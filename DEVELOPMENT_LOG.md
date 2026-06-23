@@ -264,9 +264,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 | 데모 시드 데이터 스크립트 | ✅ (`seed.py` 실행 확인) |
 | 실제 구동 검증 | ✅ 가입·로그인 동작 / 백엔드·프론트 구동 / 시드 데이터 주입 완료 |
 
-## 8. 남은 작업(후보)
+## 8. 배포
+
+- AWS Lightsail 배포 가이드와 설정 파일을 `deploy/` 에 작성.
+  - `deploy/DEPLOY.md` — 단계별 배포 가이드(인스턴스 생성 → 서비스 등록 → Nginx → HTTPS → 백업, **12절: 다른 프로젝트와 한 서버 공존**)
+  - `deploy/tennismanager-backend.service`, `deploy/tennismanager-frontend.service` — systemd 유닛
+  - `deploy/nginx-tennismanager.conf` — Nginx 리버스 프록시
+- 구조: `Nginx(80/443) → Remix(3000) →(내부)→ FastAPI(8000)`. 백엔드는 외부 미노출.
+- 배포 서버는 **더미 데이터 없이** 시작(`seed.py` 미실행, DB는 `.gitignore`).
+- ⚠️ 운영 모드 쿠키는 `Secure` → **HTTPS 필수**(미적용 시 로그인 세션 유지 안 됨).
+
+## 9. 남은 작업(후보)
 
 - 프로필 수정 화면, 친선경기 직접 입력 UI
 - 대진 수동 편집 UI(드래그/선수 교체)
-- 배포 설정
-- (운영 시) Alembic 마이그레이션 도입, SECRET_KEY 환경변수화
+- (운영 시) Alembic 마이그레이션 도입

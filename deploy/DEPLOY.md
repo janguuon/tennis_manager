@@ -145,10 +145,13 @@ journalctl -u tennismanager-backend -f
 sudo cp /home/ubuntu/teambreaker_manager/deploy/nginx-tennismanager.conf /etc/nginx/sites-available/tennismanager
 sudo nano /etc/nginx/sites-available/tennismanager   # server_name 을 도메인/IP로 수정
 sudo ln -s /etc/nginx/sites-available/tennismanager /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default            # 기본 페이지 제거
 
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+> ⚠️ **이 서버에 다른 프로젝트가 이미 돌고 있다면 `rm default`(또는 기존 사이트 삭제)를 하지 말 것.**
+> 단독 서버에서 처음 배포할 때만, 기본 페이지가 거슬리면 `sudo rm -f /etc/nginx/sites-enabled/default` 로 제거한다.
+> 다른 프로젝트와 함께 운영하는 경우는 **12. 다른 프로젝트와 같은 서버에서 함께 운영하기** 참고.
 
 이 시점에서 `http://<공인IP 또는 도메인>` 접속 시 로그인 화면이 보여야 한다.
 
@@ -203,3 +206,59 @@ cp /home/ubuntu/teambreaker_manager/backend/tennismanager.db ~/backup-$(date +%F
 ```
 > 정기 백업은 cron으로 위 명령을 돌리거나, 주기적으로 로컬로 내려받는다.
 > 이용자가 늘어 동시 쓰기가 많아지면 PostgreSQL로 이전을 검토(현재 SQLite는 소규모 팀에 충분).
+
+---
+
+## 12. 다른 프로젝트와 같은 서버에서 함께 운영하기
+
+이미 다른 웹 프로젝트가 돌고 있는 Lightsail 인스턴스에 테니스 매니저를 **추가로** 올려도 된다.
+아래 3가지 충돌만 피하면 된다.
+
+### (1) 포트 충돌 — 가장 중요
+테니스 매니저 기본 포트는 **8000(백엔드)·3000(프론트)**. 기존 프로젝트가 쓰면 바꾼다.
+
+현재 사용 중인 포트 확인:
+```bash
+sudo ss -tlnp | grep -E ':(80|443|3000|8000)'
+```
+충돌 시 테니스 매니저 포트 변경(예: 3100 / 8100):
+- `deploy/tennismanager-frontend.service` → `Environment=PORT=3100`
+- `deploy/tennismanager-backend.service` → `--port 8100`
+- `frontend/.env` → `API_URL=http://127.0.0.1:8100`
+- `deploy/nginx-tennismanager.conf` → `proxy_pass http://127.0.0.1:3100;`
+
+> 백엔드·프론트 포트는 **서버 내부에서만** 쓰이므로 Lightsail 방화벽에는 열지 않는다(80/443만).
+
+### (2) Nginx — 도메인/서브도메인으로 구분
+두 사이트는 같은 80/443을 **`server_name`(도메인)으로 구분**해 공유한다(name-based virtual host).
+
+현재 Nginx 사이트 확인:
+```bash
+ls -l /etc/nginx/sites-enabled/
+```
+규칙:
+- **기존 사이트 설정은 절대 지우지 않는다** (`rm default` 등 금지).
+- 테니스 매니저용 **별도 서브도메인**을 정한다. 예:
+  ```
+  project-A.com         → 기존 프로젝트
+  tennis.project-A.com  → 테니스 매니저   (DNS A레코드를 같은 공인 IP로 추가)
+  ```
+- `nginx-tennismanager.conf`의 `server_name`을 그 서브도메인으로 설정하고 그 사이트만 추가로 enable.
+- HTTPS도 도메인별로 따로 발급:
+  ```bash
+  sudo certbot --nginx -d tennis.project-A.com
+  ```
+
+### (3) 서버 자원(RAM)
+두 앱이 동시에 뜨므로 메모리를 확인한다:
+```bash
+free -h
+```
+- 여유가 빠듯하면(특히 1GB 이하) **스왑 추가**(2번 항목) 필수.
+- 프론트 **빌드(`npm run build`)** 가 메모리를 많이 쓰므로, 트래픽 적은 시간에 빌드하거나
+  **로컬에서 빌드 후 `build/` 폴더만 업로드**하는 방법도 있다.
+
+### 정리
+1. 포트 안 겹치게 (3000/8000 사용 중이면 변경)
+2. Nginx는 **서브도메인으로 분리**, 기존 설정 건드리지 말 것
+3. RAM 여유 확인 + 스왑

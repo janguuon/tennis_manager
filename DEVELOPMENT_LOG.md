@@ -241,6 +241,20 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 ### 모임 상세
 - **수정/삭제 기능** 추가 (주최자·관리자만). 수정은 모달에서 전 필드 편집(상태 포함), 삭제는 확인 후 `DELETE` → 캘린더 이동.
 
+### 참석 변경 마감 규칙
+- **모임 시작 3일 전부터** 일반 회원은 **불참/미정으로 변경(및 참석 취소) 불가**. 참석 유지/참석으로 전환은 가능.
+- 잠금 기간에는 **관리자만** 변경 가능.
+- 백엔드 `gatherings.py` `_attendance_locked()`(상수 `ATTENDANCE_LOCK_DAYS=3`)로 `vote_attendance`/`cancel_attendance`에서 403 처리.
+- 프론트는 모임 상세에서 불참/미정 버튼 비활성화 + 안내 문구.
+
+### 엑셀(.xlsx) 일괄 업로드
+- 캘린더 "📤 엑셀 업로드" → **양식 다운로드 → 작성 → 업로드**로 모임 일괄 등록.
+- **한 행 = 한 모임**, 모든 회원 가능, **정상 행만 등록 + 오류 행 보고**(부분 성공).
+- 컬럼(한국어 헤더, 순서 무관): 날짜·제목(필수) / 시작시간·종료시간·장소·코트번호·최대인원·설명.
+- 백엔드 `openpyxl`로 파싱, `GatheringCreate` 검증 + `_normalize_courts()` 재사용.
+- 관련: `backend` `POST /gatherings/import`·`GET /gatherings/import/template`,
+  `frontend` `lib/api.server.ts`(multipart/`apiRaw`) + `resources.gatherings-import.tsx`·`resources.gatherings-template.tsx`.
+
 ### 다크 모드
 - **테마 토글**(헤더 🌙/☀️) 추가. 테마는 **쿠키 저장 → 서버에서 `<html>`에 class 적용**(새로고침 깜빡임 없음).
 - 색상: 배경 `slate-900` / 카드 `slate-800` / 테두리 `slate-700` / 텍스트 `slate-100`, 강조색(court green) 유지.

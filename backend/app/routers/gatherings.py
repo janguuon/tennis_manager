@@ -4,9 +4,12 @@
 코트 면 수(court_count)는 모임 단위로 등록되며, 이후 대진 자동생성에서
 한 라운드의 동시 진행 매치 수로 사용된다.
 """
-from datetime import date
+import io
+from datetime import date, datetime, time
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import openpyxl
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -17,6 +20,8 @@ from ..schemas import (
     AttendanceSummary,
     GatheringCreate,
     GatheringDetail,
+    GatheringImportResult,
+    GatheringImportRowError,
     GatheringRead,
     GatheringUpdate,
     ParticipantRead,
@@ -24,6 +29,21 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/gatherings", tags=["gatherings"])
+
+# 엑셀 헤더(한국어) → 모임 필드명 매핑
+IMPORT_HEADER_MAP = {
+    "날짜": "event_date",
+    "제목": "title",
+    "시작시간": "start_time",
+    "종료시간": "end_time",
+    "장소": "location",
+    "코트번호": "court_numbers",
+    "최대인원": "max_participants",
+    "설명": "description",
+}
+IMPORT_COLUMNS = list(IMPORT_HEADER_MAP.keys())
+# 필드명 → 한국어 헤더 (오류 메시지 표기용)
+FIELD_TO_HEADER = {v: k for k, v in IMPORT_HEADER_MAP.items()}
 
 
 # --- 내부 헬퍼 --------------------------------------------------------------
@@ -72,6 +92,15 @@ def _normalize_courts(data: dict) -> None:
             data["court_count"] = len(labels)
 
 
+# 모임 시작 며칠 전부터 참석 변경(불참/미정)을 잠그는지
+ATTENDANCE_LOCK_DAYS = 3
+
+
+def _attendance_locked(gathering: Gathering) -> bool:
+    """모임 시작 ATTENDANCE_LOCK_DAYS일 전부터(당일·지난 경우 포함) 잠금."""
+    return (gathering.event_date - date.today()).days <= ATTENDANCE_LOCK_DAYS
+
+
 # --- 모임 CRUD --------------------------------------------------------------
 @router.post("", response_model=GatheringRead, status_code=status.HTTP_201_CREATED)
 def create_gathering(
@@ -86,6 +115,107 @@ def create_gathering(
     db.add(gathering)
     db.commit()
     return _to_read(_load_gathering(db, gathering.id))
+
+
+# --- 엑셀 일괄 업로드 -------------------------------------------------------
+def _cell_value(field: str, value) -> str | int:
+    """엑셀 셀 값을 GatheringCreate가 받을 수 있는 형태로 정규화."""
+    if field == "event_date":
+        if isinstance(value, datetime):
+            return value.date().isoformat()
+        if isinstance(value, date):
+            return value.isoformat()
+        return str(value).strip()
+    if field in ("start_time", "end_time"):
+        if isinstance(value, datetime):
+            return value.strftime("%H:%M")
+        if isinstance(value, time):
+            return value.strftime("%H:%M")
+        return str(value).strip()
+    if field == "max_participants":
+        return int(value)
+    # title, location, court_numbers, description
+    return str(value).strip()
+
+
+@router.post("/import", response_model=GatheringImportResult)
+async def import_gatherings(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """엑셀(.xlsx) 한 행 = 한 모임으로 일괄 등록. 오류 행은 건너뛰고 보고한다."""
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=".xlsx 파일만 업로드할 수 있습니다.")
+
+    content = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="엑셀 파일을 읽을 수 없습니다.")
+
+    ws = wb.active
+    rows = ws.iter_rows(values_only=True)
+    try:
+        header = next(rows)
+    except StopIteration:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="빈 파일입니다.")
+
+    # 헤더명 → 열 인덱스 (알 수 없는 컬럼은 무시)
+    col_to_field: dict[int, str] = {}
+    for idx, name in enumerate(header):
+        key = str(name).strip() if name is not None else ""
+        if key in IMPORT_HEADER_MAP:
+            col_to_field[idx] = IMPORT_HEADER_MAP[key]
+
+    created = 0
+    errors: list[GatheringImportRowError] = []
+
+    for i, row in enumerate(rows, start=2):  # 2행부터 데이터
+        if all(c is None or str(c).strip() == "" for c in row):
+            continue  # 완전 빈 행 skip
+        try:
+            data: dict = {}
+            for idx, field in col_to_field.items():
+                value = row[idx] if idx < len(row) else None
+                if value is None or str(value).strip() == "":
+                    continue
+                data[field] = _cell_value(field, value)
+            payload = GatheringCreate(**data)  # pydantic 검증/타입 변환 재사용
+            d = payload.model_dump()
+            _normalize_courts(d)
+            db.add(Gathering(**d, created_by=current_user.id))
+            created += 1
+        except ValidationError as ve:
+            parts = []
+            for err in ve.errors():
+                loc = err["loc"][0] if err["loc"] else ""
+                label = FIELD_TO_HEADER.get(str(loc), str(loc))
+                parts.append(f"{label}: {err['msg']}")
+            errors.append(GatheringImportRowError(row=i, error="; ".join(parts)))
+        except Exception as e:
+            errors.append(GatheringImportRowError(row=i, error=str(e)))
+
+    db.commit()
+    return GatheringImportResult(created=created, failed=len(errors), errors=errors)
+
+
+@router.get("/import/template")
+def import_template(_: User = Depends(get_current_user)):
+    """업로드용 엑셀 양식(.xlsx) 다운로드: 헤더 + 예시 1행."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "모임목록"
+    ws.append(IMPORT_COLUMNS)
+    ws.append(["2026-07-05", "정기 모임", "09:00", "12:00", "시민 테니스장", "3, 5", 16, "비고 예시"])
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return Response(
+        content=bio.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="gathering_template.xlsx"'},
+    )
 
 
 @router.get("", response_model=list[GatheringRead])
@@ -181,6 +311,17 @@ def vote_attendance(
         )
     )
 
+    # 마감 제한: 모임 3일 전부터는 일반 회원이 불참/미정으로 바꿀 수 없음(관리자만 가능)
+    if (
+        payload.status in (AttendanceStatus.ABSENT, AttendanceStatus.MAYBE)
+        and not current_user.is_admin
+        and _attendance_locked(gathering)
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 변경할 수 없습니다. 관리자에게 문의하세요.",
+        )
+
     # 정원 제한: '참석'으로 바꾸려는데 이미 정원이 찼고, 본인이 아직 참석이 아니면 차단
     if payload.status == AttendanceStatus.ATTENDING and gathering.max_participants is not None:
         already_attending = (
@@ -221,6 +362,18 @@ def cancel_attendance(
     current_user: User = Depends(get_current_user),
 ):
     """투표 취소 (참여자 명단에서 제거)."""
+    gathering = db.get(Gathering, gathering_id)
+    # 마감 제한: 취소(=사실상 불참)도 3일 전부터는 일반 회원 불가(관리자만 가능)
+    if (
+        gathering is not None
+        and not current_user.is_admin
+        and _attendance_locked(gathering)
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없습니다. 관리자에게 문의하세요.",
+        )
+
     participant = db.scalar(
         select(Participant).where(
             Participant.gathering_id == gathering_id,

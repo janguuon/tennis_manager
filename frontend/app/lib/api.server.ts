@@ -19,17 +19,22 @@ interface ApiOptions {
   body?: unknown;
   /** x-www-form-urlencoded 본문 (OAuth2 로그인 등) */
   form?: URLSearchParams;
+  /** multipart/form-data 본문 (파일 업로드). Content-Type은 자동 설정됨. */
+  multipart?: FormData;
 }
 
 export async function api<T = unknown>(
   path: string,
   options: ApiOptions = {},
 ): Promise<T> {
-  const { method = "GET", token, body, form } = options;
+  const { method = "GET", token, body, form, multipart } = options;
   const headers: Record<string, string> = {};
   let payload: BodyInit | undefined;
 
-  if (form) {
+  if (multipart) {
+    // Content-Type은 fetch가 boundary와 함께 자동 설정 (직접 지정 금지)
+    payload = multipart;
+  } else if (form) {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
     payload = form;
   } else if (body !== undefined) {
@@ -58,4 +63,18 @@ export async function api<T = unknown>(
   }
 
   return data as T;
+}
+
+/** 바이너리 응답(예: 엑셀 다운로드)을 위해 원본 Response를 그대로 반환. */
+export async function apiRaw(
+  path: string,
+  options: { token?: string | null } = {},
+): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  if (!res.ok) {
+    throw new ApiError(res.status, res.statusText);
+  }
+  return res;
 }

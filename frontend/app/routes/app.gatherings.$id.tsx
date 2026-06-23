@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useOutletContext } from "@remix-run/react";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useOutletContext, useSearchParams } from "@remix-run/react";
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "~/lib/api.server";
@@ -99,7 +99,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       });
     } else if (intent === "delete_gathering") {
       await api(`/gatherings/${id}`, { method: "DELETE", token });
-      return redirect("/app/calendar");
+      const from = String(formData.get("from") || "");
+      return redirect(from ? `/app/calendar?month=${from}` : "/app/calendar");
     }
     return json({ ok: true });
   } catch (err) {
@@ -129,6 +130,21 @@ export default function GatheringDetailPage() {
   const courtLabels = gathering.court_numbers
     ? gathering.court_numbers.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
+
+  // 참석 변경 마감: 모임 3일 전부터는 일반 회원이 불참/미정으로 못 바꿈(관리자만 가능)
+  const ATTENDANCE_LOCK_DAYS = 3;
+  const daysUntilEvent = Math.round(
+    (new Date(gathering.event_date + "T00:00:00").getTime() -
+      new Date(new Date().toDateString()).getTime()) /
+      86400000,
+  );
+  const attendanceLocked = daysUntilEvent <= ATTENDANCE_LOCK_DAYS;
+  const canSetAbsence = user.is_admin || !attendanceLocked;
+
+  // 돌아갈 캘린더의 달: 들어올 때 넘겨준 ?from, 없으면 이 모임의 달
+  const [searchParams] = useSearchParams();
+  const backMonth = searchParams.get("from") || gathering.event_date.slice(0, 7);
+  const calendarHref = `/app/calendar?month=${backMonth}`;
 
   // 수정 성공 시 모달 닫기
   useEffect(() => {
@@ -165,6 +181,7 @@ export default function GatheringDetailPage() {
               </button>
               <Form method="post">
                 <input type="hidden" name="intent" value="delete_gathering" />
+                <input type="hidden" name="from" value={backMonth} />
                 <button
                   className="btn-ghost px-3 py-1.5 text-sm text-red-500"
                   onClick={(e) => {
@@ -178,7 +195,7 @@ export default function GatheringDetailPage() {
               </Form>
             </>
           ) : null}
-          <Link to="/app/calendar" className="btn-ghost px-3 py-1.5 text-sm">← 캘린더</Link>
+          <Link to={calendarHref} className="btn-ghost px-3 py-1.5 text-sm">← 캘린더</Link>
         </div>
       </div>
 
@@ -287,12 +304,29 @@ export default function GatheringDetailPage() {
         </div>
         <Form method="post" className="flex gap-2">
           <input type="hidden" name="intent" value="vote" />
-          {(["attending", "absent", "maybe"] as AttendanceStatus[]).map((s) => (
-            <button key={s} name="status" value={s} className="btn-ghost flex-1">
-              {VOTE_LABEL[s]}
-            </button>
-          ))}
+          {(["attending", "absent", "maybe"] as AttendanceStatus[]).map((s) => {
+            const blocked = s !== "attending" && !canSetAbsence;
+            return (
+              <button
+                key={s}
+                name="status"
+                value={s}
+                disabled={blocked}
+                title={blocked ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정 변경 불가 (관리자 문의)` : undefined}
+                className="btn-ghost flex-1 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {VOTE_LABEL[s]}
+              </button>
+            );
+          })}
         </Form>
+        {attendanceLocked ? (
+          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+            {user.is_admin
+              ? `⚠️ 마감 기간(모임 ${ATTENDANCE_LOCK_DAYS}일 전)입니다. 관리자 권한으로 변경할 수 있습니다.`
+              : `⚠️ 모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 변경할 수 없습니다. 변경이 필요하면 관리자에게 문의하세요.`}
+          </p>
+        ) : null}
 
         {/* 참여자 명단 */}
         <ul className="mt-4 flex flex-wrap gap-2">

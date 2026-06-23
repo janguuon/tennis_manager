@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "@remix-run/react";
+import { Form, Link, useActionData, useFetcher, useLoaderData, useNavigation, useSearchParams } from "@remix-run/react";
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "~/lib/api.server";
@@ -112,6 +112,14 @@ export default function CalendarPage() {
   const [, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importFetcher = useFetcher<{
+    ok: boolean;
+    created?: number;
+    failed?: number;
+    errors?: { row: number; error: string }[];
+    error?: string;
+  }>();
   // 시간 제어 상태: 시작 선택 시 종료를 +2h 자동 설정하되, 사용자가 종료를 직접 바꾸면 자동 변경 중단
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -156,6 +164,7 @@ export default function CalendarPage() {
           📅 {yy}년 {Number(mm)}월
         </h1>
         <div className="flex gap-2">
+          <button className="btn-ghost px-3 py-1.5" onClick={() => setImporting(true)}>📤 엑셀 업로드</button>
           <button className="btn-ghost px-3 py-1.5" onClick={() => goMonth(shiftMonth(month, -1))}>←</button>
           <button className="btn-ghost px-3 py-1.5" onClick={() => goMonth(currentMonth())}>오늘</button>
           <button className="btn-ghost px-3 py-1.5" onClick={() => goMonth(shiftMonth(month, 1))}>→</button>
@@ -210,7 +219,7 @@ export default function CalendarPage() {
                   {dayGatherings.map((g) => (
                     <Link
                       key={g.id}
-                      to={`/app/gatherings/${g.id}`}
+                      to={`/app/gatherings/${g.id}?from=${month}`}
                       onClick={(e) => e.stopPropagation()}
                       className="block truncate rounded bg-court-100 px-1.5 py-0.5 text-[11px] font-medium text-court-800 hover:bg-court-200 dark:bg-court-900/50 dark:text-court-200 dark:hover:bg-court-900"
                       title={`${g.title} · 코트 ${g.court_count}면`}
@@ -334,6 +343,70 @@ export default function CalendarPage() {
                 {navigation.state === "submitting" ? "등록 중…" : "모임 등록"}
               </button>
             </Form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 엑셀 일괄 업로드 모달 */}
+      {importing ? (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setImporting(false)}
+        >
+          <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <importFetcher.Form
+              method="post"
+              action="/resources/gatherings-import"
+              encType="multipart/form-data"
+              className="card space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold">엑셀 일괄 업로드</h2>
+                <button type="button" className="text-slate-400 hover:text-slate-600" onClick={() => setImporting(false)}>
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                한 행 = 한 모임으로 등록됩니다. 양식을 받아 작성한 뒤 업로드하세요.
+              </p>
+
+              <a href="/resources/gatherings-template" className="btn-ghost w-full" download>
+                ⬇️ 엑셀 양식 다운로드
+              </a>
+
+              <div>
+                <label className="label" htmlFor="file">엑셀 파일 (.xlsx)</label>
+                <input id="file" name="file" type="file" accept=".xlsx" className="input" required />
+              </div>
+
+              <button type="submit" className="btn-primary w-full" disabled={importFetcher.state !== "idle"}>
+                {importFetcher.state !== "idle" ? "업로드 중…" : "업로드"}
+              </button>
+
+              {/* 결과 */}
+              {importFetcher.data ? (
+                importFetcher.data.ok ? (
+                  <div className="space-y-2 rounded-md bg-court-50 p-3 text-sm dark:bg-court-900/30">
+                    <p className="font-medium text-court-700 dark:text-court-300">
+                      {importFetcher.data.created}건 등록
+                      {importFetcher.data.failed ? ` · ${importFetcher.data.failed}건 실패` : ""}
+                    </p>
+                    {importFetcher.data.errors && importFetcher.data.errors.length > 0 ? (
+                      <ul className="max-h-40 space-y-0.5 overflow-y-auto text-xs text-red-600 dark:text-red-400">
+                        {importFetcher.data.errors.map((e) => (
+                          <li key={e.row}>{e.row}행: {e.error}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
+                    {importFetcher.data.error}
+                  </p>
+                )
+              ) : null}
+            </importFetcher.Form>
           </div>
         </div>
       ) : null}

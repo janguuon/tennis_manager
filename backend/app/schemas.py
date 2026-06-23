@@ -219,6 +219,19 @@ class GatheringCreate(GatheringBase):
     pass
 
 
+class GatheringImportRowError(BaseModel):
+    row: int
+    error: str
+
+
+class GatheringImportResult(BaseModel):
+    """엑셀 일괄 업로드 결과."""
+
+    created: int
+    failed: int
+    errors: list[GatheringImportRowError]
+
+
 class GatheringUpdate(BaseModel):
     title: str | None = Field(None, max_length=200)
     description: str | None = None

@@ -2,7 +2,11 @@
 
 테니스 매니저(Remix + FastAPI + SQLite)를 **Lightsail 인스턴스 1대**에 배포한다.
 
-## 배포 구조
+> ⚠️ **이 서버는 이미 Docker + 공용 `nginx_proxy`(80/443 점유) 환경이다.**
+> 따라서 호스트에 nginx를 까는 아래 1~11절(systemd 방식)은 **사용하지 않는다.**
+> **→ [13. Docker 배포](#13-docker-배포-이-서버-환경) 절을 따른다.** (아래 systemd 가이드는 단독 서버용 참고로만 남겨둠)
+
+## 배포 구조 (단독 서버용 — 참고)
 
 ```
 [인터넷] → Nginx (80/443) → Remix 프론트 (127.0.0.1:5555)
@@ -65,7 +69,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 git 저장소가 있다면:
 ```bash
 cd /home/ubuntu
-git clone <레포주소> teambreaker_manager
+git clone <레포주소> tennis_manager
 ```
 
 git이 없으면 로컬에서 scp로 업로드 (단, **node_modules / venv / *.db 는 제외**):
@@ -76,7 +80,7 @@ git이 없으면 로컬에서 scp로 업로드 (단, **node_modules / venv / *.d
 
 업로드 방식으로 했다면 혹시 포함됐을 더미 DB를 삭제:
 ```bash
-rm -f /home/ubuntu/teambreaker_manager/backend/tennismanager.db
+rm -f /home/ubuntu/tennis_manager/backend/tennismanager.db
 ```
 
 ---
@@ -84,7 +88,7 @@ rm -f /home/ubuntu/teambreaker_manager/backend/tennismanager.db
 ## 4. 백엔드(FastAPI) 설정
 
 ```bash
-cd /home/ubuntu/teambreaker_manager/backend
+cd /home/ubuntu/tennis_manager/backend
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
@@ -103,7 +107,7 @@ EOF
 ## 5. 프론트엔드(Remix) 설정 + 빌드
 
 ```bash
-cd /home/ubuntu/teambreaker_manager/frontend
+cd /home/ubuntu/tennis_manager/frontend
 npm ci
 npm run build
 
@@ -121,8 +125,8 @@ EOF
 배포용 유닛 파일을 복사해 등록한다.
 
 ```bash
-sudo cp /home/ubuntu/teambreaker_manager/deploy/tennismanager-backend.service /etc/systemd/system/
-sudo cp /home/ubuntu/teambreaker_manager/deploy/tennismanager-frontend.service /etc/systemd/system/
+sudo cp /home/ubuntu/tennis_manager/deploy/tennismanager-backend.service /etc/systemd/system/
+sudo cp /home/ubuntu/tennis_manager/deploy/tennismanager-frontend.service /etc/systemd/system/
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now tennismanager-backend
@@ -142,7 +146,7 @@ journalctl -u tennismanager-backend -f
 ## 7. Nginx 리버스 프록시
 
 ```bash
-sudo cp /home/ubuntu/teambreaker_manager/deploy/nginx-tennismanager.conf /etc/nginx/sites-available/tennismanager
+sudo cp /home/ubuntu/tennis_manager/deploy/nginx-tennismanager.conf /etc/nginx/sites-available/tennismanager
 sudo nano /etc/nginx/sites-available/tennismanager   # server_name 을 도메인/IP로 수정
 sudo ln -s /etc/nginx/sites-available/tennismanager /etc/nginx/sites-enabled/
 
@@ -191,7 +195,7 @@ sudo certbot --nginx -d 13.125.173.69.sslip.io
 ## 10. 코드 업데이트(재배포)
 
 ```bash
-cd /home/ubuntu/teambreaker_manager
+cd /home/ubuntu/tennis_manager
 git pull
 
 # 백엔드 의존성 바뀌었으면
@@ -208,7 +212,7 @@ sudo systemctl restart tennismanager-backend tennismanager-frontend
 
 DB는 파일 하나(`backend/tennismanager.db`)라 백업이 간단하다.
 ```bash
-cp /home/ubuntu/teambreaker_manager/backend/tennismanager.db ~/backup-$(date +%F).db
+cp /home/ubuntu/tennis_manager/backend/tennismanager.db ~/backup-$(date +%F).db
 ```
 > 정기 백업은 cron으로 위 명령을 돌리거나, 주기적으로 로컬로 내려받는다.
 > 이용자가 늘어 동시 쓰기가 많아지면 PostgreSQL로 이전을 검토(현재 SQLite는 소규모 팀에 충분).
@@ -267,3 +271,51 @@ free -h
 1. 포트 안 겹치게 (백엔드 5005 / 프론트 5555 — 사용 중이면 변경)
 2. Nginx는 **서브도메인으로 분리**, 기존 설정 건드리지 말 것
 3. RAM 여유 확인 + 스왑
+
+---
+
+## 13. Docker 배포 (이 서버 환경)
+
+**실제 운영 서버는 Docker + 공용 `nginx_proxy`(80/443) + `duckdns` 구조다.** 다른 프로젝트들도 전부 컨테이너로 돌고 있어,
+호스트 nginx를 새로 깔 수 없다(80 충돌). 그래서 테니스 매니저도 **컨테이너로 패키징**해 기존 `nginx_proxy`에 연동한다.
+
+### 구성 파일 (레포에 포함)
+- `backend/Dockerfile` (FastAPI/uvicorn, 5005), `frontend/Dockerfile` (Remix 멀티스테이지, 5555)
+- 루트 `docker-compose.yml` — `tennis-backend`(내부) + `tennis-frontend`(호스트 5555 공개), SQLite는 `tennis-data` 볼륨에 영속
+- `.env.docker.example` — `SECRET_KEY`, `SESSION_SECRET`
+- `app/database.py`는 `DATABASE_URL` 환경변수 지원 (compose에서 `sqlite:////app/data/tennismanager.db`)
+
+### 컨테이너 띄우기
+```bash
+cd /home/ubuntu/tennis_manager
+
+# (호스트 systemd 방식 쓰던 게 있으면) 중지/비활성화
+sudo systemctl disable --now tennismanager-backend tennismanager-frontend 2>/dev/null
+
+# 시크릿 .env 생성 (레포 루트)
+cat > .env <<EOF
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+SESSION_SECRET=$(openssl rand -hex 32)
+EOF
+
+# 빌드 + 실행
+docker compose up -d --build
+docker compose ps
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5555   # 200/302 면 정상
+```
+> 더미 데이터는 넣지 않는다(`seed.py` 미실행). 빈 DB로 시작 → 첫 가입자가 관리자.
+
+### 기존 nginx_proxy 연동 (HTTPS)
+프론트가 호스트 `5555`로 공개되므로, **기존 `nginx_proxy` 컨테이너에 서버 블록 하나만 추가**해
+DuckDNS 서브도메인 → `호스트:5555`로 프록시한다. 정확한 경로/인증서 방식은 기존 설정을 보고 맞춘다:
+```bash
+docker inspect nginx_proxy --format '{{json .Mounts}}'   # 설정/인증서 호스트 경로
+docker inspect duckdns     --format '{{json .Config.Env}}' # 현재 도메인
+```
+- 새 DuckDNS 서브도메인을 같은 IP에 추가 → `nginx_proxy` 설정에 server 블록 추가(`proxy_pass`는 기존 사이트와 동일한 호스트 게이트웨이 방식) → 인증서 발급(기존 체계 재사용) → reload.
+
+### 업데이트(재배포)
+```bash
+cd /home/ubuntu/tennis_manager && git pull
+docker compose up -d --build
+```

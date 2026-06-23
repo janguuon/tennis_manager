@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/teambreaker_manager/backend
-EnvironmentFile=/home/ubuntu/teambreaker_manager/backend/.env
-ExecStart=/home/ubuntu/teambreaker_manager/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 5005
+WorkingDirectory=/home/ubuntu/tennis_manager/backend
+EnvironmentFile=/home/ubuntu/tennis_manager/backend/.env
+ExecStart=/home/ubuntu/tennis_manager/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 5005
 Restart=always
 RestartSec=3
 

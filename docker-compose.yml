@@ -1,0 +1,36 @@
+# 테니스 매니저 Docker 배포.
+# 백엔드(FastAPI)와 프론트(Remix)를 컨테이너로 띄우고, 프론트만 호스트 5555 포트로 공개한다.
+# 기존 nginx_proxy 컨테이너가 이 5555로 프록시하도록 server_block 을 추가한다.
+#
+# 사전: 같은 폴더에 .env 파일 생성 (SECRET_KEY, SESSION_SECRET)
+#   SECRET_KEY=...        # python3 -c "import secrets; print(secrets.token_hex(32))"
+#   SESSION_SECRET=...    # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+services:
+  tennis-backend:
+    build: ./backend
+    container_name: tennis-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////app/data/tennismanager.db
+      ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
+    volumes:
+      - tennis-data:/app/data   # SQLite 영속 (컨테이너 재생성해도 데이터 유지)
+
+  tennis-frontend:
+    build: ./frontend
+    container_name: tennis-frontend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "5555"
+      API_URL: http://tennis-backend:5005   # 같은 compose 네트워크에서 백엔드 호출
+    depends_on:
+      - tennis-backend
+    ports:
+      - "5555:5555"   # nginx_proxy가 호스트 5555로 접근
+
+volumes:
+  tennis-data:

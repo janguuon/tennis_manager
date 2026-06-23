@@ -291,13 +291,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - ⚠️ 운영 모드 쿠키는 `Secure` → **HTTPS 필수**(미적용 시 로그인 세션 유지 안 됨).
 
 ### 배포 환경 (확정)
-- 운영 서버: AWS Lightsail (서울 리전), 같은 인스턴스에 다른 백엔드 프로젝트와 공존.
+- 운영 서버: AWS Lightsail (서울 리전), 같은 인스턴스에 다른 프로젝트들과 공존.
 - 공인 IP: **`13.125.173.69`** (Static IP 연결 필요 — 바뀌면 주소·인증서 깨짐).
-- **도메인 없음 → sslip.io로 무료 HTTPS**: 접속 주소 **`https://13.125.173.69.sslip.io`**.
-  - sslip.io는 가입·등록 없이 `<IP>.sslip.io`를 해당 IP로 연결해주는 공개 DNS.
-  - 인증서: `sudo certbot --nginx -d 13.125.173.69.sslip.io` (자동 갱신).
-  - Nginx `server_name`도 이 값으로 설정됨.
-  - 추후 실제 도메인/DuckDNS로 교체 시 `server_name` 수정 + certbot 재실행만 하면 됨.
+
+### 서버가 Docker 기반임이 확인됨 → 배포 방식 전환
+- `sudo ss -tlnp` 결과 **80/443/8000/8001을 `docker-proxy`가 점유**. `docker ps`로 확인:
+  - **`nginx_proxy`(nginx:latest)** 컨테이너가 80/443을 잡는 **공용 리버스 프록시**.
+  - **`duckdns`** 컨테이너로 이미 DuckDNS 도메인 운영 중.
+  - usuniverse-frontend/backend, pathfinder 등 다른 프로젝트도 전부 컨테이너.
+- 따라서 **호스트 nginx 설치 불가**(80 점유 충돌) → **systemd 방식 폐기**, 테니스 매니저도 **Docker로 패키징**해 기존 `nginx_proxy`에 연동하기로 결정.
+
+### Docker 패키징 (구성)
+- 추가 파일: `backend/Dockerfile`, `frontend/Dockerfile`(멀티스테이지), 각 `.dockerignore`,
+  루트 `docker-compose.yml`, `.env.docker.example`, 루트 `.gitignore`(.env 제외).
+- `app/database.py`가 `DATABASE_URL` 환경변수 지원 → 컨테이너에서 볼륨(`tennis-data:/app/data`)에 SQLite 영속.
+- 구조: `tennis-backend`(5005, 내부) + `tennis-frontend`(5555, 호스트 공개). 프론트→백엔드는 compose 네트워크(`http://tennis-backend:5005`).
+- 실행: 루트에 `.env`(SECRET_KEY/SESSION_SECRET) 생성 후 `docker compose up -d --build`.
+- **남은 단계**: 기존 `nginx_proxy`에 서버 블록 추가(호스트 5555로 proxy_pass) + DuckDNS 서브도메인 + HTTPS 인증서. (nginx_proxy 마운트 경로/인증서 방식 확인 후 진행)
 
 ## 9. 남은 작업(후보)
 

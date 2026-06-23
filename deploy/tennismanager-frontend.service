@@ -6,7 +6,7 @@ After=network.target tennismanager-backend.service
 User=ubuntu
 WorkingDirectory=/home/ubuntu/teambreaker_manager/frontend
 Environment=NODE_ENV=production
-Environment=PORT=3000
+Environment=PORT=5555
 EnvironmentFile=/home/ubuntu/teambreaker_manager/frontend/.env
 ExecStart=/usr/bin/npm run start
 Restart=always

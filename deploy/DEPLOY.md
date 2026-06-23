@@ -5,10 +5,10 @@
 ## 배포 구조
 
 ```
-[인터넷] → Nginx (80/443) → Remix 프론트 (127.0.0.1:3000)
+[인터넷] → Nginx (80/443) → Remix 프론트 (127.0.0.1:5555)
                                    │ 서버 내부 호출
                                    ▼
-                            FastAPI 백엔드 (127.0.0.1:8000) → SQLite(tennismanager.db)
+                            FastAPI 백엔드 (127.0.0.1:5005) → SQLite(tennismanager.db)
 ```
 
 - 프론트가 **서버 사이드**에서 백엔드를 호출하므로 백엔드는 외부에 노출하지 않는다(내부 전용).
@@ -26,7 +26,7 @@
 3. 플랜: **최소 1GB RAM 이상** 권장 (프론트 빌드가 메모리를 꽤 씀. 512MB면 빌드 중 OOM 가능 — 아래 스왑 팁 참고)
 4. 인스턴스 생성 후 **Networking** 탭 → **IPv4 Firewall**에 규칙 추가:
    - **HTTP (80)**, **HTTPS (443)** 허용 (SSH 22는 기본 허용)
-   - 8000/3000은 **열지 않는다**(내부 전용)
+   - 5005/5555는 **열지 않는다**(내부 전용)
 5. (권장) **Static IP** 연결 → 재부팅해도 IP 고정
 6. 브라우저 SSH 또는 본인 터미널로 접속 (`ubuntu` 사용자)
 
@@ -109,7 +109,7 @@ npm run build
 
 # 운영용 .env 생성 (SESSION_SECRET은 반드시 새 무작위 값)
 cat > .env <<EOF
-API_URL=http://127.0.0.1:8000
+API_URL=http://127.0.0.1:5005
 SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 EOF
 ```
@@ -153,24 +153,30 @@ sudo nginx -t && sudo systemctl reload nginx
 > 단독 서버에서 처음 배포할 때만, 기본 페이지가 거슬리면 `sudo rm -f /etc/nginx/sites-enabled/default` 로 제거한다.
 > 다른 프로젝트와 함께 운영하는 경우는 **12. 다른 프로젝트와 같은 서버에서 함께 운영하기** 참고.
 
-이 시점에서 `http://<공인IP 또는 도메인>` 접속 시 로그인 화면이 보여야 한다.
+이 시점에서 `http://13.125.173.69.sslip.io` 접속 시 로그인 화면이 보여야 한다.
 
 ---
 
-## 8. HTTPS (도메인 필요) — 중요
+## 8. HTTPS — 도메인 없이 무료 (sslip.io) · 중요
 
 ⚠️ **로그인/테마 쿠키는 운영 모드에서 `Secure` 속성이 붙어 HTTPS에서만 전송된다.**
 즉 **HTTP만으로는 로그인 세션이 유지되지 않는다.** 반드시 HTTPS를 붙인다.
 
-도메인을 인스턴스 IP로 연결(A 레코드)한 뒤:
+도메인이 없으므로 **공인 IP 기반 sslip.io** 주소로 인증서를 받는다.
+- 공인 IP: `13.125.173.69` → 접속 주소: **`https://13.125.173.69.sslip.io`**
+- sslip.io는 별도 가입/등록 없이 그 주소를 해당 IP로 자동 연결해준다.
+
+전제: ① Lightsail에 **Static IP가 인스턴스에 연결**돼 있을 것(IP가 바뀌면 안 됨) ② 방화벽 80·443 열림.
+
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
+sudo certbot --nginx -d 13.125.173.69.sslip.io
 # 자동 갱신은 certbot이 등록함
 ```
+완료 후 `https://13.125.173.69.sslip.io` 로 접속한다.
 
-> 도메인이 없다면: 무료 도메인(예: DuckDNS)을 IP에 연결해 certbot으로 인증서를 받는 방법을 권장.
-> 정 임시로 HTTP에서 테스트해야 하면, `frontend/app/lib/session.server.ts`와 `theme.server.ts`의
+> 나중에 실제 도메인이나 DuckDNS로 바꾸려면 nginx `server_name` 수정 후 certbot만 다시 실행하면 된다.
+> 정 임시로 HTTP에서만 테스트해야 하면, `frontend/app/lib/session.server.ts`와 `theme.server.ts`의
 > 쿠키 `secure` 옵션을 임시로 `false`로 바꿔야 로그인이 유지된다(운영에서는 되돌릴 것).
 
 ---
@@ -215,19 +221,18 @@ cp /home/ubuntu/teambreaker_manager/backend/tennismanager.db ~/backup-$(date +%F
 아래 3가지 충돌만 피하면 된다.
 
 ### (1) 포트 충돌 — 가장 중요
-테니스 매니저 기본 포트는 **8000(백엔드)·3000(프론트)**. 기존 프로젝트가 쓰면 바꾼다.
-
-현재 사용 중인 포트 확인:
+다른 백엔드 프로젝트와의 충돌을 피하기 위해 테니스 매니저는 **백엔드 5005 / 프론트 5555**를 사용한다
+(아래 배포 파일에 이미 반영됨). 배포 전 두 포트가 비어 있는지 확인한다:
 ```bash
-sudo ss -tlnp | grep -E ':(80|443|3000|8000)'
+sudo ss -tlnp | grep -E ':(5005|5555)'    # 아무것도 안 나오면 OK
 ```
-충돌 시 테니스 매니저 포트 변경(예: 3100 / 8100):
-- `deploy/tennismanager-frontend.service` → `Environment=PORT=3100`
-- `deploy/tennismanager-backend.service` → `--port 8100`
-- `frontend/.env` → `API_URL=http://127.0.0.1:8100`
-- `deploy/nginx-tennismanager.conf` → `proxy_pass http://127.0.0.1:3100;`
+만약 둘 중 하나가 이미 쓰이고 있으면 다른 빈 포트로 바꾸고, 아래 4곳을 함께 수정한다:
+- `deploy/tennismanager-backend.service` → `--port 5005`
+- `deploy/tennismanager-frontend.service` → `Environment=PORT=5555`
+- `frontend/.env` → `API_URL=http://127.0.0.1:5005`
+- `deploy/nginx-tennismanager.conf` → `proxy_pass http://127.0.0.1:5555;`
 
-> 백엔드·프론트 포트는 **서버 내부에서만** 쓰이므로 Lightsail 방화벽에는 열지 않는다(80/443만).
+> 5005/5555는 **서버 내부에서만** 쓰이므로 Lightsail 방화벽에는 열지 않는다(80/443만).
 
 ### (2) Nginx — 도메인/서브도메인으로 구분
 두 사이트는 같은 80/443을 **`server_name`(도메인)으로 구분**해 공유한다(name-based virtual host).
@@ -259,6 +264,6 @@ free -h
   **로컬에서 빌드 후 `build/` 폴더만 업로드**하는 방법도 있다.
 
 ### 정리
-1. 포트 안 겹치게 (3000/8000 사용 중이면 변경)
+1. 포트 안 겹치게 (백엔드 5005 / 프론트 5555 — 사용 중이면 변경)
 2. Nginx는 **서브도메인으로 분리**, 기존 설정 건드리지 말 것
 3. RAM 여유 확인 + 스왑

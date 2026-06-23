@@ -237,6 +237,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - **시작 시간 선택 시 종료 시간 자동 +2시간** 설정 (사용자가 종료를 직접 바꾸면 자동 변경 중단).
 - **코트 번호 등록** (쉼표 구분, 예: `3, 5`) → 면수 자동 계산. 대진표의 코트 순번을 실제 번호로 표시.
 - **최대 참석 인원** 설정 + 정원 초과 시 참석 투표 차단(백엔드 `409`).
+- **보던 달 유지**: 보던 달은 URL(`?month=`)에 저장되어 브라우저 뒤로가기 시 유지됨. 추가로 모임 칩이 현재 달을 `?from=`으로 넘기고, 상세의 "← 캘린더"/삭제 후 이동도 그 달(없으면 모임의 달)로 복귀하도록 처리.
 
 ### 모임 상세
 - **수정/삭제 기능** 추가 (주최자·관리자만). 수정은 모달에서 전 필드 편집(상태 포함), 삭제는 확인 후 `DELETE` → 캘린더 이동.
@@ -284,9 +285,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
   - `deploy/DEPLOY.md` — 단계별 배포 가이드(인스턴스 생성 → 서비스 등록 → Nginx → HTTPS → 백업, **12절: 다른 프로젝트와 한 서버 공존**)
   - `deploy/tennismanager-backend.service`, `deploy/tennismanager-frontend.service` — systemd 유닛
   - `deploy/nginx-tennismanager.conf` — Nginx 리버스 프록시
-- 구조: `Nginx(80/443) → Remix(3000) →(내부)→ FastAPI(8000)`. 백엔드는 외부 미노출.
+- 구조: `Nginx(80/443) → Remix(5555) →(내부)→ FastAPI(5005)`. 백엔드는 외부 미노출. (로컬 개발은 3000/8000)
+  - **포트 5005/5555 선택 이유**: 같은 서버에 다른 백엔드 프로젝트가 돌고 있어 충돌 회피용. 내부 전용이라 방화벽엔 80/443만 연다.
 - 배포 서버는 **더미 데이터 없이** 시작(`seed.py` 미실행, DB는 `.gitignore`).
 - ⚠️ 운영 모드 쿠키는 `Secure` → **HTTPS 필수**(미적용 시 로그인 세션 유지 안 됨).
+
+### 배포 환경 (확정)
+- 운영 서버: AWS Lightsail (서울 리전), 같은 인스턴스에 다른 백엔드 프로젝트와 공존.
+- 공인 IP: **`13.125.173.69`** (Static IP 연결 필요 — 바뀌면 주소·인증서 깨짐).
+- **도메인 없음 → sslip.io로 무료 HTTPS**: 접속 주소 **`https://13.125.173.69.sslip.io`**.
+  - sslip.io는 가입·등록 없이 `<IP>.sslip.io`를 해당 IP로 연결해주는 공개 DNS.
+  - 인증서: `sudo certbot --nginx -d 13.125.173.69.sslip.io` (자동 갱신).
+  - Nginx `server_name`도 이 값으로 설정됨.
+  - 추후 실제 도메인/DuckDNS로 교체 시 `server_name` 수정 + certbot 재실행만 하면 됨.
 
 ## 9. 남은 작업(후보)
 

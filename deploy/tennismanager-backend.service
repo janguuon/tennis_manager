@@ -1,0 +1,14 @@
+[Unit]
+Description=Tennis Manager Backend (FastAPI)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/teambreaker_manager/backend
+EnvironmentFile=/home/ubuntu/teambreaker_manager/backend/.env
+ExecStart=/home/ubuntu/teambreaker_manager/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,124 @@
+import type { LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { Form, NavLink, Outlet, useLoaderData, useLocation, useRouteLoaderData } from "@remix-run/react";
+
+import { ApiError, api } from "~/lib/api.server";
+import { requireToken } from "~/lib/session.server";
+import type { User } from "~/lib/types";
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const token = await requireToken(request);
+  try {
+    const user = await api<User>("/users/me", { token });
+    return json({ user });
+  } catch (err) {
+    // 토큰 만료/무효 → 로그아웃 처리
+    if (err instanceof ApiError && err.status === 401) {
+      throw redirect("/logout");
+    }
+    throw err;
+  }
+}
+
+const navItems = [
+  { to: "/app/calendar", label: "캘린더" },
+  { to: "/app/ranking", label: "랭킹" },
+  { to: "/app/members", label: "회원" },
+];
+
+export default function AppLayout() {
+  const { user } = useLoaderData<typeof loader>();
+  const rootData = useRouteLoaderData("root") as { theme?: string } | undefined;
+  const theme = rootData?.theme === "dark" ? "dark" : "light";
+  const location = useLocation();
+
+  return (
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-6">
+            <NavLink to="/app" className="text-lg font-bold text-court-700">
+              🎾 테니스 매니저
+            </NavLink>
+            <nav className="hidden gap-1 sm:flex">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `rounded-lg px-3 py-1.5 text-sm font-medium ${
+                      isActive
+                        ? "bg-court-100 text-court-700 dark:bg-court-900/40 dark:text-court-300"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+              {user.is_admin ? (
+                <NavLink
+                  to="/app/admin"
+                  className={({ isActive }) =>
+                    `rounded-lg px-3 py-1.5 text-sm font-medium ${
+                      isActive ? "bg-court-100 text-court-700" : "text-slate-600 hover:bg-slate-100"
+                    }`
+                  }
+                >
+                  관리자
+                </NavLink>
+              ) : null}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-600 dark:text-slate-300">
+              {user.name}
+              {user.is_admin ? <span className="ml-1 text-court-600 dark:text-court-400">(관리자)</span> : null}
+            </span>
+            <Form method="post" action="/resources/theme">
+              <input type="hidden" name="theme" value={theme === "dark" ? "light" : "dark"} />
+              <input type="hidden" name="redirectTo" value={location.pathname + location.search} />
+              <button
+                type="submit"
+                className="btn-ghost px-2 py-1.5 text-sm"
+                title={theme === "dark" ? "라이트 모드로" : "다크 모드로"}
+                aria-label="테마 전환"
+              >
+                {theme === "dark" ? "☀️" : "🌙"}
+              </button>
+            </Form>
+            <Form method="post" action="/logout">
+              <button type="submit" className="btn-ghost px-3 py-1.5 text-xs">
+                로그아웃
+              </button>
+            </Form>
+          </div>
+        </div>
+
+        {/* 모바일 내비 */}
+        <nav className="flex gap-1 border-t border-slate-100 px-4 py-2 dark:border-slate-800 sm:hidden">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-medium ${
+                  isActive
+                    ? "bg-court-100 text-court-700 dark:bg-court-900/40 dark:text-court-300"
+                    : "text-slate-600 dark:text-slate-300"
+                }`
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+      </header>
+
+      <main className="mx-auto max-w-5xl px-4 py-6">
+        <Outlet context={{ user }} />
+      </main>
+    </div>
+  );
+}

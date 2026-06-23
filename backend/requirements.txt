@@ -1,0 +1,11 @@
+# Python 3.12 ~ 3.14 호환. 정확한 핀 대신 하한선만 지정해
+# pip가 해당 파이썬용 미리 빌드된 wheel(특히 pydantic-core)을 받도록 한다.
+fastapi>=0.115
+uvicorn[standard]>=0.34
+sqlalchemy>=2.0.36
+pydantic[email]>=2.11
+pydantic-settings>=2.7
+email-validator>=2.2
+bcrypt>=4.0
+python-jose[cryptography]>=3.3
+python-multipart>=0.0.20

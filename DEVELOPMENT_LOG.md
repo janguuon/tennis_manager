@@ -216,6 +216,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - **원인**: Windows 기본 콘솔 인코딩(cp949)이 이모지(유니코드)를 표현하지 못함. (데이터 저장은 그 전에 모두 커밋되어 정상)
 - **해결**: 스크립트 상단에서 `sys.stdout.reconfigure(encoding="utf-8")` 적용.
 
+### ⑤ nginx.conf 수정이 컨테이너에 반영 안 됨 (단일 파일 bind-mount inode 문제)
+- **증상**: 호스트의 `nginx.conf`에 sslip.io 블록을 추가하고 `nginx -t`/`reload`가 "성공"인데도 실제로는 적용 안 됨. `docker exec nginx_proxy nginx -T | grep sslip` 결과가 비어 있음(=컨테이너는 옛 설정을 봄).
+- **원인**: **단일 파일**을 bind-mount한 경우, 편집기(vim/nano)나 `sed -i`로 저장하면 파일이 **새 inode로 교체**되어 컨테이너는 마운트 시점의 옛 inode를 계속 참조. → 컨테이너 안 nginx는 옛 파일 기준으로 -t/reload "성공".
+- **해결**: **`docker restart nginx_proxy`**로 마운트를 다시 해석시켜 새 파일을 읽게 함. 단, 재시작 전 인증서가 실제 존재해야 함(443 블록이 없는 cert를 참조하면 nginx 起動 실패 → 전체 다운). 재시작 전 임시 컨테이너로 안전 검증 권장:
+  `docker run --rm -v .../nginx.conf:/etc/nginx/nginx.conf:ro -v .../certbot/conf:/etc/letsencrypt:ro nginx:latest nginx -t`
+- **검증**: 재시작 후 `docker exec nginx_proxy grep -c sslip /etc/nginx/nginx.conf` > 0.
+
 ### ④ 라이트 모드인데 다크 스타일이 적용됨
 - **증상**: 토글은 라이트(🌙)인데 화면(달력·헤더 등)이 어둡게 표시됨.
 - **원인**: `tailwind.config.ts`의 `darkMode: "class"` 변경이 **dev 서버에 반영되지 않음**. Tailwind 기본값은 `darkMode: "media"`라 **OS 다크모드 설정**이 그대로 `dark:` 스타일을 켜버림.
@@ -308,7 +315,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - 구조: `tennis-backend`(5005, 내부) + `tennis-frontend`(5555, 호스트 공개). 프론트→백엔드는 compose 네트워크(`http://tennis-backend:5005`).
 - 실행: 루트에 `.env`(SECRET_KEY/SESSION_SECRET) 생성 후 `docker compose up -d --build`.
 - **도메인 정책**: DuckDNS는 쓰지 않음(그 컨테이너는 다른 프로젝트용). 테니스 매니저는 **sslip.io**(`13.125.173.69.sslip.io`)로 IP 기반 접속/HTTPS.
-- **남은 단계**: 기존 `nginx_proxy`에 서버 블록 추가(`server_name 13.125.173.69.sslip.io` → 호스트 5555로 proxy_pass) + Let's Encrypt 인증서. (nginx_proxy 마운트 경로/인증서 방식 확인 후 진행)
+
+### 기존 nginx_proxy(UsUniverse) 연동 — 실제 적용
+- 공용 프록시: `nginx_proxy`(nginx:latest), 네트워크 **`usuniverse_app-network`**, 설정 단일 파일 `/home/ubuntu/UsUniverse/nginx/nginx.conf`(컨테이너에 bind-mount), 인증서 `certbot/certbot` 컨테이너(webroot `/var/www/certbot`, 저장 `/home/ubuntu/UsUniverse/certbot/conf`).
+- 기존 프록시는 **컨테이너 이름으로 proxy_pass**(`http://frontend:3000`, `resolver 127.0.0.11`) → 테니스도 같은 네트워크에 연결해 **`tennis-frontend:5555`로 프록시**.
+- 적용 절차:
+  1. `docker network connect usuniverse_app-network tennis-frontend tennis-backend` (compose에도 external 네트워크로 반영).
+  2. `nginx.conf`에 테니스용 **80 블록(ACME+리다이렉트)** + **443 블록(sslip.io → tennis-frontend:5555)** 추가(기존 블록과 나란히).
+  3. certbot webroot로 `13.125.173.69.sslip.io` 인증서 발급.
+  4. `docker restart nginx_proxy`로 반영.
+- 우리 앱은 브라우저가 백엔드를 직접 호출하지 않으므로 `/api/` 블록 불필요 — `location /` 하나면 됨.
 
 ## 9. 남은 작업(후보)
 

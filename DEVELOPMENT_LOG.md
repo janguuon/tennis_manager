@@ -307,7 +307,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - `app/database.py`가 `DATABASE_URL` 환경변수 지원 → 컨테이너에서 볼륨(`tennis-data:/app/data`)에 SQLite 영속.
 - 구조: `tennis-backend`(5005, 내부) + `tennis-frontend`(5555, 호스트 공개). 프론트→백엔드는 compose 네트워크(`http://tennis-backend:5005`).
 - 실행: 루트에 `.env`(SECRET_KEY/SESSION_SECRET) 생성 후 `docker compose up -d --build`.
-- **남은 단계**: 기존 `nginx_proxy`에 서버 블록 추가(호스트 5555로 proxy_pass) + DuckDNS 서브도메인 + HTTPS 인증서. (nginx_proxy 마운트 경로/인증서 방식 확인 후 진행)
+- **도메인 정책**: DuckDNS는 쓰지 않음(그 컨테이너는 다른 프로젝트용). 테니스 매니저는 **sslip.io**(`13.125.173.69.sslip.io`)로 IP 기반 접속/HTTPS.
+- **남은 단계**: 기존 `nginx_proxy`에 서버 블록 추가(`server_name 13.125.173.69.sslip.io` → 호스트 5555로 proxy_pass) + Let's Encrypt 인증서. (nginx_proxy 마운트 경로/인증서 방식 확인 후 진행)
 
 ## 9. 남은 작업(후보)
 

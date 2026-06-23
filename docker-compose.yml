@@ -1,10 +1,10 @@
 # 테니스 매니저 Docker 배포.
-# 백엔드(FastAPI)와 프론트(Remix)를 컨테이너로 띄우고, 프론트만 호스트 5555 포트로 공개한다.
-# 기존 nginx_proxy 컨테이너가 이 5555로 프록시하도록 server_block 을 추가한다.
+# 백엔드(FastAPI)와 프론트(Remix)를 컨테이너로 띄우고, 기존 nginx_proxy와 같은
+# 외부 네트워크(usuniverse_app-network)에 붙여 nginx_proxy가 컨테이너 이름으로 프록시한다.
 #
 # 사전: 같은 폴더에 .env 파일 생성 (SECRET_KEY, SESSION_SECRET)
 #   SECRET_KEY=...        # python3 -c "import secrets; print(secrets.token_hex(32))"
-#   SESSION_SECRET=...    # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#   SESSION_SECRET=...    # openssl rand -hex 32
 
 services:
   tennis-backend:
@@ -16,7 +16,9 @@ services:
       DATABASE_URL: sqlite:////app/data/tennismanager.db
       ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
     volumes:
-      - tennis-data:/app/data   # SQLite 영속 (컨테이너 재생성해도 데이터 유지)
+      - tennis-data:/app/data   # SQLite 영속
+    networks:
+      - usuniverse
 
   tennis-frontend:
     build: ./frontend
@@ -26,11 +28,18 @@ services:
     environment:
       NODE_ENV: production
       PORT: "5555"
-      API_URL: http://tennis-backend:5005   # 같은 compose 네트워크에서 백엔드 호출
+      API_URL: http://tennis-backend:5005   # 같은 네트워크에서 백엔드 호출
     depends_on:
       - tennis-backend
     ports:
-      - "5555:5555"   # nginx_proxy가 호스트 5555로 접근
+      - "127.0.0.1:5555:5555"   # 로컬 디버깅용(외부 비공개). nginx는 네트워크로 접근
+    networks:
+      - usuniverse
 
 volumes:
   tennis-data:
+
+networks:
+  usuniverse:
+    external: true
+    name: usuniverse_app-network

@@ -331,3 +331,46 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - 프로필 수정 화면, 친선경기 직접 입력 UI
 - 대진 수동 편집 UI(드래그/선수 교체)
 - (운영 시) Alembic 마이그레이션 도입
+
+## 10. 추가 작업 로그 (2026-06-27)
+
+### 커밋 메시지
+```
+feat : UI 리디자인 및 엑셀 참가비/계좌 등록, 리스트 뒤로가기 수정
+
+- 엑셀 일괄 등록에 참가비·은행·계좌번호·예금주 컬럼 추가(양식/텍스트 서식 포함)
+- 전체 UI 미니멀+컬러풀 리디자인(그라데이션 버튼·내비, 플로팅 카드, 컬러 통계/정산/랭킹)
+- 캘린더 리스트 모드에서 상세 진입 후 뒤로가기 시 월 전체 리스트로 복귀하도록 수정
+- 이모지 파비콘 추가로 /favicon.ico 404 제거
+```
+
+### 1) 엑셀 일괄 등록에 참가비·계좌 추가
+- `backend/app/routers/gatherings.py`
+  - `IMPORT_HEADER_MAP`에 `참가비→fee`, `은행→bank`, `계좌번호→account_number`, `예금주→account_holder` 추가.
+  - `_cell_value`: 참가비는 `"5,000"`/`5000.0`도 정수로 변환, 계좌번호는 숫자 인식(`...0.0`) 시 정수 문자열로 보정.
+  - 다운로드 양식(`import_template`)에 새 컬럼·예시 반영 + 계좌번호 열을 텍스트 서식(`@`)으로 지정.
+
+### 2) UI 미니멀 + 컬러풀 리디자인
+- `frontend/tailwind.config.ts` — court 팔레트 보강(300/950), `soft`/`soft-lg` 그림자, Pretendard 폰트 스택, fade-in 애니메이션.
+- `frontend/app/tailwind.css` — 그라데이션 알약 버튼(`.btn-primary`), 테두리 최소화·큰 라운드 플로팅 카드(`.card`), 채움형 인풋, 컬러 메시 배경, `.icon-chip`/`.chip` 추가.
+- `app/routes/app.tsx` — 헤더 반투명/블러, 브랜드 그라데이션, 활성 내비 그라데이션 알약(관리자=앰버), 페이지 페이드인.
+- `login.tsx`/`signup.tsx` — 로고 배지 + 그라데이션 타이틀.
+- `app.members.$id.tsx` — 종합 전적 컬러 블록(슬레이트/그린/로즈/스카이).
+- `app.payments.tsx` — 월 합계 그라데이션 카드(걷힘=그린, 미납=앰버).
+- `app.ranking.tsx` — 상위 3위 컬러 하이라이트 + 메달 확대.
+- `app.members._index.tsx` — 그라데이션 아바타.
+
+### 3) 캘린더 리스트 모드 뒤로가기 수정
+- 증상: 리스트 모드에서 일정 상세 진입 후 "← 목록" 시 해당 **일자 페이지**(특정 일만)로 이동.
+- 해결: 상세 진입 시 `from` 출처를 구분.
+  - `list:YYYY-MM` → 캘린더 리스트 모드(월 전체)로 복귀.
+  - `YYYY-MM-DD` → 일자 페이지, `YYYY-MM` → 달력 모드(기존 유지).
+- 파일: `app.calendar.tsx`(리스트 카드가 `?from=list:{월}` 전달), `app.gatherings.$id.tsx`(뒤로가기/삭제 리다이렉트 분기).
+
+### 4) 콘솔 노이즈 정리
+- `app/root.tsx` — 🎾 이모지 파비콘(SVG data URI) 추가로 `/favicon.ico` 404 스택트레이스 제거.
+- 참고: `tailwind.config.ts` 변경 시 dev 서버 재시작 필요(설정 HMR 불안정). `com.chrome.devtools.json` 404는 DevTools 자동 요청으로 무해.
+
+### 검증
+- 백엔드 임포트 OK, 엑셀 임포트 엔드투엔드(참가비 5,000·계좌 등록) 통과.
+- 프론트 `typecheck` 0 에러, 프로덕션 `build` 통과.

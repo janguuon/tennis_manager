@@ -35,11 +35,14 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+      <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/70 shadow-sm shadow-slate-900/5 backdrop-blur-md dark:border-slate-800/70 dark:bg-slate-900/70">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
-            <NavLink to="/app" className="text-base font-bold text-court-700 sm:text-lg">
-              🎾 테니스 매니저
+            <NavLink to="/app" className="flex items-center gap-1.5 text-base font-extrabold tracking-tight sm:text-lg">
+              <span>🎾</span>
+              <span className="bg-gradient-to-r from-court-600 to-court-800 bg-clip-text text-transparent dark:from-court-400 dark:to-court-500">
+                테니스 매니저
+              </span>
             </NavLink>
             <nav className="hidden gap-1 sm:flex">
               {navItems.map((item) => (
@@ -47,10 +50,10 @@ export default function AppLayout() {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    `rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
                       isActive
-                        ? "bg-court-100 text-court-700 dark:bg-court-900/40 dark:text-court-300"
-                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                        ? "bg-gradient-to-r from-court-500 to-emerald-600 text-white shadow-md shadow-court-500/30"
+                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`
                   }
                 >
@@ -61,8 +64,10 @@ export default function AppLayout() {
                 <NavLink
                   to="/app/admin"
                   className={({ isActive }) =>
-                    `rounded-lg px-3 py-1.5 text-sm font-medium ${
-                      isActive ? "bg-court-100 text-court-700" : "text-slate-600 hover:bg-slate-100"
+                    `rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
+                      isActive
+                        ? "bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-md shadow-amber-500/30"
+                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
                     }`
                   }
                 >
@@ -112,10 +117,10 @@ export default function AppLayout() {
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex-1 rounded-lg px-2 py-1.5 text-center text-sm font-medium ${
+                `flex-1 rounded-full px-2 py-1.5 text-center text-sm font-semibold transition ${
                   isActive
-                    ? "bg-court-100 text-court-700 dark:bg-court-900/40 dark:text-court-300"
-                    : "text-slate-600 dark:text-slate-300"
+                    ? "bg-gradient-to-r from-court-500 to-emerald-600 text-white shadow-sm shadow-court-500/30"
+                    : "text-slate-500 dark:text-slate-300"
                 }`
               }
             >
@@ -126,7 +131,9 @@ export default function AppLayout() {
       </header>
 
       <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
-        <Outlet context={{ user }} />
+        <div key={location.pathname} className="animate-fade-in-up">
+          <Outlet context={{ user }} />
+        </div>
       </main>
     </div>
   );

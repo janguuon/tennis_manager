@@ -43,8 +43,19 @@ export default function RankingPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {ranking.map((row) => (
-                <tr key={row.user.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                  <td className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center font-bold">{medal(row.rank)}</td>
+                <tr
+                  key={row.user.id}
+                  className={`transition hover:bg-slate-50 dark:hover:bg-slate-700/40 ${
+                    row.rank === 1
+                      ? "bg-amber-50/70 dark:bg-amber-900/10"
+                      : row.rank === 2
+                        ? "bg-slate-50/80 dark:bg-slate-800/40"
+                        : row.rank === 3
+                          ? "bg-orange-50/60 dark:bg-orange-900/10"
+                          : ""
+                  }`}
+                >
+                  <td className="px-2.5 py-2.5 text-center text-base font-extrabold sm:px-4 sm:py-3">{medal(row.rank)}</td>
                   <td className="px-2.5 py-2.5 sm:px-4 sm:py-3">
                     <Link to={`/app/members/${row.user.id}`} className="font-medium hover:text-court-600">
                       {row.user.name}

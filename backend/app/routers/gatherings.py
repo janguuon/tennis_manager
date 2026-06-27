@@ -8,6 +8,7 @@ import io
 from datetime import date, datetime, time, timedelta
 
 import openpyxl
+from openpyxl.utils import get_column_letter
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -43,6 +44,10 @@ IMPORT_HEADER_MAP = {
     "장소": "location",
     "코트번호": "court_numbers",
     "최대인원": "max_participants",
+    "참가비": "fee",
+    "은행": "bank",
+    "계좌번호": "account_number",
+    "예금주": "account_holder",
     "설명": "description",
 }
 IMPORT_COLUMNS = list(IMPORT_HEADER_MAP.keys())
@@ -138,7 +143,15 @@ def _cell_value(field: str, value) -> str | int:
         return str(value).strip()
     if field == "max_participants":
         return int(value)
-    # title, location, court_numbers, description
+    if field == "fee":
+        # "5,000" 같은 콤마 표기나 5000.0 float 도 허용
+        return int(float(str(value).replace(",", "").strip()))
+    if field == "account_number":
+        # 엑셀이 계좌번호를 숫자로 인식(예: 1234567890.0)해도 정수 문자열로 보정
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+    # title, location, court_numbers, bank, account_holder, description
     return str(value).strip()
 
 
@@ -211,7 +224,15 @@ def import_template(_: User = Depends(get_current_user)):
     ws = wb.active
     ws.title = "모임목록"
     ws.append(IMPORT_COLUMNS)
-    ws.append(["2026-07-05", "정기 모임", "09:00", "12:00", "시민 테니스장", "3, 5", 16, "비고 예시"])
+    ws.append([
+        "2026-07-05", "정기 모임", "09:00", "12:00", "시민 테니스장", "3, 5", 16,
+        5000, "국민", "123-456-7890", "홍길동", "비고 예시",
+    ])
+    # 계좌번호 열은 텍스트 서식으로(숫자 자동 인식·0 누락 방지)
+    acct_col = get_column_letter(IMPORT_COLUMNS.index("계좌번호") + 1)
+    ws.column_dimensions[acct_col].number_format = "@"
+    for cell in ws[acct_col]:
+        cell.number_format = "@"
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)

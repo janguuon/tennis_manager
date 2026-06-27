@@ -28,7 +28,7 @@ export default function MembersPage() {
             to={`/app/members/${m.id}`}
             className="card flex items-center gap-3 transition hover:border-court-300 hover:shadow"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-court-100 font-bold text-court-700">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-court-400 to-emerald-600 text-lg font-bold text-white shadow-sm shadow-court-500/30">
               {m.name.charAt(0)}
             </div>
             <div>

@@ -110,6 +110,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     } else if (intent === "delete_gathering") {
       await api(`/gatherings/${id}`, { method: "DELETE", token });
       const from = String(formData.get("from") || "");
+      if (from.startsWith("list:")) return redirect(`/app/calendar?view=list&month=${from.slice(5)}`);
       if (/^\d{4}-\d{2}-\d{2}$/.test(from)) return redirect(`/app/day/${from}`);
       return redirect(from ? `/app/calendar?month=${from}` : "/app/calendar");
     }
@@ -173,14 +174,24 @@ export default function GatheringDetailPage() {
   const attendanceLocked = daysUntilEvent <= ATTENDANCE_LOCK_DAYS;
   const canSetAbsence = user.is_admin || !attendanceLocked;
 
-  // 돌아갈 위치: ?from 이 전체 날짜(YYYY-MM-DD)면 그 날의 일정 목록, 달(YYYY-MM)이면 캘린더로.
+  // 돌아갈 위치를 ?from 으로 판별:
+  //  - "list:YYYY-MM" → 캘린더 리스트 모드(월 전체)
+  //  - "YYYY-MM-DD"   → 그 날의 일정 목록 페이지
+  //  - "YYYY-MM"      → 캘린더(달력 모드)
   const [searchParams] = useSearchParams();
   const from = searchParams.get("from") || "";
-  const backToDay = /^\d{4}-\d{2}-\d{2}$/.test(from);
-  const backHref = backToDay
-    ? `/app/day/${from}`
-    : `/app/calendar?month=${from || gathering.event_date.slice(0, 7)}`;
-  const backLabel = backToDay ? "← 목록" : "← 캘린더";
+  let backHref: string;
+  let backLabel: string;
+  if (from.startsWith("list:")) {
+    backHref = `/app/calendar?view=list&month=${from.slice(5)}`;
+    backLabel = "← 목록";
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    backHref = `/app/day/${from}`;
+    backLabel = "← 목록";
+  } else {
+    backHref = `/app/calendar?month=${from || gathering.event_date.slice(0, 7)}`;
+    backLabel = "← 캘린더";
+  }
 
   // 수정 성공 시 모달 닫기
   useEffect(() => {

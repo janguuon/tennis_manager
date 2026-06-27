@@ -54,11 +54,11 @@ export default function MemberDetailPage() {
       {/* 종합 전적 */}
       <div className="card">
         <h2 className="mb-3 font-semibold">종합 전적</h2>
-        <div className="grid grid-cols-4 gap-3 text-center">
-          <Stat label="경기" value={stats.overall.total} />
-          <Stat label="승" value={stats.overall.wins} color="text-court-600" />
-          <Stat label="패" value={stats.overall.losses} color="text-red-500" />
-          <Stat label="승률" value={`${(stats.overall.win_rate * 100).toFixed(0)}%`} />
+        <div className="grid grid-cols-4 gap-2 text-center sm:gap-3">
+          <Stat label="경기" value={stats.overall.total} tint="slate" />
+          <Stat label="승" value={stats.overall.wins} tint="green" />
+          <Stat label="패" value={stats.overall.losses} tint="red" />
+          <Stat label="승률" value={`${(stats.overall.win_rate * 100).toFixed(0)}%`} tint="blue" />
         </div>
       </div>
 
@@ -122,11 +122,26 @@ export default function MemberDetailPage() {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string | number; color?: string }) {
+const STAT_TINT: Record<string, string> = {
+  slate: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100",
+  green: "bg-court-50 text-court-700 dark:bg-court-900/30 dark:text-court-300",
+  red: "bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300",
+  blue: "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
+};
+
+function Stat({
+  label,
+  value,
+  tint = "slate",
+}: {
+  label: string;
+  value: string | number;
+  tint?: "slate" | "green" | "red" | "blue";
+}) {
   return (
-    <div>
-      <div className={`text-xl font-bold sm:text-2xl ${color ?? "text-slate-800 dark:text-slate-100"}`}>{value}</div>
-      <div className="text-xs text-slate-500">{label}</div>
+    <div className={`rounded-2xl px-2 py-3 ${STAT_TINT[tint]}`}>
+      <div className="text-xl font-extrabold sm:text-2xl">{value}</div>
+      <div className="mt-0.5 text-xs font-semibold opacity-70">{label}</div>
     </div>
   );
 }

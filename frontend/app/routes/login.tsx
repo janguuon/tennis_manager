@@ -41,9 +41,14 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-court-700">🎾 테니스 매니저</h1>
+      <div className="w-full max-w-sm animate-fade-in-up">
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-court-500 to-court-700 text-2xl shadow-soft-lg shadow-court-600/25">
+            🎾
+          </div>
+          <h1 className="bg-gradient-to-r from-court-600 to-court-800 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent dark:from-court-400 dark:to-court-600">
+            테니스 매니저
+          </h1>
           <p className="mt-1 text-sm text-slate-500">테니스 팀 매니지먼트</p>
         </div>
 

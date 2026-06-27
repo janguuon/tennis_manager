@@ -14,6 +14,12 @@ import stylesheet from "~/tailwind.css?url";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: stylesheet },
+  // 🎾 이모지 파비콘 (별도 파일 없이 /favicon.ico 자동요청 404 방지)
+  {
+    rel: "icon",
+    href:
+      "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>",
+  },
 ];
 
 export async function loader({ request }: LoaderFunctionArgs) {

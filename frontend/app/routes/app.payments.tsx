@@ -53,20 +53,18 @@ export default function PaymentsPage() {
       </div>
 
       {/* 월 합계 */}
-      <div className="card grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-lg font-bold sm:text-xl">{won(summary.total_collected)}</div>
-          <div className="text-xs text-slate-500">걷힘</div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-3xl bg-gradient-to-br from-court-500 to-emerald-600 p-3 text-center text-white shadow-lg shadow-court-500/30 sm:p-4">
+          <div className="text-base font-extrabold sm:text-xl">{won(summary.total_collected)}</div>
+          <div className="text-xs font-semibold text-white/80">걷힘</div>
         </div>
-        <div>
-          <div className="text-lg font-bold text-amber-600 sm:text-xl dark:text-amber-400">
-            {won(summary.total_unpaid)}
-          </div>
-          <div className="text-xs text-slate-500">미납</div>
+        <div className="rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 p-3 text-center text-white shadow-lg shadow-amber-500/30 sm:p-4">
+          <div className="text-base font-extrabold sm:text-xl">{won(summary.total_unpaid)}</div>
+          <div className="text-xs font-semibold text-white/80">미납</div>
         </div>
-        <div>
-          <div className="text-lg font-bold sm:text-xl">{won(summary.total_expected)}</div>
-          <div className="text-xs text-slate-500">합계</div>
+        <div className="rounded-3xl bg-white p-3 text-center shadow-soft ring-1 ring-slate-100 sm:p-4 dark:bg-slate-900/70 dark:ring-slate-800">
+          <div className="text-base font-extrabold sm:text-xl">{won(summary.total_expected)}</div>
+          <div className="text-xs font-semibold text-slate-400">합계</div>
         </div>
       </div>
 

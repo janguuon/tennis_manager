@@ -315,7 +315,7 @@ export default function CalendarPage() {
                 {list.map((g) => (
                   <Link
                     key={g.id}
-                    to={`/app/gatherings/${g.id}?from=${dateStr}`}
+                    to={`/app/gatherings/${g.id}?from=list:${month}`}
                     className="card flex items-center justify-between gap-3 transition hover:border-court-300 hover:bg-court-50 dark:hover:bg-slate-700/40"
                   >
                     <div className="min-w-0">

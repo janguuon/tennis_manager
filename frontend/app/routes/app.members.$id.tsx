@@ -42,7 +42,7 @@ export default function MemberDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">
+        <h1 className="text-lg font-bold sm:text-xl">
           {stats.user.name}
           {stats.user.nickname ? (
             <span className="ml-2 text-sm text-slate-400">@{stats.user.nickname}</span>
@@ -125,7 +125,7 @@ export default function MemberDetailPage() {
 function Stat({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
     <div>
-      <div className={`text-2xl font-bold ${color ?? "text-slate-800 dark:text-slate-100"}`}>{value}</div>
+      <div className={`text-xl font-bold sm:text-2xl ${color ?? "text-slate-800 dark:text-slate-100"}`}>{value}</div>
       <div className="text-xs text-slate-500">{label}</div>
     </div>
   );

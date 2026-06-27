@@ -19,7 +19,7 @@ export default function MembersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">👥 회원 ({members.length}명)</h1>
+      <h1 className="text-lg font-bold sm:text-xl">👥 회원 ({members.length}명)</h1>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {members.map((m) => (

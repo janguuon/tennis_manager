@@ -23,7 +23,7 @@ export default function RankingPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">🏆 팀 랭킹</h1>
+      <h1 className="text-lg font-bold sm:text-xl">🏆 팀 랭킹</h1>
 
       {ranking.length === 0 ? (
         <div className="card text-center text-sm text-slate-500">
@@ -34,18 +34,18 @@ export default function RankingPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 dark:bg-slate-900/40 dark:text-slate-400">
               <tr>
-                <th className="px-4 py-3">순위</th>
-                <th className="px-4 py-3">회원</th>
-                <th className="px-4 py-3 text-center">승</th>
-                <th className="px-4 py-3 text-center">패</th>
-                <th className="px-4 py-3 text-center">승률</th>
+                <th className="px-2.5 py-2.5 sm:px-4 sm:py-3">순위</th>
+                <th className="px-2.5 py-2.5 sm:px-4 sm:py-3">회원</th>
+                <th className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center">승</th>
+                <th className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center">패</th>
+                <th className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center">승률</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {ranking.map((row) => (
                 <tr key={row.user.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                  <td className="px-4 py-3 text-center font-bold">{medal(row.rank)}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center font-bold">{medal(row.rank)}</td>
+                  <td className="px-2.5 py-2.5 sm:px-4 sm:py-3">
                     <Link to={`/app/members/${row.user.id}`} className="font-medium hover:text-court-600">
                       {row.user.name}
                     </Link>
@@ -53,9 +53,9 @@ export default function RankingPage() {
                       <span className="ml-1 text-xs text-slate-400">@{row.user.nickname}</span>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 text-center text-court-600">{row.record.wins}</td>
-                  <td className="px-4 py-3 text-center text-red-500">{row.record.losses}</td>
-                  <td className="px-4 py-3 text-center font-semibold">
+                  <td className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center text-court-600">{row.record.wins}</td>
+                  <td className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center text-red-500">{row.record.losses}</td>
+                  <td className="px-2.5 py-2.5 sm:px-4 sm:py-3 text-center font-semibold">
                     {(row.record.win_rate * 100).toFixed(0)}%
                   </td>
                 </tr>

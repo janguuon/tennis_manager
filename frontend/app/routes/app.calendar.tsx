@@ -77,7 +77,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     await api("/gatherings", { method: "POST", token, body });
-    return json({ ok: true });
+    return json({ ok: true, error: null as string | null });
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "모임 생성에 실패했습니다.";
     return json({ ok: false, error: message }, { status: 400 });
@@ -438,7 +438,7 @@ export default function CalendarPage() {
                 <textarea id="description" name="description" rows={2} className="input" />
               </div>
 
-              {actionData && "error" in actionData && actionData.error ? (
+              {actionData?.error ? (
                 <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{actionData.error}</p>
               ) : null}
 

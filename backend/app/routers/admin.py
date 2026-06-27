@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import get_current_admin
 from ..models import ApprovalStatus, User
-from ..schemas import UserRead
+from ..schemas import PasswordUpdate, UserRead
+from ..security import hash_password
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 
@@ -60,6 +61,18 @@ def set_admin(
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/users/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_user_password(
+    user_id: int,
+    payload: PasswordUpdate,
+    db: Session = Depends(get_db),
+):
+    """관리자가 회원 비밀번호를 초기화한다(분실 대응). 새 비밀번호로 교체."""
+    user = _get_user_or_404(db, user_id)
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
 
 
 def _get_user_or_404(db: Session, user_id: int) -> User:

@@ -77,7 +77,7 @@ export default function MyPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-court-700">마이페이지</h1>
+        <h1 className="text-xl font-bold text-court-700 sm:text-2xl">마이페이지</h1>
         <p className="mt-1 text-sm text-slate-500">내 정보를 확인하고 수정할 수 있어요.</p>
       </div>
 

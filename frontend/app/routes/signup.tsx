@@ -32,10 +32,10 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const res = await api<SignupResponse>("/auth/signup", { method: "POST", body });
-    return { message: res.message };
+    return { message: res.message, error: null as string | null };
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : "가입 신청에 실패했습니다.";
-    return { error: message };
+    const msg = err instanceof ApiError ? err.message : "가입 신청에 실패했습니다.";
+    return { message: null as string | null, error: msg };
   }
 }
 

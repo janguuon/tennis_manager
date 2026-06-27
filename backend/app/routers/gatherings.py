@@ -5,7 +5,7 @@
 한 라운드의 동시 진행 매치 수로 사용된다.
 """
 import io
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
@@ -22,10 +22,14 @@ from ..schemas import (
     GatheringDetail,
     GatheringImportResult,
     GatheringImportRowError,
+    GatheringPaymentSummary,
     GatheringRead,
     GatheringUpdate,
+    MonthlyPaymentSummary,
     ParticipantRead,
     ParticipantVote,
+    PaymentUpdate,
+    UserBrief,
 )
 
 router = APIRouter(prefix="/gatherings", tags=["gatherings"])
@@ -383,3 +387,91 @@ def cancel_attendance(
     if participant:
         db.delete(participant)
         db.commit()
+
+
+# --- 회비 / 참가비 정산 -----------------------------------------------------
+@router.put(
+    "/{gathering_id}/participants/{user_id}/payment", response_model=ParticipantRead
+)
+def set_payment(
+    gathering_id: int,
+    user_id: int,
+    payload: PaymentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """참가비 납부/미납 처리. 주최자 또는 관리자만 가능."""
+    gathering = _load_gathering(db, gathering_id)
+    _require_organizer(gathering, current_user)
+
+    participant = db.scalar(
+        select(Participant).where(
+            Participant.gathering_id == gathering_id,
+            Participant.user_id == user_id,
+        )
+    )
+    if participant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="참여자를 찾을 수 없습니다.")
+
+    participant.paid = payload.paid
+    participant.paid_at = datetime.now() if payload.paid else None
+    db.commit()
+    db.refresh(participant)
+    return ParticipantRead.model_validate(participant)
+
+
+@router.get("/payments/summary", response_model=MonthlyPaymentSummary)
+def payment_summary(
+    month: str = Query(..., description="정산할 달 (YYYY-MM)"),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """한 달 모임들의 참가비 정산 집계(참석자 기준). 미납자 명단 포함."""
+    try:
+        year, mon = (int(x) for x in month.split("-"))
+        first = date(year, mon, 1)
+        nxt = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
+        last = nxt - timedelta(days=1)
+    except (ValueError, TypeError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="month는 YYYY-MM 형식이어야 합니다.")
+
+    stmt = (
+        select(Gathering)
+        .where(Gathering.event_date >= first, Gathering.event_date <= last)
+        .options(selectinload(Gathering.participants).selectinload(Participant.user))
+        .order_by(Gathering.event_date, Gathering.start_time)
+    )
+
+    summaries: list[GatheringPaymentSummary] = []
+    total_expected = 0
+    total_collected = 0
+    for g in db.scalars(stmt).all():
+        attendees = [p for p in g.participants if p.status == AttendanceStatus.ATTENDING]
+        paid = [p for p in attendees if p.paid]
+        unpaid = [p for p in attendees if not p.paid]
+        expected = g.fee * len(attendees)
+        collected = g.fee * len(paid)
+        total_expected += expected
+        total_collected += collected
+        summaries.append(
+            GatheringPaymentSummary(
+                id=g.id,
+                title=g.title,
+                event_date=g.event_date,
+                fee=g.fee,
+                attending=len(attendees),
+                paid_count=len(paid),
+                unpaid_count=len(unpaid),
+                collected=collected,
+                expected=expected,
+                unpaid_members=[UserBrief.model_validate(p.user) for p in unpaid],
+            )
+        )
+
+    return MonthlyPaymentSummary(
+        month=month,
+        total_expected=total_expected,
+        total_collected=total_collected,
+        total_unpaid=total_expected - total_collected,
+        gatherings=summaries,
+    )

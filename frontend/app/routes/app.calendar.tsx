@@ -72,6 +72,10 @@ export async function action({ request }: ActionFunctionArgs) {
       ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
       : Number(get("court_count") || 1),
     max_participants: maxParticipants ? Number(maxParticipants) : null,
+    fee: get("fee") ? Number(get("fee")) : 0,
+    bank: get("bank") || null,
+    account_number: get("account_number") || null,
+    account_holder: get("account_holder") || null,
     description: get("description") || null,
   };
 
@@ -431,6 +435,26 @@ export default function CalendarPage() {
                   <label className="label" htmlFor="max_participants">최대 참석 인원</label>
                   <input id="max_participants" name="max_participants" type="number" min="1" className="input" placeholder="제한 없음" />
                 </div>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="fee">참가비 (1인, 원)</label>
+                <input id="fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="예: 5000 (무료면 0)" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="label" htmlFor="bank">은행</label>
+                  <input id="bank" name="bank" className="input" placeholder="국민" />
+                </div>
+                <div className="col-span-2">
+                  <label className="label" htmlFor="account_number">계좌번호</label>
+                  <input id="account_number" name="account_number" className="input" placeholder="123-456-7890" />
+                </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="account_holder">예금주</label>
+                <input id="account_holder" name="account_holder" className="input" placeholder="홍길동" />
               </div>
 
               <div>

@@ -24,6 +24,7 @@ const navItems = [
   { to: "/app/calendar", label: "캘린더" },
   { to: "/app/ranking", label: "랭킹" },
   { to: "/app/members", label: "회원" },
+  { to: "/app/payments", label: "정산" },
 ];
 
 export default function AppLayout() {

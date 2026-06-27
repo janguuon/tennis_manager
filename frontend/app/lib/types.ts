@@ -79,6 +79,10 @@ export interface Gathering {
   court_count: number;
   court_numbers: string | null;
   max_participants: number | null;
+  fee: number;
+  bank: string | null;
+  account_number: string | null;
+  account_holder: string | null;
   status: GatheringStatus;
   created_by: number;
   created_at: string;
@@ -110,10 +114,33 @@ export interface Participant {
   user: UserBrief;
   status: AttendanceStatus;
   voted_at: string;
+  paid: boolean;
+  paid_at: string | null;
 }
 
 export interface GatheringDetail extends Gathering {
   participants: Participant[];
+}
+
+export interface GatheringPaymentSummary {
+  id: number;
+  title: string;
+  event_date: string;
+  fee: number;
+  attending: number;
+  paid_count: number;
+  unpaid_count: number;
+  collected: number;
+  expected: number;
+  unpaid_members: UserBrief[];
+}
+
+export interface MonthlyPaymentSummary {
+  month: string;
+  total_expected: number;
+  total_collected: number;
+  total_unpaid: number;
+  gatherings: GatheringPaymentSummary[];
 }
 
 export interface DrawMatch {

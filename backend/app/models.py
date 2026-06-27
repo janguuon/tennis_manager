@@ -211,6 +211,13 @@ class Gathering(Base):
     court_numbers: Mapped[str | None] = mapped_column(String(200))
     max_participants: Mapped[int | None] = mapped_column(Integer)
 
+    # 1인 참가비(원). 0이면 무료. 모임별 회비 정산에 사용.
+    fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # 입금 계좌 (참가자 공개) — 은행/계좌번호/예금주
+    bank: Mapped[str | None] = mapped_column(String(50))
+    account_number: Mapped[str | None] = mapped_column(String(50))
+    account_holder: Mapped[str | None] = mapped_column(String(50))
+
     status: Mapped[GatheringStatus] = mapped_column(
         Enum(GatheringStatus), default=GatheringStatus.PLANNED
     )
@@ -251,6 +258,10 @@ class Participant(Base):
     voted_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+    # 참가비 납부 여부 (회비 정산). paid_at은 납부 처리 시각.
+    paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     gathering: Mapped[Gathering] = relationship(back_populates="participants")
     user: Mapped[User] = relationship(back_populates="participations")

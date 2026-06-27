@@ -61,6 +61,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
           method: formData.get("method"),
         },
       });
+    } else if (intent === "toggle_payment") {
+      await api(`/gatherings/${id}/participants/${formData.get("user_id")}/payment`, {
+        method: "PUT",
+        token,
+        body: { paid: formData.get("paid") === "true" },
+      });
     } else if (intent === "delete_draw") {
       await api(`/draws/${formData.get("draw_id")}`, { method: "DELETE", token });
     } else if (intent === "result") {
@@ -93,6 +99,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
             ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
             : Number(get("court_count") || 1),
           max_participants: maxParticipants ? Number(maxParticipants) : null,
+          fee: get("fee") ? Number(get("fee")) : 0,
+          bank: get("bank") || null,
+          account_number: get("account_number") || null,
+          account_holder: get("account_holder") || null,
           description: get("description") || null,
           status: get("status"),
         },
@@ -115,6 +125,27 @@ const VOTE_LABEL: Record<AttendanceStatus, string> = {
   absent: "불참",
   maybe: "미정",
 };
+
+function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {
+          // 클립보드 접근이 불가하면 무시 (HTTPS/localhost에서만 동작)
+        }
+      }}
+      className={`shrink-0 rounded-md bg-court-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-court-700 ${className}`}
+    >
+      {copied ? "복사됨 ✓" : "계좌 복사"}
+    </button>
+  );
+}
 
 function names(players: UserBrief[]): string {
   return players.map((p) => p.name).join(", ") || "—";
@@ -156,6 +187,10 @@ export default function GatheringDetailPage() {
     if (actionData?.ok) setEditing(false);
   }, [actionData]);
 
+  // 참가비 정산: 참석자 기준
+  const feeAttendees = gathering.participants.filter((p) => p.status === "attending");
+  const feePaidCount = feeAttendees.filter((p) => p.paid).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
@@ -176,6 +211,7 @@ export default function GatheringDetailPage() {
               ? `코트 ${gathering.court_numbers} (${gathering.court_count}면)`
               : `코트 ${gathering.court_count}면`}
             {gathering.max_participants ? ` · 정원 ${gathering.max_participants}명` : ""}
+            {gathering.fee > 0 ? ` · 참가비 ${gathering.fee.toLocaleString()}원` : ""}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -280,6 +316,26 @@ export default function GatheringDetailPage() {
               </div>
 
               <div>
+                <label className="label" htmlFor="e_fee">참가비 (1인, 원)</label>
+                <input id="e_fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="무료면 0" defaultValue={gathering.fee ?? 0} />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="label" htmlFor="e_bank">은행</label>
+                  <input id="e_bank" name="bank" className="input" placeholder="국민" defaultValue={gathering.bank ?? ""} />
+                </div>
+                <div className="col-span-2">
+                  <label className="label" htmlFor="e_account">계좌번호</label>
+                  <input id="e_account" name="account_number" className="input" placeholder="123-456-7890" defaultValue={gathering.account_number ?? ""} />
+                </div>
+              </div>
+              <div>
+                <label className="label" htmlFor="e_holder">예금주</label>
+                <input id="e_holder" name="account_holder" className="input" placeholder="홍길동" defaultValue={gathering.account_holder ?? ""} />
+              </div>
+
+              <div>
                 <label className="label" htmlFor="e_desc">설명</label>
                 <textarea id="e_desc" name="description" rows={2} className="input" defaultValue={gathering.description ?? ""} />
               </div>
@@ -351,6 +407,71 @@ export default function GatheringDetailPage() {
           ))}
         </ul>
       </div>
+
+      {/* 참가비 정산 */}
+      {gathering.fee > 0 ? (
+        <div className="card">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="font-semibold">💰 참가비 정산</h2>
+            <span className="text-sm text-slate-500">
+              <span className="font-semibold text-court-700 dark:text-court-300">
+                {(gathering.fee * feePaidCount).toLocaleString()}
+              </span>
+              {" / "}
+              {(gathering.fee * feeAttendees.length).toLocaleString()}원
+              <span className="ml-1 text-xs">({feePaidCount}/{feeAttendees.length}명)</span>
+            </span>
+          </div>
+
+          {/* 입금 계좌 (참가자 공개) */}
+          {gathering.account_number ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-court-50 px-3 py-2 dark:bg-court-900/30">
+              <div className="min-w-0 text-sm">
+                <span className="text-slate-500">입금 </span>
+                <span className="font-semibold text-court-800 dark:text-court-200">
+                  {gathering.bank ? `${gathering.bank} ` : ""}
+                  {gathering.account_number}
+                </span>
+                {gathering.account_holder ? (
+                  <span className="text-slate-500"> · {gathering.account_holder}</span>
+                ) : null}
+              </div>
+              <CopyButton text={gathering.account_number} className="ml-auto" />
+            </div>
+          ) : null}
+          {feeAttendees.length === 0 ? (
+            <p className="text-sm text-slate-500">참석자가 없습니다.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+              {feeAttendees.map((p) => {
+                const badge = `rounded-full px-3 py-1 text-xs font-medium ${
+                  p.paid
+                    ? "bg-court-100 text-court-700 dark:bg-court-900/40 dark:text-court-300"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                }`;
+                return (
+                  <li key={p.user.id} className="flex items-center justify-between py-2 text-sm">
+                    <span className="font-medium">{p.user.name}</span>
+                    {isOrganizer ? (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="toggle_payment" />
+                        <input type="hidden" name="user_id" value={p.user.id} />
+                        <input type="hidden" name="paid" value={p.paid ? "false" : "true"} />
+                        <button className={badge}>{p.paid ? "납부함" : "미납"}</button>
+                      </Form>
+                    ) : (
+                      <span className={badge}>{p.paid ? "납부함" : "미납"}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {isOrganizer ? (
+            <p className="mt-2 text-xs text-slate-400">상태를 누르면 납부/미납이 전환됩니다.</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* 대진 생성 (주최자/관리자) */}
       {isOrganizer ? (

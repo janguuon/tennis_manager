@@ -11,14 +11,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  (모델 등록을 위해 import 필요)
-from .database import Base, engine
+from .database import Base, engine, run_lightweight_migrations
 from .routers import admin, auth, draws, gatherings, matches, stats, users
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 시작 시: 테이블 생성
+    # 시작 시: 테이블 생성 + 기존 DB 컬럼 보강(경량 마이그레이션)
     Base.metadata.create_all(bind=engine)
+    run_lightweight_migrations()
     yield
     # 종료 시 정리 로직이 필요하면 여기에 추가
 

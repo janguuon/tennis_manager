@@ -219,6 +219,10 @@ class GatheringBase(BaseModel):
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
     max_participants: int | None = Field(None, ge=1)
+    fee: int = Field(0, ge=0, description="1인 참가비(원). 0이면 무료.")
+    bank: str | None = Field(None, max_length=50, description="입금 은행")
+    account_number: str | None = Field(None, max_length=50, description="입금 계좌번호")
+    account_holder: str | None = Field(None, max_length=50, description="예금주")
 
 
 class GatheringCreate(GatheringBase):
@@ -248,6 +252,10 @@ class GatheringUpdate(BaseModel):
     court_count: int | None = Field(None, ge=1)
     court_numbers: str | None = Field(None, max_length=200)
     max_participants: int | None = Field(None, ge=1)
+    fee: int | None = Field(None, ge=0)
+    bank: str | None = Field(None, max_length=50)
+    account_number: str | None = Field(None, max_length=50)
+    account_holder: str | None = Field(None, max_length=50)
     status: GatheringStatus | None = None
 
 
@@ -274,6 +282,8 @@ class ParticipantRead(BaseModel):
     user: UserBrief
     status: AttendanceStatus
     voted_at: datetime
+    paid: bool = False
+    paid_at: datetime | None = None
 
 
 class GatheringDetail(GatheringRead):
@@ -284,6 +294,38 @@ class ParticipantVote(BaseModel):
     """참석/불참/미정 투표."""
 
     status: AttendanceStatus
+
+
+class PaymentUpdate(BaseModel):
+    """참가비 납부 처리(주최자/관리자)."""
+
+    paid: bool
+
+
+# --- 회비 정산 --------------------------------------------------------------
+class GatheringPaymentSummary(BaseModel):
+    """모임 1건의 참가비 정산 요약."""
+
+    id: int
+    title: str
+    event_date: date
+    fee: int
+    attending: int        # 참석 인원
+    paid_count: int       # 납부 인원
+    unpaid_count: int     # 미납 인원
+    collected: int        # 걷힌 금액 = fee * paid_count
+    expected: int         # 받아야 할 금액 = fee * attending
+    unpaid_members: list[UserBrief] = []
+
+
+class MonthlyPaymentSummary(BaseModel):
+    """한 달 회비 정산 집계."""
+
+    month: str            # "YYYY-MM"
+    total_expected: int
+    total_collected: int
+    total_unpaid: int
+    gatherings: list[GatheringPaymentSummary] = []
 
 
 # --- 대진표 (Draw) ----------------------------------------------------------

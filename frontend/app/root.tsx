@@ -23,7 +23,11 @@ export const links: LinksFunction = () => [
 ];
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  return json({ theme: await getTheme(request) });
+  return json({
+    theme: await getTheme(request),
+    // 카카오 공유용 JavaScript 키 (공개 키라 클라이언트 노출 OK)
+    kakaoJsKey: process.env.KAKAO_JS_KEY ?? "",
+  });
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -40,6 +44,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body>
         {children}
         <ScrollRestoration />
+        {/* 카카오 공유: JS 키를 window.ENV로 전달 + SDK 로드 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.ENV=${JSON.stringify({ KAKAO_JS_KEY: data?.kakaoJsKey ?? "" })}`,
+          }}
+        />
+        <script src="https://t1.kakao.com/kakao_js_sdk/2.7.2/kakao.min.js" crossOrigin="anonymous" />
         <Scripts />
       </body>
     </html>

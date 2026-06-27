@@ -148,6 +148,29 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
   );
 }
 
+function KakaoShareButton({ text }: { text: string }) {
+  const onClick = () => {
+    const w = window as unknown as { Kakao?: any; ENV?: { KAKAO_JS_KEY?: string } };
+    const Kakao = w.Kakao;
+    const key = w.ENV?.KAKAO_JS_KEY;
+    if (!Kakao || !key) {
+      alert("카카오 공유가 아직 설정되지 않았어요. (KAKAO_JS_KEY 필요)");
+      return;
+    }
+    if (!Kakao.isInitialized()) Kakao.init(key);
+    Kakao.Share.sendDefault({
+      objectType: "text",
+      text,
+      link: { mobileWebUrl: window.location.href, webUrl: window.location.href },
+    });
+  };
+  return (
+    <button type="button" onClick={onClick} className="btn-ghost px-3 py-1.5 text-sm">
+      💬 공유
+    </button>
+  );
+}
+
 function names(players: UserBrief[]): string {
   return players.map((p) => p.name).join(", ") || "—";
 }
@@ -202,6 +225,19 @@ export default function GatheringDetailPage() {
   const feeAttendees = gathering.participants.filter((p) => p.status === "attending");
   const feePaidCount = feeAttendees.filter((p) => p.paid).length;
 
+  // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
+  const shareText = [
+    `🎾 ${gathering.title}`,
+    `📅 ${gathering.event_date}${gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""}${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`,
+    gathering.location ? `📍 ${gathering.location}` : "",
+    gathering.fee > 0 ? `💰 참가비 ${gathering.fee.toLocaleString()}원` : "",
+    gathering.account_number
+      ? `🏦 ${gathering.bank ? `${gathering.bank} ` : ""}${gathering.account_number}${gathering.account_holder ? ` (${gathering.account_holder})` : ""}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
@@ -247,6 +283,7 @@ export default function GatheringDetailPage() {
               </Form>
             </>
           ) : null}
+          <KakaoShareButton text={shareText} />
           <Link to={backHref} className="btn-ghost px-3 py-1.5 text-sm">{backLabel}</Link>
         </div>
       </div>

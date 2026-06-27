@@ -71,8 +71,8 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label className="label" htmlFor="password">비밀번호 * (8자 이상)</label>
-              <input id="password" name="password" type="password" className="input" required minLength={8} />
+              <label className="label" htmlFor="password">비밀번호 * (4자 이상)</label>
+              <input id="password" name="password" type="password" className="input" required minLength={4} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

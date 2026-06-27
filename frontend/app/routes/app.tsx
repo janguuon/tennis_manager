@@ -37,7 +37,7 @@ export default function AppLayout() {
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
-            <NavLink to="/app" className="text-lg font-bold text-court-700">
+            <NavLink to="/app" className="text-base font-bold text-court-700 sm:text-lg">
               🎾 테니스 매니저
             </NavLink>
             <nav className="hidden gap-1 sm:flex">
@@ -72,10 +72,18 @@ export default function AppLayout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600 dark:text-slate-300">
+            <NavLink
+              to="/app/mypage"
+              className={({ isActive }) =>
+                `text-sm font-medium ${
+                  isActive ? "text-court-700 dark:text-court-300" : "text-slate-600 hover:text-court-700 dark:text-slate-300"
+                }`
+              }
+              title="마이페이지"
+            >
               {user.name}
               {user.is_admin ? <span className="ml-1 text-court-600 dark:text-court-400">(관리자)</span> : null}
-            </span>
+            </NavLink>
             <Form method="post" action="/resources/theme">
               <input type="hidden" name="theme" value={theme === "dark" ? "light" : "dark"} />
               <input type="hidden" name="redirectTo" value={location.pathname + location.search} />
@@ -116,7 +124,7 @@ export default function AppLayout() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
         <Outlet context={{ user }} />
       </main>
     </div>

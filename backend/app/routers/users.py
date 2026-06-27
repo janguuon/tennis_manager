@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import ApprovalStatus, User
-from ..schemas import UserRead, UserUpdate
+from ..schemas import PasswordUpdate, UserRead, UserUpdate
+from ..security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -43,6 +44,17 @@ def update_my_profile(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_my_password(
+    payload: PasswordUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """비밀번호 변경: 현재 비밀번호 확인 없이 새 비밀번호로 교체한다."""
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.commit()
 
 
 @router.get("", response_model=list[UserRead])

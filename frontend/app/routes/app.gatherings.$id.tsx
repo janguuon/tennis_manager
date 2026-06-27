@@ -100,6 +100,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     } else if (intent === "delete_gathering") {
       await api(`/gatherings/${id}`, { method: "DELETE", token });
       const from = String(formData.get("from") || "");
+      if (/^\d{4}-\d{2}-\d{2}$/.test(from)) return redirect(`/app/day/${from}`);
       return redirect(from ? `/app/calendar?month=${from}` : "/app/calendar");
     }
     return json({ ok: true });
@@ -141,10 +142,14 @@ export default function GatheringDetailPage() {
   const attendanceLocked = daysUntilEvent <= ATTENDANCE_LOCK_DAYS;
   const canSetAbsence = user.is_admin || !attendanceLocked;
 
-  // 돌아갈 캘린더의 달: 들어올 때 넘겨준 ?from, 없으면 이 모임의 달
+  // 돌아갈 위치: ?from 이 전체 날짜(YYYY-MM-DD)면 그 날의 일정 목록, 달(YYYY-MM)이면 캘린더로.
   const [searchParams] = useSearchParams();
-  const backMonth = searchParams.get("from") || gathering.event_date.slice(0, 7);
-  const calendarHref = `/app/calendar?month=${backMonth}`;
+  const from = searchParams.get("from") || "";
+  const backToDay = /^\d{4}-\d{2}-\d{2}$/.test(from);
+  const backHref = backToDay
+    ? `/app/day/${from}`
+    : `/app/calendar?month=${from || gathering.event_date.slice(0, 7)}`;
+  const backLabel = backToDay ? "← 목록" : "← 캘린더";
 
   // 수정 성공 시 모달 닫기
   useEffect(() => {
@@ -155,7 +160,7 @@ export default function GatheringDetailPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold">
+          <h1 className="text-lg font-bold sm:text-xl">
             {gathering.title}
             <span className="ml-2 align-middle text-xs font-normal text-slate-400">
               {STATUS_LABEL[gathering.status]}
@@ -181,7 +186,7 @@ export default function GatheringDetailPage() {
               </button>
               <Form method="post">
                 <input type="hidden" name="intent" value="delete_gathering" />
-                <input type="hidden" name="from" value={backMonth} />
+                <input type="hidden" name="from" value={from} />
                 <button
                   className="btn-ghost px-3 py-1.5 text-sm text-red-500"
                   onClick={(e) => {
@@ -195,7 +200,7 @@ export default function GatheringDetailPage() {
               </Form>
             </>
           ) : null}
-          <Link to={calendarHref} className="btn-ghost px-3 py-1.5 text-sm">← 캘린더</Link>
+          <Link to={backHref} className="btn-ghost px-3 py-1.5 text-sm">{backLabel}</Link>
         </div>
       </div>
 

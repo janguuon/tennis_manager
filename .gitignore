@@ -1,2 +1,6 @@
 # 루트(docker-compose) 환경변수 — 비밀키 포함, 절대 커밋 금지
 .env
+
+# Python 가상환경
+venv/
+.venv/

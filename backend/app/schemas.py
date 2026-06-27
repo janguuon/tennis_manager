@@ -33,7 +33,7 @@ class UserCreate(UserBase):
     """회원가입(신청) 요청. 로그인 ID는 username."""
 
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_.-]+$")
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=4, max_length=72)
     email: EmailStr | None = None
 
 
@@ -47,6 +47,12 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(None, max_length=20)
     bio: str | None = None
     avatar_url: str | None = Field(None, max_length=500)
+
+
+class PasswordUpdate(BaseModel):
+    """비밀번호 변경 요청 (별도 인증 없이 새 비밀번호만)."""
+
+    new_password: str = Field(..., min_length=4, max_length=72)
 
 
 class UserRead(UserBase):

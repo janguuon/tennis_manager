@@ -105,13 +105,20 @@ const STATUS_DOT: Record<string, string> = {
   completed: "bg-slate-400",
   canceled: "bg-red-400",
 };
+const STATUS_LABEL: Record<string, string> = {
+  planned: "예정",
+  ongoing: "진행중",
+  completed: "완료",
+  canceled: "취소",
+};
 
 export default function CalendarPage() {
   const { month, gatherings } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get("view") === "list" ? "list" : "calendar";
   const navigation = useNavigation();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [importing, setImporting] = useState(false);
   const importFetcher = useFetcher<{
     ok: boolean;
@@ -127,17 +134,17 @@ export default function CalendarPage() {
 
   // 모임 생성 성공 시 모달 닫기
   useEffect(() => {
-    if (actionData?.ok) setSelectedDate(null);
+    if (actionData?.ok) setShowCreate(false);
   }, [actionData]);
 
   // 모달이 열릴 때마다 시간 입력 초기화
   useEffect(() => {
-    if (selectedDate) {
+    if (showCreate) {
       setStartTime("");
       setEndTime("");
       setEndEdited(false);
     }
-  }, [selectedDate]);
+  }, [showCreate]);
 
   const cells = buildCells(month);
   const todayStr = (() => {
@@ -153,24 +160,62 @@ export default function CalendarPage() {
     byDate.set(g.event_date, list);
   }
 
-  const goMonth = (m: string) => setSearchParams({ month: m });
+  // month/view 둘 다 보존하며 URL 갱신
+  const updateParams = (next: { month?: string; view?: "calendar" | "list" }) => {
+    const p = new URLSearchParams(searchParams);
+    if (next.month !== undefined) p.set("month", next.month);
+    if (next.view !== undefined) {
+      if (next.view === "calendar") p.delete("view");
+      else p.set("view", next.view);
+    }
+    setSearchParams(p);
+  };
+  const goMonth = (m: string) => updateParams({ month: m });
   const [yy, mm] = month.split("-");
+
+  // 리스트 뷰: 일정이 있는 날짜만 오름차순으로
+  const listDates = [...byDate.keys()].sort();
 
   return (
     <div className="space-y-4">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">
-          📅 {yy}년 {Number(mm)}월
-        </h1>
-        <div className="flex gap-2">
-          <button className="btn-ghost px-3 py-1.5" onClick={() => setImporting(true)}>📤 엑셀 업로드</button>
-          <button className="btn-ghost px-3 py-1.5" onClick={() => goMonth(shiftMonth(month, -1))}>←</button>
-          <button className="btn-ghost px-3 py-1.5" onClick={() => goMonth(currentMonth())}>오늘</button>
-          <button className="btn-ghost px-3 py-1.5" onClick={() => goMonth(shiftMonth(month, 1))}>→</button>
+      <div className="space-y-2">
+        {/* 1줄: 달 + 월 이동 */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-bold sm:text-xl">
+            📅 {yy}년 {Number(mm)}월
+          </h1>
+          <div className="flex gap-1">
+            <button className="btn-ghost px-2.5 py-1 text-sm" onClick={() => goMonth(shiftMonth(month, -1))}>←</button>
+            <button className="btn-ghost px-2.5 py-1 text-sm" onClick={() => goMonth(currentMonth())}>오늘</button>
+            <button className="btn-ghost px-2.5 py-1 text-sm" onClick={() => goMonth(shiftMonth(month, 1))}>→</button>
+          </div>
+        </div>
+        {/* 2줄: 보기 전환 + 등록 액션 */}
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+            <button
+              className={`px-2.5 py-1 text-sm ${view === "calendar" ? "bg-court-600 text-white" : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+              onClick={() => updateParams({ view: "calendar" })}
+            >
+              📅 달력
+            </button>
+            <button
+              className={`px-2.5 py-1 text-sm ${view === "list" ? "bg-court-600 text-white" : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"}`}
+              onClick={() => updateParams({ view: "list" })}
+            >
+              📋 리스트
+            </button>
+          </div>
+          <div className="ml-auto flex gap-1.5">
+            <button className="btn-primary px-2.5 py-1 text-sm" onClick={() => setShowCreate(true)}>➕ 등록</button>
+            <button className="btn-ghost px-2.5 py-1 text-sm" onClick={() => setImporting(true)}>📤 엑셀</button>
+          </div>
         </div>
       </div>
 
+      {view === "calendar" ? (
+      <>
       {/* 달력 그리드 */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         {/* 요일 헤더 */}
@@ -189,7 +234,7 @@ export default function CalendarPage() {
         <div className="grid grid-cols-7">
           {cells.map((day, idx) => {
             if (day === null) {
-              return <div key={idx} className="min-h-24 border-b border-r border-slate-100 bg-slate-50/40 dark:border-slate-700/60 dark:bg-slate-900/30" />;
+              return <div key={idx} className="min-h-[3.25rem] border-b border-r border-slate-100 bg-slate-50/40 dark:border-slate-700/60 dark:bg-slate-900/30 sm:min-h-24" />;
             }
             const dateStr = `${month}-${String(day).padStart(2, "0")}`;
             const isToday = dateStr === todayStr;
@@ -197,13 +242,13 @@ export default function CalendarPage() {
             const weekday = idx % 7;
 
             return (
-              <button
+              <Link
                 key={idx}
-                onClick={() => setSelectedDate(dateStr)}
-                className="min-h-24 border-b border-r border-slate-100 p-1.5 text-left align-top transition hover:bg-court-50 dark:border-slate-700/60 dark:hover:bg-slate-700/40"
+                to={`/app/day/${dateStr}`}
+                className="block min-h-[3.25rem] border-b border-r border-slate-100 p-1 text-left align-top transition hover:bg-court-50 dark:border-slate-700/60 dark:hover:bg-slate-700/40 sm:min-h-24 sm:p-1.5"
               >
                 <div
-                  className={`mb-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold sm:mb-1 sm:h-6 sm:w-6 sm:text-xs ${
                     isToday
                       ? "bg-court-600 text-white"
                       : weekday === 0
@@ -215,43 +260,101 @@ export default function CalendarPage() {
                 >
                   {day}
                 </div>
-                <div className="space-y-1">
+
+                {/* 모바일: 점 표시(최대 4개) */}
+                <div className="mt-0.5 flex flex-wrap gap-0.5 sm:hidden">
+                  {dayGatherings.slice(0, 4).map((g) => (
+                    <span key={g.id} className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[g.status]}`} />
+                  ))}
+                </div>
+
+                {/* 데스크톱: 제목 칩 */}
+                <div className="hidden space-y-1 sm:block">
                   {dayGatherings.map((g) => (
-                    <Link
+                    <span
                       key={g.id}
-                      to={`/app/gatherings/${g.id}?from=${month}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="block truncate rounded bg-court-100 px-1.5 py-0.5 text-[11px] font-medium text-court-800 hover:bg-court-200 dark:bg-court-900/50 dark:text-court-200 dark:hover:bg-court-900"
+                      className="block truncate rounded bg-court-100 px-1.5 py-0.5 text-[11px] font-medium text-court-800 dark:bg-court-900/50 dark:text-court-200"
                       title={`${g.title} · 코트 ${g.court_count}면`}
                     >
                       <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${STATUS_DOT[g.status]}`} />
                       {g.start_time ? `${g.start_time.slice(0, 5)} ` : ""}
                       {g.title}
                       {g.attendance ? ` (${g.attendance.attending})` : ""}
-                    </Link>
+                    </span>
                   ))}
                 </div>
-              </button>
+              </Link>
             );
           })}
         </div>
       </div>
 
       <p className="text-center text-xs text-slate-400">
-        날짜 칸을 클릭하면 그 날짜로 새 모임을 등록할 수 있어요.
+        날짜 칸을 누르면 그 날의 일정 목록을 볼 수 있어요. 새 일정은 위의 ‘➕ 일정 등록’ 버튼으로 추가하세요.
       </p>
+      </>
+      ) : listDates.length === 0 ? (
+        <div className="card text-center text-sm text-slate-500">이 달에 등록된 일정이 없어요.</div>
+      ) : (
+        <div className="space-y-5">
+          {listDates.map((dateStr) => {
+            const [ly, lm, ld] = dateStr.split("-").map(Number);
+            const wd = WEEKDAYS[new Date(ly, lm - 1, ld).getDay()];
+            const list = [...(byDate.get(dateStr) ?? [])].sort(
+              (a, b) => (a.start_time ?? "99").localeCompare(b.start_time ?? "99"),
+            );
+            return (
+              <section key={dateStr} className="space-y-2">
+                <h2 className="border-b border-slate-200 pb-1 text-sm font-bold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                  {ly}년 {lm}월 {ld}일 <span className="font-normal text-slate-400">({wd})</span>
+                </h2>
+                {list.map((g) => (
+                  <Link
+                    key={g.id}
+                    to={`/app/gatherings/${g.id}?from=${dateStr}`}
+                    className="card flex items-center justify-between gap-3 transition hover:border-court-300 hover:bg-court-50 dark:hover:bg-slate-700/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[g.status]}`} />
+                        <span className="truncate font-semibold">{g.title}</span>
+                        <span className="shrink-0 text-xs text-slate-400">{STATUS_LABEL[g.status]}</span>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-slate-500">
+                        {g.start_time ? g.start_time.slice(0, 5) : "시간 미정"}
+                        {g.end_time ? `~${g.end_time.slice(0, 5)}` : ""}
+                        {g.location ? ` · ${g.location}` : ""}
+                        {` · 코트 ${g.court_count}면`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 text-sm">
+                      {g.attendance ? (
+                        <span className="font-semibold text-court-700 dark:text-court-300">
+                          {g.attendance.attending}
+                          {g.max_participants ? `/${g.max_participants}` : ""}명
+                        </span>
+                      ) : null}
+                      <span className="text-slate-300">›</span>
+                    </div>
+                  </Link>
+                ))}
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       {/* 모임 생성 모달 */}
-      {selectedDate ? (
+      {showCreate ? (
         <div
           className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4"
-          onClick={() => setSelectedDate(null)}
+          onClick={() => setShowCreate(false)}
         >
           <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <Form method="post" className="card space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold">새 모임 등록</h2>
-                <button type="button" className="text-slate-400 hover:text-slate-600" onClick={() => setSelectedDate(null)}>
+                <button type="button" className="text-slate-400 hover:text-slate-600" onClick={() => setShowCreate(false)}>
                   ✕
                 </button>
               </div>
@@ -263,7 +366,7 @@ export default function CalendarPage() {
 
               <div>
                 <label className="label" htmlFor="event_date">날짜 *</label>
-                <input id="event_date" name="event_date" type="date" className="input" required defaultValue={selectedDate} />
+                <input id="event_date" name="event_date" type="date" className="input" required defaultValue={todayStr} />
               </div>
 
               <div className="grid grid-cols-2 gap-2">

@@ -148,7 +148,15 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
   );
 }
 
-function KakaoShareButton({ text }: { text: string }) {
+function KakaoShareButton({
+  base,
+  attendees,
+  path,
+}: {
+  base: string;
+  attendees: string[];
+  path: string;
+}) {
   const onClick = () => {
     const w = window as unknown as { Kakao?: any; ENV?: { KAKAO_JS_KEY?: string } };
     const Kakao = w.Kakao;
@@ -158,10 +166,33 @@ function KakaoShareButton({ text }: { text: string }) {
       return;
     }
     if (!Kakao.isInitialized()) Kakao.init(key);
+
+    const url = `${window.location.origin}${path}`;
+    const suffix = `\n\n👉 모임 보기: ${url}`;
+    const LIMIT = 200; // 카카오 텍스트 메시지 길이 제한
+
+    // 참석자 줄: 200자를 넘으면 이름을 앞에서부터 채우고 "외 N명"으로 축약
+    let line = attendees.length ? `\n👥 참석 ${attendees.length}명: ${attendees.join(", ")}` : "";
+    if ((base + line + suffix).length > LIMIT && attendees.length) {
+      const header = `\n👥 참석 ${attendees.length}명: `;
+      const budget = LIMIT - base.length - suffix.length - header.length - 6;
+      const shown: string[] = [];
+      let used = 0;
+      for (const n of attendees) {
+        if (used + n.length + 2 > budget) break;
+        shown.push(n);
+        used += n.length + 2;
+      }
+      const rest = attendees.length - shown.length;
+      line = shown.length
+        ? header + shown.join(", ") + (rest > 0 ? ` 외 ${rest}명` : "")
+        : `\n👥 참석 ${attendees.length}명`;
+    }
+
     Kakao.Share.sendDefault({
       objectType: "text",
-      text,
-      link: { mobileWebUrl: window.location.href, webUrl: window.location.href },
+      text: base + line + suffix,
+      link: { mobileWebUrl: url, webUrl: url },
     });
   };
   return (
@@ -226,10 +257,14 @@ export default function GatheringDetailPage() {
   const feePaidCount = feeAttendees.filter((p) => p.paid).length;
 
   // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
-  const shareText = [
+  const shareAttendees = gathering.participants
+    .filter((p) => p.status === "attending")
+    .map((p) => p.user.name);
+  const shareBase = [
     `🎾 ${gathering.title}`,
     `📅 ${gathering.event_date}${gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""}${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`,
     gathering.location ? `📍 ${gathering.location}` : "",
+    `🟩 코트 ${gathering.court_numbers ? `${gathering.court_numbers} (${gathering.court_count}면)` : `${gathering.court_count}면`}`,
     gathering.fee > 0 ? `💰 참가비 ${gathering.fee.toLocaleString()}원` : "",
     gathering.account_number
       ? `🏦 ${gathering.bank ? `${gathering.bank} ` : ""}${gathering.account_number}${gathering.account_holder ? ` (${gathering.account_holder})` : ""}`
@@ -283,7 +318,7 @@ export default function GatheringDetailPage() {
               </Form>
             </>
           ) : null}
-          <KakaoShareButton text={shareText} />
+          <KakaoShareButton base={shareBase} attendees={shareAttendees} path={`/app/gatherings/${gathering.id}`} />
           <Link to={backHref} className="btn-ghost px-3 py-1.5 text-sm">{backLabel}</Link>
         </div>
       </div>

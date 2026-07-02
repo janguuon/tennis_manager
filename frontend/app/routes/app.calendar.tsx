@@ -47,7 +47,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     `/gatherings?date_from=${from}&date_to=${to}`,
     { token },
   );
-  return json({ month, gatherings });
+  // 보기 방식: URL(?view) 우선, 없으면 쿠키(cal_view)로 마지막 선택 기억, 기본 달력
+  const urlView = url.searchParams.get("view");
+  const savedList = /(?:^|;\s*)cal_view=list/.test(request.headers.get("Cookie") ?? "");
+  const view: "calendar" | "list" =
+    urlView === "list" ? "list" : urlView === "calendar" ? "calendar" : savedList ? "list" : "calendar";
+  return json({ month, gatherings, view });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -117,10 +122,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function CalendarPage() {
-  const { month, gatherings } = useLoaderData<typeof loader>();
+  const { month, gatherings, view } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const view = searchParams.get("view") === "list" ? "list" : "calendar";
   const navigation = useNavigation();
   const [showCreate, setShowCreate] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -171,6 +175,8 @@ export default function CalendarPage() {
     if (next.view !== undefined) {
       if (next.view === "calendar") p.delete("view");
       else p.set("view", next.view);
+      // 마지막 보기 방식을 쿠키에 기억 (1년)
+      document.cookie = `cal_view=${next.view}; path=/; max-age=${60 * 60 * 24 * 365}`;
     }
     setSearchParams(p);
   };

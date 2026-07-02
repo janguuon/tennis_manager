@@ -50,7 +50,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             __html: `window.ENV=${JSON.stringify({ KAKAO_JS_KEY: data?.kakaoJsKey ?? "" })}`,
           }}
         />
-        <script src="https://t1.kakao.com/kakao_js_sdk/2.7.2/kakao.min.js" crossOrigin="anonymous" />
+        <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" crossOrigin="anonymous" />
         <Scripts />
       </body>
     </html>

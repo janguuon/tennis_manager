@@ -439,7 +439,7 @@ export default function GatheringDetailPage() {
       {/* 참석 투표 */}
       <div className="card">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold">참석 투표</h2>
+          <h2 className="font-semibold">{user.is_admin ? "참석 현황" : "참석 투표"}</h2>
           {gathering.attendance ? (
             <span className="text-sm text-slate-500">
               참석 {gathering.attendance.attending} · 불참 {gathering.attendance.absent} · 미정{" "}
@@ -447,30 +447,33 @@ export default function GatheringDetailPage() {
             </span>
           ) : null}
         </div>
-        <Form method="post" className="flex gap-2">
-          <input type="hidden" name="intent" value="vote" />
-          {(["attending", "absent", "maybe"] as AttendanceStatus[]).map((s) => {
-            const blocked = s !== "attending" && !canSetAbsence;
-            return (
-              <button
-                key={s}
-                name="status"
-                value={s}
-                disabled={blocked}
-                title={blocked ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정 변경 불가 (관리자 문의)` : undefined}
-                className="btn-ghost flex-1 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {VOTE_LABEL[s]}
-              </button>
-            );
-          })}
-        </Form>
-        {attendanceLocked ? (
-          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-            {user.is_admin
-              ? `⚠️ 마감 기간(모임 ${ATTENDANCE_LOCK_DAYS}일 전)입니다. 관리자 권한으로 변경할 수 있습니다.`
-              : `⚠️ 모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 변경할 수 없습니다. 변경이 필요하면 관리자에게 문의하세요.`}
-          </p>
+        {/* 관리자는 참석 투표가 필요 없어 버튼을 숨긴다(현황·명단은 계속 표시) */}
+        {!user.is_admin ? (
+          <>
+            <Form method="post" className="flex gap-2">
+              <input type="hidden" name="intent" value="vote" />
+              {(["attending", "absent", "maybe"] as AttendanceStatus[]).map((s) => {
+                const blocked = s !== "attending" && !canSetAbsence;
+                return (
+                  <button
+                    key={s}
+                    name="status"
+                    value={s}
+                    disabled={blocked}
+                    title={blocked ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정 변경 불가 (관리자 문의)` : undefined}
+                    className="btn-ghost flex-1 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {VOTE_LABEL[s]}
+                  </button>
+                );
+              })}
+            </Form>
+            {attendanceLocked ? (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                ⚠️ 모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 변경할 수 없습니다. 변경이 필요하면 관리자에게 문의하세요.
+              </p>
+            ) : null}
+          </>
         ) : null}
 
         {/* 참여자 명단 */}

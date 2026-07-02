@@ -436,10 +436,11 @@ export default function GatheringDetailPage() {
         </div>
       ) : null}
 
-      {/* 참석 투표 */}
+      {/* 참석 투표 — 관리자에겐 표시하지 않음 */}
+      {!user.is_admin ? (
       <div className="card">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold">{user.is_admin ? "참석 현황" : "참석 투표"}</h2>
+          <h2 className="font-semibold">참석 투표</h2>
           {gathering.attendance ? (
             <span className="text-sm text-slate-500">
               참석 {gathering.attendance.attending} · 불참 {gathering.attendance.absent} · 미정{" "}
@@ -494,6 +495,7 @@ export default function GatheringDetailPage() {
           ))}
         </ul>
       </div>
+      ) : null}
 
       {/* 참가비 정산 */}
       {gathering.fee > 0 ? (

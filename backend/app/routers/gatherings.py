@@ -470,8 +470,11 @@ def payment_summary(
         attendees = [p for p in g.participants if p.status == AttendanceStatus.ATTENDING]
         paid = [p for p in attendees if p.paid]
         unpaid = [p for p in attendees if not p.paid]
-        expected = g.fee * len(attendees)
-        collected = g.fee * len(paid)
+        attendees_n = len(attendees)
+        # 총액을 참석 인원으로 1/n (반올림). 참석 없으면 0.
+        per_person = round(g.fee / attendees_n) if attendees_n else 0
+        expected = per_person * attendees_n
+        collected = per_person * len(paid)
         total_expected += expected
         total_collected += collected
         summaries.append(
@@ -480,7 +483,8 @@ def payment_summary(
                 title=g.title,
                 event_date=g.event_date,
                 fee=g.fee,
-                attending=len(attendees),
+                per_person=per_person,
+                attending=attendees_n,
                 paid_count=len(paid),
                 unpaid_count=len(unpaid),
                 collected=collected,

@@ -127,6 +127,7 @@ export interface GatheringPaymentSummary {
   title: string;
   event_date: string;
   fee: number;
+  per_person: number;
   attending: number;
   paid_count: number;
   unpaid_count: number;

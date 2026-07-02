@@ -84,7 +84,7 @@ export default function PaymentsPage() {
                     {g.title}
                   </Link>
                   <p className="text-xs text-slate-500">
-                    {g.event_date.slice(5).replace("-", "/")} · 참가비 {won(g.fee)} · 참석 {g.attending}명
+                    {g.event_date.slice(5).replace("-", "/")} · 총 {won(g.fee)} · 1인 {won(g.per_person)} · 참석 {g.attending}명
                   </p>
                 </div>
                 <div className="shrink-0 text-right text-sm">

@@ -444,8 +444,8 @@ export default function CalendarPage() {
               </div>
 
               <div>
-                <label className="label" htmlFor="fee">참가비 (1인, 원)</label>
-                <input id="fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="예: 5000 (무료면 0)" />
+                <label className="label" htmlFor="fee">총 참가비 (원)</label>
+                <input id="fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="예: 40000 (참석자 수로 1/n, 무료면 0)" />
               </div>
 
               <div className="grid grid-cols-3 gap-2">

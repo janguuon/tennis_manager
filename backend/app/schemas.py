@@ -219,7 +219,7 @@ class GatheringBase(BaseModel):
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
     max_participants: int | None = Field(None, ge=1)
-    fee: int = Field(0, ge=0, description="1인 참가비(원). 0이면 무료.")
+    fee: int = Field(0, ge=0, description="총 참가비(원). 참석자 수로 1/n. 0이면 무료.")
     bank: str | None = Field(None, max_length=50, description="입금 은행")
     account_number: str | None = Field(None, max_length=50, description="입금 계좌번호")
     account_holder: str | None = Field(None, max_length=50, description="예금주")
@@ -309,12 +309,13 @@ class GatheringPaymentSummary(BaseModel):
     id: int
     title: str
     event_date: date
-    fee: int
+    fee: int              # 총 참가비(모임 전체 금액)
+    per_person: int       # 1인당 금액 = round(fee / 참석 인원)
     attending: int        # 참석 인원
     paid_count: int       # 납부 인원
     unpaid_count: int     # 미납 인원
-    collected: int        # 걷힌 금액 = fee * paid_count
-    expected: int         # 받아야 할 금액 = fee * attending
+    collected: int        # 걷힌 금액 = per_person * paid_count
+    expected: int         # 받아야 할 금액 = per_person * attending
     unpaid_members: list[UserBrief] = []
 
 

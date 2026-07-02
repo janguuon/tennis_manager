@@ -252,9 +252,10 @@ export default function GatheringDetailPage() {
     if (actionData?.ok) setEditing(false);
   }, [actionData]);
 
-  // 참가비 정산: 참석자 기준
+  // 참가비 정산: 총액을 참석자 수로 1/n
   const feeAttendees = gathering.participants.filter((p) => p.status === "attending");
   const feePaidCount = feeAttendees.filter((p) => p.paid).length;
+  const feePerPerson = feeAttendees.length ? Math.round(gathering.fee / feeAttendees.length) : 0;
 
   // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
   const shareAttendees = gathering.participants
@@ -265,7 +266,7 @@ export default function GatheringDetailPage() {
     `📅 ${gathering.event_date}${gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""}${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`,
     gathering.location ? `📍 ${gathering.location}` : "",
     `🟩 코트 ${gathering.court_numbers ? `${gathering.court_numbers} (${gathering.court_count}면)` : `${gathering.court_count}면`}`,
-    gathering.fee > 0 ? `💰 참가비 ${gathering.fee.toLocaleString()}원` : "",
+    gathering.fee > 0 ? `💰 참가비 총 ${gathering.fee.toLocaleString()}원 (1인 ${feePerPerson.toLocaleString()}원)` : "",
     gathering.account_number
       ? `🏦 ${gathering.bank ? `${gathering.bank} ` : ""}${gathering.account_number}${gathering.account_holder ? ` (${gathering.account_holder})` : ""}`
       : "",
@@ -293,7 +294,7 @@ export default function GatheringDetailPage() {
               ? `코트 ${gathering.court_numbers} (${gathering.court_count}면)`
               : `코트 ${gathering.court_count}면`}
             {gathering.max_participants ? ` · 정원 ${gathering.max_participants}명` : ""}
-            {gathering.fee > 0 ? ` · 참가비 ${gathering.fee.toLocaleString()}원` : ""}
+            {gathering.fee > 0 ? ` · 참가비 총 ${gathering.fee.toLocaleString()}원 (1인 ${feePerPerson.toLocaleString()}원)` : ""}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -399,8 +400,8 @@ export default function GatheringDetailPage() {
               </div>
 
               <div>
-                <label className="label" htmlFor="e_fee">참가비 (1인, 원)</label>
-                <input id="e_fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="무료면 0" defaultValue={gathering.fee ?? 0} />
+                <label className="label" htmlFor="e_fee">총 참가비 (원)</label>
+                <input id="e_fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="참석자 수로 1/n, 무료면 0" defaultValue={gathering.fee ?? 0} />
               </div>
 
               <div className="grid grid-cols-3 gap-2">
@@ -494,17 +495,20 @@ export default function GatheringDetailPage() {
       {/* 참가비 정산 */}
       {gathering.fee > 0 ? (
         <div className="card">
-          <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
             <h2 className="font-semibold">💰 참가비 정산</h2>
             <span className="text-sm text-slate-500">
               <span className="font-semibold text-court-700 dark:text-court-300">
-                {(gathering.fee * feePaidCount).toLocaleString()}
+                {(feePerPerson * feePaidCount).toLocaleString()}
               </span>
               {" / "}
-              {(gathering.fee * feeAttendees.length).toLocaleString()}원
+              {(feePerPerson * feeAttendees.length).toLocaleString()}원
               <span className="ml-1 text-xs">({feePaidCount}/{feeAttendees.length}명)</span>
             </span>
           </div>
+          <p className="mb-3 text-xs text-slate-400">
+            총 {gathering.fee.toLocaleString()}원 ÷ 참석 {feeAttendees.length}명 = <span className="font-semibold text-slate-500">1인 {feePerPerson.toLocaleString()}원</span>
+          </p>
 
           {/* 입금 계좌 (참가자 공개) */}
           {gathering.account_number ? (

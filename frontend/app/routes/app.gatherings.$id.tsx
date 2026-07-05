@@ -547,10 +547,10 @@ export default function GatheringDetailPage() {
                         <input type="hidden" name="intent" value="toggle_payment" />
                         <input type="hidden" name="user_id" value={p.user.id} />
                         <input type="hidden" name="paid" value={p.paid ? "false" : "true"} />
-                        <button className={badge}>{p.paid ? "납부함" : "미납"}</button>
+                        <button className={badge}>{p.paid ? "입금" : "미입금"}</button>
                       </Form>
                     ) : (
-                      <span className={badge}>{p.paid ? "납부함" : "미납"}</span>
+                      <span className={badge}>{p.paid ? "입금" : "미입금"}</span>
                     )}
                   </li>
                 );
@@ -558,7 +558,7 @@ export default function GatheringDetailPage() {
             </ul>
           )}
           {isOrganizer ? (
-            <p className="mt-2 text-xs text-slate-400">상태를 누르면 납부/미납이 전환됩니다.</p>
+            <p className="mt-2 text-xs text-slate-400">상태를 누르면 입금/미입금이 전환됩니다.</p>
           ) : null}
         </div>
       ) : null}

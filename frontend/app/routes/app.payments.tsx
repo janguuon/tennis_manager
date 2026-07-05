@@ -60,7 +60,7 @@ export default function PaymentsPage() {
         </div>
         <div className="rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 p-3 text-center text-white shadow-lg shadow-amber-500/30 sm:p-4">
           <div className="text-base font-extrabold sm:text-xl">{won(summary.total_unpaid)}</div>
-          <div className="text-xs font-semibold text-white/80">미납</div>
+          <div className="text-xs font-semibold text-white/80">미입금</div>
         </div>
         <div className="rounded-3xl bg-white p-3 text-center shadow-soft ring-1 ring-slate-100 sm:p-4 dark:bg-slate-900/70 dark:ring-slate-800">
           <div className="text-base font-extrabold sm:text-xl">{won(summary.total_expected)}</div>
@@ -93,20 +93,20 @@ export default function PaymentsPage() {
                   </span>
                   <span className="text-slate-400"> / {won(g.expected)}</span>
                   <div className="text-xs text-slate-500">
-                    납부 {g.paid_count}/{g.attending}
+                    입금 {g.paid_count}/{g.attending}
                   </div>
                 </div>
               </div>
 
               {g.unpaid_members.length > 0 ? (
                 <div className="rounded-md bg-amber-50 px-3 py-2 text-xs dark:bg-amber-950/30">
-                  <span className="font-medium text-amber-700 dark:text-amber-300">미납 {g.unpaid_count}명:</span>{" "}
+                  <span className="font-medium text-amber-700 dark:text-amber-300">미입금 {g.unpaid_count}명:</span>{" "}
                   <span className="text-amber-700 dark:text-amber-300">
                     {g.unpaid_members.map((m) => m.name).join(", ")}
                   </span>
                 </div>
               ) : g.attending > 0 ? (
-                <p className="text-xs text-court-600 dark:text-court-400">✓ 전원 납부 완료</p>
+                <p className="text-xs text-court-600 dark:text-court-400">✓ 전원 입금 완료</p>
               ) : null}
             </div>
           ))}
@@ -114,7 +114,7 @@ export default function PaymentsPage() {
       )}
 
       <p className="text-center text-xs text-slate-400">
-        납부 처리는 각 모임 상세의 ‘참가비 정산’에서 할 수 있어요.
+        입금 처리는 각 모임 상세의 ‘참가비 정산’에서 할 수 있어요.
       </p>
     </div>
   );

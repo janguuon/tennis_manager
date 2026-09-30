@@ -274,6 +274,8 @@ class GatheringRead(GatheringBase):
     created_by: int
     created_at: datetime
     attendance: AttendanceSummary | None = None
+    # 1인 참가비 = 총액 ÷ 참석 인원 (100원 단위 올림, 취소된 모임은 0). 서버에서만 계산.
+    per_person: int = 0
 
 
 class ParticipantRead(BaseModel):
@@ -284,10 +286,37 @@ class ParticipantRead(BaseModel):
     voted_at: datetime
     paid: bool = False
     paid_at: datetime | None = None
+    paid_amount: int | None = None  # 입금 처리 당시 금액
+
+
+class PaymentLine(BaseModel):
+    """사람별 금액 한 줄 (받을 돈 또는 돌려줄 돈)."""
+
+    user: UserBrief
+    amount: int
+
+
+class GatheringPaymentSummary(BaseModel):
+    """모임 1건의 참가비 정산 요약. 금액 계산은 모두 서버에서 한다."""
+
+    id: int
+    title: str
+    event_date: date
+    status: GatheringStatus
+    fee: int              # 총 참가비(모임 전체 금액)
+    per_person: int       # 1인 금액 (100원 단위 올림)
+    attending: int        # 참석 인원
+    paid_count: int       # 입금한 참석자 수
+    collected: int        # 실제 걷힌 금액 = 참석자의 입금 금액 합
+    expected: int         # 받아야 할 금액 = 1인 금액 × 참석 인원
+    outstanding: int      # 아직 받을 금액 = dues 합
+    dues: list[PaymentLine] = []     # 받을 돈: 미입금(1인 금액) + 추가 입금(차액)
+    refunds: list[PaymentLine] = []  # 돌려줄 돈: 입금 후 불참 + 초과 입금(차액)
 
 
 class GatheringDetail(GatheringRead):
     participants: list[ParticipantRead] = []
+    payment: GatheringPaymentSummary | None = None  # 참가비가 있는 모임만
 
 
 class ParticipantVote(BaseModel):
@@ -297,36 +326,35 @@ class ParticipantVote(BaseModel):
 
 
 class PaymentUpdate(BaseModel):
-    """참가비 납부 처리(주최자/관리자)."""
+    """참가비 입금 처리(주최자/관리자). paid=true면 현재 1인 금액으로 기록(차액 정산 포함)."""
 
     paid: bool
 
 
 # --- 회비 정산 --------------------------------------------------------------
-class GatheringPaymentSummary(BaseModel):
-    """모임 1건의 참가비 정산 요약."""
-
-    id: int
-    title: str
-    event_date: date
-    fee: int              # 총 참가비(모임 전체 금액)
-    per_person: int       # 1인당 금액 = round(fee / 참석 인원)
-    attending: int        # 참석 인원
-    paid_count: int       # 납부 인원
-    unpaid_count: int     # 미납 인원
-    collected: int        # 걷힌 금액 = per_person * paid_count
-    expected: int         # 받아야 할 금액 = per_person * attending
-    unpaid_members: list[UserBrief] = []
-
-
 class MonthlyPaymentSummary(BaseModel):
-    """한 달 회비 정산 집계."""
+    """한 달 회비 정산 집계 (참가비가 있는 모임만)."""
 
     month: str            # "YYYY-MM"
     total_expected: int
     total_collected: int
-    total_unpaid: int
+    total_outstanding: int
+    total_refund: int
     gatherings: list[GatheringPaymentSummary] = []
+
+
+class MyPaymentDue(BaseModel):
+    """내가 아직 내야 할 참가비 한 건."""
+
+    gathering_id: int
+    title: str
+    event_date: date
+    amount: int           # 낼 금액 (미입금이면 1인 금액, 일부 입금이면 차액)
+    per_person: int
+    partial: bool         # 이미 일부 입금했고 차액만 남은 경우
+    bank: str | None = None
+    account_number: str | None = None
+    account_holder: str | None = None
 
 
 # --- 대진표 (Draw) ----------------------------------------------------------

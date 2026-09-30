@@ -87,6 +87,8 @@ export interface Gathering {
   created_by: number;
   created_at: string;
   attendance: AttendanceSummary | null;
+  /** 1인 참가비 (총액 ÷ 참석 인원, 100원 단위 올림). 서버가 계산. */
+  per_person: number;
 }
 
 export interface TypeRecord {
@@ -116,32 +118,61 @@ export interface Participant {
   voted_at: string;
   paid: boolean;
   paid_at: string | null;
+  /** 입금 처리 당시 금액 (이전 기록은 null) */
+  paid_amount: number | null;
 }
 
 export interface GatheringDetail extends Gathering {
   participants: Participant[];
+  /** 참가비 정산 내역 (참가비가 있는 모임만). 금액은 모두 서버 계산값. */
+  payment: GatheringPaymentSummary | null;
+}
+
+/** 사람별 금액 한 줄 (받을 돈 / 돌려줄 돈) */
+export interface PaymentLine {
+  user: UserBrief;
+  amount: number;
 }
 
 export interface GatheringPaymentSummary {
   id: number;
   title: string;
   event_date: string;
+  status: GatheringStatus;
   fee: number;
   per_person: number;
   attending: number;
   paid_count: number;
-  unpaid_count: number;
   collected: number;
   expected: number;
-  unpaid_members: UserBrief[];
+  outstanding: number;
+  /** 받을 돈: 미입금 + 추가 입금(차액) */
+  dues: PaymentLine[];
+  /** 돌려줄 돈: 입금 후 불참 + 초과 입금(차액) */
+  refunds: PaymentLine[];
 }
 
 export interface MonthlyPaymentSummary {
   month: string;
   total_expected: number;
   total_collected: number;
-  total_unpaid: number;
+  total_outstanding: number;
+  total_refund: number;
   gatherings: GatheringPaymentSummary[];
+}
+
+/** 내가 아직 내야 할 참가비 */
+export interface MyPaymentDue {
+  gathering_id: number;
+  title: string;
+  event_date: string;
+  amount: number;
+  per_person: number;
+  /** 이미 일부 입금했고 차액만 남음 */
+  partial: boolean;
+  bank: string | null;
+  account_number: string | null;
+  account_holder: string | null;
 }
 
 export interface DrawMatch {

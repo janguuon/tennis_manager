@@ -3,7 +3,10 @@ import { json, redirect } from "@remix-run/node";
 import { Form, Link, useActionData, useLoaderData, useNavigation, useOutletContext, useSearchParams } from "@remix-run/react";
 import { useEffect, useState } from "react";
 
+import { CopyButton } from "~/components/CopyButton";
 import { ApiError, api } from "~/lib/api.server";
+import { accountText, won } from "~/lib/format";
+import { shareToKakao } from "~/lib/kakao";
 import { requireToken } from "~/lib/session.server";
 import {
   MATCH_TYPE_LABEL,
@@ -127,81 +130,6 @@ const VOTE_LABEL: Record<AttendanceStatus, string> = {
   maybe: "미정",
 };
 
-function CopyButton({ text, className = "" }: { text: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        } catch {
-          // 클립보드 접근이 불가하면 무시 (HTTPS/localhost에서만 동작)
-        }
-      }}
-      className={`shrink-0 rounded-md bg-court-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-court-700 ${className}`}
-    >
-      {copied ? "복사됨 ✓" : "계좌 복사"}
-    </button>
-  );
-}
-
-function KakaoShareButton({
-  base,
-  attendees,
-  path,
-}: {
-  base: string;
-  attendees: string[];
-  path: string;
-}) {
-  const onClick = () => {
-    const w = window as unknown as { Kakao?: any; ENV?: { KAKAO_JS_KEY?: string } };
-    const Kakao = w.Kakao;
-    const key = w.ENV?.KAKAO_JS_KEY;
-    if (!Kakao || !key) {
-      alert("카카오 공유가 아직 설정되지 않았어요. (KAKAO_JS_KEY 필요)");
-      return;
-    }
-    if (!Kakao.isInitialized()) Kakao.init(key);
-
-    const url = `${window.location.origin}${path}`;
-    const suffix = `\n\n👉 모임 보기: ${url}`;
-    const LIMIT = 200; // 카카오 텍스트 메시지 길이 제한
-
-    // 참석자 줄: 200자를 넘으면 이름을 앞에서부터 채우고 "외 N명"으로 축약
-    let line = attendees.length ? `\n👥 참석 ${attendees.length}명: ${attendees.join(", ")}` : "";
-    if ((base + line + suffix).length > LIMIT && attendees.length) {
-      const header = `\n👥 참석 ${attendees.length}명: `;
-      const budget = LIMIT - base.length - suffix.length - header.length - 6;
-      const shown: string[] = [];
-      let used = 0;
-      for (const n of attendees) {
-        if (used + n.length + 2 > budget) break;
-        shown.push(n);
-        used += n.length + 2;
-      }
-      const rest = attendees.length - shown.length;
-      line = shown.length
-        ? header + shown.join(", ") + (rest > 0 ? ` 외 ${rest}명` : "")
-        : `\n👥 참석 ${attendees.length}명`;
-    }
-
-    Kakao.Share.sendDefault({
-      objectType: "text",
-      text: base + line + suffix,
-      link: { mobileWebUrl: url, webUrl: url },
-    });
-  };
-  return (
-    <button type="button" onClick={onClick} className="btn-ghost px-3 py-1.5 text-sm">
-      💬 공유
-    </button>
-  );
-}
-
 function names(players: UserBrief[]): string {
   return players.map((p) => p.name).join(", ") || "—";
 }
@@ -252,24 +180,40 @@ export default function GatheringDetailPage() {
     if (actionData?.ok) setEditing(false);
   }, [actionData]);
 
-  // 참가비 정산: 총액을 참석자 수로 1/n
-  const feeAttendees = gathering.participants.filter((p) => p.status === "attending");
-  const feePaidCount = feeAttendees.filter((p) => p.paid).length;
-  const feePerPerson = feeAttendees.length ? Math.round(gathering.fee / feeAttendees.length) : 0;
+  // 참가비 정산: 금액은 모두 서버 계산값(1인 금액 = 총액 ÷ 참석 인원, 100원 단위 올림)
+  const perPerson = gathering.per_person;
+  const payment = gathering.payment;
+  const attendees = gathering.participants.filter((p) => p.status === "attending");
+  const dueOf = new Map(payment?.dues.map((d) => [d.user.id, d.amount]) ?? []);
+  const refundOf = new Map(payment?.refunds.map((r) => [r.user.id, r.amount]) ?? []);
+  // 입금 후 불참으로 바뀐 사람 (돌려줄 돈)
+  const refundAbsentees = gathering.participants.filter((p) => p.status !== "attending" && refundOf.has(p.user.id));
+  const me = gathering.participants.find((p) => p.user.id === user.id);
+  const myAttending = me?.status === "attending";
+  const myDue = me ? (dueOf.get(me.user.id) ?? 0) : 0;
+  const myRefund = me ? (refundOf.get(me.user.id) ?? 0) : 0;
+  const account = accountText(gathering);
+  const dateLine = `📅 ${gathering.event_date}${gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""}${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`;
+  const path = `/app/gatherings/${gathering.id}`;
 
   // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
-  const shareAttendees = gathering.participants
-    .filter((p) => p.status === "attending")
-    .map((p) => p.user.name);
   const shareBase = [
     `🎾 ${gathering.title}`,
-    `📅 ${gathering.event_date}${gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""}${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`,
+    dateLine,
     gathering.location ? `📍 ${gathering.location}` : "",
     `🟩 코트 ${gathering.court_numbers ? `${gathering.court_numbers} (${gathering.court_count}면)` : `${gathering.court_count}면`}`,
-    gathering.fee > 0 ? `💰 참가비 총 ${gathering.fee.toLocaleString()}원 (1인 ${feePerPerson.toLocaleString()}원)` : "",
-    gathering.account_number
-      ? `🏦 ${gathering.bank ? `${gathering.bank} ` : ""}${gathering.account_number}${gathering.account_holder ? ` (${gathering.account_holder})` : ""}`
-      : "",
+    gathering.fee > 0 ? `💰 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})` : "",
+    account ? `🏦 ${account}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  // 총무용 미입금 안내 메시지
+  const remindBase = [
+    `💰 ${gathering.title} 참가비 안내`,
+    dateLine,
+    `1인 ${won(perPerson)}`,
+    account ? `🏦 ${account}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -294,7 +238,7 @@ export default function GatheringDetailPage() {
               ? `코트 ${gathering.court_numbers} (${gathering.court_count}면)`
               : `코트 ${gathering.court_count}면`}
             {gathering.max_participants ? ` · 정원 ${gathering.max_participants}명` : ""}
-            {gathering.fee > 0 ? ` · 참가비 총 ${gathering.fee.toLocaleString()}원 (1인 ${feePerPerson.toLocaleString()}원)` : ""}
+            {gathering.fee > 0 ? ` · 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})` : ""}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -319,10 +263,23 @@ export default function GatheringDetailPage() {
               </Form>
             </>
           ) : null}
-          <KakaoShareButton base={shareBase} attendees={shareAttendees} path={`/app/gatherings/${gathering.id}`} />
+          <button
+            type="button"
+            className="btn-ghost px-3 py-1.5 text-sm"
+            onClick={() => shareToKakao({ base: shareBase, names: attendees.map((p) => p.user.name), path })}
+          >
+            💬 공유
+          </button>
           <Link to={backHref} className="btn-ghost px-3 py-1.5 text-sm">{backLabel}</Link>
         </div>
       </div>
+
+      {/* 처리 실패 알림 (참석 투표 정원 초과·마감, 입금 처리 등). 수정 모달이 열려 있으면 모달 안에서 보여준다. */}
+      {actionData?.error && !editing ? (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-300">
+          ⚠️ {actionData.error}
+        </p>
+      ) : null}
 
       {/* 수정 모달 */}
       {editing ? (
@@ -495,70 +452,178 @@ export default function GatheringDetailPage() {
         </ul>
       </div>
 
-      {/* 참가비 정산 */}
-      {gathering.fee > 0 ? (
-        <div className="card">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <h2 className="font-semibold">💰 참가비 정산</h2>
-            <span className="text-sm text-slate-500">
-              <span className="font-semibold text-court-700 dark:text-court-300">
-                {(feePerPerson * feePaidCount).toLocaleString()}
+      {/* 참가비 정산 (금액은 모두 서버 계산값) */}
+      {payment ? (
+        <div className="card space-y-3">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold">💰 참가비 정산</h2>
+              <span className="text-sm text-slate-500">
+                <span className="font-semibold text-court-700 dark:text-court-300">
+                  {payment.collected.toLocaleString()}
+                </span>
+                {" / "}
+                {won(payment.expected)}
+                <span className="ml-1 text-xs">({payment.paid_count}/{payment.attending}명)</span>
               </span>
-              {" / "}
-              {(feePerPerson * feeAttendees.length).toLocaleString()}원
-              <span className="ml-1 text-xs">({feePaidCount}/{feeAttendees.length}명)</span>
-            </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {gathering.status === "canceled" ? (
+                "취소된 모임이라 받을 참가비가 없어요."
+              ) : payment.attending > 0 ? (
+                <>
+                  총 {won(gathering.fee)} ÷ 참석 {payment.attending}명 ={" "}
+                  <span className="font-semibold text-slate-500">1인 {won(perPerson)}</span> (100원 단위 올림)
+                </>
+              ) : (
+                "참석자가 정해지면 1인 금액이 계산돼요."
+              )}
+            </p>
           </div>
-          <p className="mb-3 text-xs text-slate-400">
-            총 {gathering.fee.toLocaleString()}원 ÷ 참석 {feeAttendees.length}명 = <span className="font-semibold text-slate-500">1인 {feePerPerson.toLocaleString()}원</span>
-          </p>
+
+          {/* 내 참가비 (참석한 회원 본인) */}
+          {myAttending && perPerson > 0 ? (
+            <div
+              className={`rounded-2xl px-4 py-3 ${
+                myDue > 0 ? "bg-amber-50 dark:bg-amber-950/30" : "bg-court-50 dark:bg-court-900/30"
+              }`}
+            >
+              <p className="text-xs font-semibold text-slate-500">내 참가비</p>
+              {myDue > 0 ? (
+                <p className="mt-0.5 text-lg font-extrabold text-amber-700 dark:text-amber-300">
+                  {won(myDue)}{" "}
+                  <span className="text-sm font-semibold">{me?.paid ? "추가 입금이 필요해요" : "입금해 주세요"}</span>
+                </p>
+              ) : (
+                <p className="mt-0.5 text-lg font-extrabold text-court-700 dark:text-court-300">
+                  ✓ 입금 완료{" "}
+                  <span className="text-sm font-semibold">({won(me?.paid_amount ?? perPerson)})</span>
+                </p>
+              )}
+              {myRefund > 0 ? (
+                <p className="mt-0.5 text-xs text-sky-700 dark:text-sky-300">
+                  참석 인원이 늘어 {won(myRefund)}을 더 냈어요. 총무가 돌려줄 예정이에요.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* 입금 계좌 (참가자 공개) */}
           {gathering.account_number ? (
-            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-court-50 px-3 py-2 dark:bg-court-900/30">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
               <div className="min-w-0 text-sm">
                 <span className="text-slate-500">입금 </span>
-                <span className="font-semibold text-court-800 dark:text-court-200">
-                  {gathering.bank ? `${gathering.bank} ` : ""}
-                  {gathering.account_number}
-                </span>
-                {gathering.account_holder ? (
-                  <span className="text-slate-500"> · {gathering.account_holder}</span>
-                ) : null}
+                <span className="font-semibold">{account}</span>
               </div>
-              <CopyButton text={gathering.account_number} className="ml-auto" />
+              <CopyButton text={gathering.account_number} label="계좌 복사" className="ml-auto" />
             </div>
           ) : null}
-          {feeAttendees.length === 0 ? (
+
+          {/* 참석자별 입금 현황 */}
+          {attendees.length === 0 ? (
             <p className="text-sm text-slate-500">참석자가 없습니다.</p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-700">
-              {feeAttendees.map((p) => {
+              {attendees.map((p) => {
+                const due = dueOf.get(p.user.id) ?? 0;
+                const refund = refundOf.get(p.user.id) ?? 0;
+                // 입금 뒤 참석 인원이 바뀌어 1인 금액과 입금 금액이 달라진 경우
+                const note =
+                  p.paid && due > 0
+                    ? `${won(p.paid_amount ?? 0)} 입금 · ${won(due)} 추가로 받아야 해요`
+                    : p.paid && refund > 0
+                      ? `${won(p.paid_amount ?? 0)} 입금 · ${won(refund)} 돌려줘야 해요`
+                      : null;
                 const badge = `rounded-full px-3 py-1 text-xs font-medium ${
                   p.paid
                     ? "bg-court-100 text-court-700 dark:bg-court-900/40 dark:text-court-300"
                     : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                 }`;
                 return (
-                  <li key={p.user.id} className="flex items-center justify-between py-2 text-sm">
-                    <span className="font-medium">{p.user.name}</span>
-                    {isOrganizer ? (
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="toggle_payment" />
-                        <input type="hidden" name="user_id" value={p.user.id} />
-                        <input type="hidden" name="paid" value={p.paid ? "false" : "true"} />
-                        <button className={badge}>{p.paid ? "입금" : "미입금"}</button>
-                      </Form>
-                    ) : (
-                      <span className={badge}>{p.paid ? "입금" : "미입금"}</span>
-                    )}
+                  <li key={p.user.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium">{p.user.name}</span>
+                      {p.user.id === user.id ? <span className="ml-1 text-xs text-slate-400">(나)</span> : null}
+                      {note ? <p className="text-xs text-amber-600 dark:text-amber-400">{note}</p> : null}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {isOrganizer && note ? (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="toggle_payment" />
+                          <input type="hidden" name="user_id" value={p.user.id} />
+                          <input type="hidden" name="paid" value="true" />
+                          <button
+                            className="rounded-full px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-300 hover:bg-amber-50 dark:text-amber-300 dark:ring-amber-700"
+                            title="차액을 주고받았으면 누르세요. 현재 1인 금액으로 기록됩니다."
+                          >
+                            차액 정산
+                          </button>
+                        </Form>
+                      ) : null}
+                      {isOrganizer ? (
+                        <Form method="post">
+                          <input type="hidden" name="intent" value="toggle_payment" />
+                          <input type="hidden" name="user_id" value={p.user.id} />
+                          <input type="hidden" name="paid" value={p.paid ? "false" : "true"} />
+                          <button className={badge}>{p.paid ? "입금" : "미입금"}</button>
+                        </Form>
+                      ) : (
+                        <span className={badge}>{p.paid ? "입금" : "미입금"}</span>
+                      )}
+                    </div>
                   </li>
                 );
               })}
             </ul>
           )}
+
+          {/* 돌려줄 참가비: 입금 후 불참/취소 */}
+          {refundAbsentees.length > 0 ? (
+            <div className="rounded-lg bg-sky-50 px-3 py-2 dark:bg-sky-950/30">
+              <p className="mb-1 text-xs font-semibold text-sky-700 dark:text-sky-300">↩️ 돌려줄 참가비 (입금 후 불참)</p>
+              <ul className="space-y-1 text-sm">
+                {refundAbsentees.map((p) => (
+                  <li key={p.user.id} className="flex items-center justify-between gap-2">
+                    <span>
+                      {p.user.name} · {won(refundOf.get(p.user.id) ?? 0)}
+                    </span>
+                    {isOrganizer ? (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="toggle_payment" />
+                        <input type="hidden" name="user_id" value={p.user.id} />
+                        <input type="hidden" name="paid" value="false" />
+                        <button className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-sky-700 ring-1 ring-sky-200 hover:bg-sky-100 dark:bg-slate-800 dark:text-sky-300 dark:ring-sky-800">
+                          환불 완료
+                        </button>
+                      </Form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* 총무 도구 */}
+          {isOrganizer && payment.dues.length > 0 ? (
+            <button
+              type="button"
+              className="btn-ghost w-full text-sm"
+              onClick={() =>
+                shareToKakao({
+                  base: remindBase,
+                  names: payment.dues.map((d) => d.user.name),
+                  namesLabel: "🙏 미입금",
+                  path,
+                })
+              }
+            >
+              💬 미입금 안내 카톡으로 보내기 ({payment.dues.length}명)
+            </button>
+          ) : null}
           {isOrganizer ? (
-            <p className="mt-2 text-xs text-slate-400">상태를 누르면 입금/미입금이 전환됩니다.</p>
+            <p className="text-xs text-slate-400">
+              상태를 누르면 입금/미입금이 바뀌어요. 입금 처리하면 그때의 1인 금액이 기록돼요.
+            </p>
           ) : null}
         </div>
       ) : null}

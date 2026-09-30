@@ -49,6 +49,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "account_holder", "account_holder VARCHAR(50)"),
     ("participants", "paid", "paid BOOLEAN NOT NULL DEFAULT 0"),
     ("participants", "paid_at", "paid_at DATETIME"),
+    ("participants", "paid_amount", "paid_amount INTEGER"),
 ]
 
 

@@ -259,9 +259,12 @@ class Participant(Base):
         DateTime, server_default=func.now(), onupdate=func.now()
     )
 
-    # 참가비 납부 여부 (회비 정산). paid_at은 납부 처리 시각.
+    # 참가비 입금 여부 (회비 정산). paid_at은 입금 처리 시각.
     paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 입금 처리 당시의 1인 금액. 이후 참석 인원이 바뀌어 1인 금액이 달라져도
+    # 실제 받은 돈을 기준으로 차액(추가 입금/환불)을 계산하기 위해 저장한다.
+    paid_amount: Mapped[int | None] = mapped_column(Integer)
 
     gathering: Mapped[Gathering] = relationship(back_populates="participants")
     user: Mapped[User] = relationship(back_populates="participations")

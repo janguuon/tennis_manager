@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import AttendanceStatus, Gathering, Participant, User
+from ..models import AttendanceStatus, Gathering, GatheringStatus, Participant, User
 from ..schemas import (
     AttendanceSummary,
     GatheringCreate,
@@ -27,8 +27,10 @@ from ..schemas import (
     GatheringRead,
     GatheringUpdate,
     MonthlyPaymentSummary,
+    MyPaymentDue,
     ParticipantRead,
     ParticipantVote,
+    PaymentLine,
     PaymentUpdate,
     UserBrief,
 )
@@ -72,7 +74,89 @@ def _summary(gathering: Gathering) -> AttendanceSummary:
 def _to_read(gathering: Gathering) -> GatheringRead:
     read = GatheringRead.model_validate(gathering)
     read.attendance = _summary(gathering)
+    read.per_person = _per_person(gathering)
     return read
+
+
+# --- 참가비 계산 -------------------------------------------------------------
+# 1인 금액 = 총액 ÷ 참석 인원을 이 단위(원)로 올림. 송금하기 쉬운 금액이 되고 총액이 모자라지 않는다.
+PER_PERSON_UNIT = 100
+
+
+def per_person_fee(fee: int, attendees: int) -> int:
+    """총 참가비를 참석 인원으로 1/n 한 1인 금액 (PER_PERSON_UNIT 단위 올림)."""
+    if fee <= 0 or attendees <= 0:
+        return 0
+    return -(-fee // (attendees * PER_PERSON_UNIT)) * PER_PERSON_UNIT
+
+
+def _attendees(gathering: Gathering) -> list[Participant]:
+    return [p for p in gathering.participants if p.status == AttendanceStatus.ATTENDING]
+
+
+def _per_person(gathering: Gathering) -> int:
+    """모임의 현재 1인 금액. 취소된 모임은 받을 돈이 없으므로 0."""
+    if gathering.status == GatheringStatus.CANCELED:
+        return 0
+    return per_person_fee(gathering.fee, len(_attendees(gathering)))
+
+
+def _payment_breakdown(gathering: Gathering) -> dict:
+    """
+    모임 1건의 사람별 정산 내역.
+
+    - 참석자: 1인 금액보다 덜 냈으면 dues(받을 돈), 더 냈으면 refunds(돌려줄 돈)
+    - 입금 후 불참/취소: 낸 금액 전부 refunds
+    입금 금액이 없는 옛 기록(paid_amount 없음)은 현재 1인 금액을 낸 것으로 본다.
+    """
+    per_person = _per_person(gathering)
+    dues: list[tuple[Participant, int]] = []
+    refunds: list[tuple[Participant, int]] = []
+    collected = 0
+    paid_count = 0
+    for p in gathering.participants:
+        paid = (p.paid_amount if p.paid_amount is not None else per_person) if p.paid else 0
+        if p.status == AttendanceStatus.ATTENDING:
+            collected += paid
+            paid_count += 1 if p.paid else 0
+            if paid < per_person:
+                dues.append((p, per_person - paid))
+            elif paid > per_person:
+                refunds.append((p, paid - per_person))
+        elif p.paid and paid > 0:
+            refunds.append((p, paid))
+    return {
+        "per_person": per_person,
+        "attending": len(_attendees(gathering)),
+        "paid_count": paid_count,
+        "collected": collected,
+        "dues": dues,
+        "refunds": refunds,
+    }
+
+
+def _lines(items: list[tuple[Participant, int]]) -> list[PaymentLine]:
+    return [PaymentLine(user=UserBrief.model_validate(p.user), amount=a) for p, a in items]
+
+
+def _payment_summary(gathering: Gathering) -> GatheringPaymentSummary:
+    """모임 1건의 정산 요약 (모임 상세·월별 정산에서 공통으로 사용)."""
+    b = _payment_breakdown(gathering)
+    return GatheringPaymentSummary(
+        id=gathering.id,
+        title=gathering.title,
+        event_date=gathering.event_date,
+        status=gathering.status,
+        fee=gathering.fee,
+        per_person=b["per_person"],
+        attending=b["attending"],
+        paid_count=b["paid_count"],
+        collected=b["collected"],
+        expected=b["per_person"] * b["attending"],
+        outstanding=sum(a for _, a in b["dues"]),
+        dues=_lines(b["dues"]),
+        refunds=_lines(b["refunds"]),
+    )
 
 
 def _load_gathering(db: Session, gathering_id: int) -> Gathering:
@@ -273,7 +357,9 @@ def get_gathering(
     g = _load_gathering(db, gathering_id)
     detail = GatheringDetail.model_validate(g)
     detail.attendance = _summary(g)
+    detail.per_person = _per_person(g)
     detail.participants = [ParticipantRead.model_validate(p) for p in g.participants]
+    detail.payment = _payment_summary(g) if g.fee > 0 else None
     return detail
 
 
@@ -421,24 +507,76 @@ def set_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """참가비 납부/미납 처리. 주최자 또는 관리자만 가능."""
+    """
+    참가비 입금/미입금 처리. 주최자 또는 관리자만 가능.
+
+    - paid=true : 참석자만 가능. 현재 1인 금액을 입금 금액으로 기록한다.
+                  이미 입금한 사람에게 다시 보내면 차액 정산 완료(금액을 현재 1인 금액으로 갱신).
+    - paid=false: 누구든 가능(입금 취소, 환불 완료). 기록을 지운다.
+    """
     gathering = _load_gathering(db, gathering_id)
     _require_organizer(gathering, current_user)
 
-    participant = db.scalar(
-        select(Participant).where(
-            Participant.gathering_id == gathering_id,
-            Participant.user_id == user_id,
-        )
-    )
+    participant = next((p for p in gathering.participants if p.user_id == user_id), None)
     if participant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="참여자를 찾을 수 없습니다.")
 
-    participant.paid = payload.paid
-    participant.paid_at = datetime.now() if payload.paid else None
+    if payload.paid:
+        if participant.status != AttendanceStatus.ATTENDING:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="참석자만 입금 처리할 수 있습니다.")
+        per_person = _per_person(gathering)
+        if per_person <= 0:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="받을 참가비가 없는 모임입니다.")
+        participant.paid = True
+        participant.paid_amount = per_person
+        participant.paid_at = datetime.now()
+    else:
+        participant.paid = False
+        participant.paid_amount = None
+        participant.paid_at = None
+
     db.commit()
     db.refresh(participant)
     return ParticipantRead.model_validate(participant)
+
+
+@router.get("/payments/me", response_model=list[MyPaymentDue])
+def my_payment_dues(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """내가 아직 내야 할 참가비 목록(참석한 모임 중 미입금·추가 입금). 날짜순."""
+    stmt = (
+        select(Gathering)
+        .join(Participant, Participant.gathering_id == Gathering.id)
+        .where(
+            Participant.user_id == current_user.id,
+            Participant.status == AttendanceStatus.ATTENDING,
+            Gathering.fee > 0,
+            Gathering.status != GatheringStatus.CANCELED,
+        )
+        .options(selectinload(Gathering.participants).selectinload(Participant.user))
+        .order_by(Gathering.event_date, Gathering.start_time)
+    )
+    result: list[MyPaymentDue] = []
+    for g in db.scalars(stmt).all():
+        b = _payment_breakdown(g)
+        for p, amount in b["dues"]:
+            if p.user_id == current_user.id:
+                result.append(
+                    MyPaymentDue(
+                        gathering_id=g.id,
+                        title=g.title,
+                        event_date=g.event_date,
+                        amount=amount,
+                        per_person=b["per_person"],
+                        partial=p.paid,
+                        bank=g.bank,
+                        account_number=g.account_number,
+                        account_holder=g.account_holder,
+                    )
+                )
+    return result
 
 
 @router.get("/payments/summary", response_model=MonthlyPaymentSummary)
@@ -447,7 +585,7 @@ def payment_summary(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """한 달 모임들의 참가비 정산 집계(참석자 기준). 미납자 명단 포함."""
+    """한 달 모임들의 참가비 정산 집계. 참가비가 있는 모임만, 받을 돈·돌려줄 돈을 사람별로."""
     try:
         year, mon = (int(x) for x in month.split("-"))
         first = date(year, mon, 1)
@@ -458,45 +596,28 @@ def payment_summary(
 
     stmt = (
         select(Gathering)
-        .where(Gathering.event_date >= first, Gathering.event_date <= last)
+        .where(
+            Gathering.event_date >= first,
+            Gathering.event_date <= last,
+            Gathering.fee > 0,  # 무료 모임은 정산 대상 아님
+        )
         .options(selectinload(Gathering.participants).selectinload(Participant.user))
         .order_by(Gathering.event_date, Gathering.start_time)
     )
 
     summaries: list[GatheringPaymentSummary] = []
-    total_expected = 0
-    total_collected = 0
     for g in db.scalars(stmt).all():
-        attendees = [p for p in g.participants if p.status == AttendanceStatus.ATTENDING]
-        paid = [p for p in attendees if p.paid]
-        unpaid = [p for p in attendees if not p.paid]
-        attendees_n = len(attendees)
-        # 총액을 참석 인원으로 1/n (반올림). 참석 없으면 0.
-        per_person = round(g.fee / attendees_n) if attendees_n else 0
-        expected = per_person * attendees_n
-        collected = per_person * len(paid)
-        total_expected += expected
-        total_collected += collected
-        summaries.append(
-            GatheringPaymentSummary(
-                id=g.id,
-                title=g.title,
-                event_date=g.event_date,
-                fee=g.fee,
-                per_person=per_person,
-                attending=attendees_n,
-                paid_count=len(paid),
-                unpaid_count=len(unpaid),
-                collected=collected,
-                expected=expected,
-                unpaid_members=[UserBrief.model_validate(p.user) for p in unpaid],
-            )
-        )
+        s = _payment_summary(g)
+        # 취소된 모임은 돌려줄 돈이 있을 때만 표시
+        if g.status == GatheringStatus.CANCELED and not s.refunds:
+            continue
+        summaries.append(s)
 
     return MonthlyPaymentSummary(
         month=month,
-        total_expected=total_expected,
-        total_collected=total_collected,
-        total_unpaid=total_expected - total_collected,
+        total_expected=sum(s.expected for s in summaries),
+        total_collected=sum(s.collected for s in summaries),
+        total_outstanding=sum(s.outstanding for s in summaries),
+        total_refund=sum(r.amount for s in summaries for r in s.refunds),
         gatherings=summaries,
     )

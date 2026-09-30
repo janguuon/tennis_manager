@@ -1,15 +1,19 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
+import { Form, Link, useActionData, useNavigation, useSearchParams } from "@remix-run/react";
 
 import { ApiError, api } from "~/lib/api.server";
-import { createUserSession, getToken } from "~/lib/session.server";
+import { createUserSession, getToken, safeRedirect } from "~/lib/session.server";
 import type { LoginResponse } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "로그인 · 테니스 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  if (await getToken(request)) throw redirect("/app");
+  // 이미 로그인 상태면 원래 가려던 페이지(없으면 /app)로
+  if (await getToken(request)) {
+    const redirectTo = new URL(request.url).searchParams.get("redirectTo");
+    throw redirect(safeRedirect(redirectTo));
+  }
   return null;
 }
 
@@ -17,6 +21,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const username = String(formData.get("username") ?? "");
   const password = String(formData.get("password") ?? "");
+  const redirectTo = safeRedirect(formData.get("redirectTo"));
 
   if (!username || !password) {
     return { error: "아이디와 비밀번호를 입력하세요." };
@@ -27,7 +32,7 @@ export async function action({ request }: ActionFunctionArgs) {
       method: "POST",
       form: new URLSearchParams({ username, password }),
     });
-    return createUserSession(res.access_token, "/app");
+    return createUserSession(res.access_token, redirectTo);
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "로그인에 실패했습니다.";
     return { error: message };
@@ -38,6 +43,8 @@ export default function LoginPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo") ?? "";
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
@@ -53,6 +60,7 @@ export default function LoginPage() {
         </div>
 
         <Form method="post" className="card space-y-4">
+          <input type="hidden" name="redirectTo" value={redirectTo} />
           <div>
             <label className="label" htmlFor="username">아이디</label>
             <input id="username" name="username" className="input" autoComplete="username" required />

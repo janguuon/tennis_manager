@@ -1,9 +1,9 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { Form, NavLink, Outlet, useLoaderData, useLocation, useRouteLoaderData } from "@remix-run/react";
 
 import { ApiError, api } from "~/lib/api.server";
-import { requireToken } from "~/lib/session.server";
+import { getReturnPath, logout, requireToken } from "~/lib/session.server";
 import type { User } from "~/lib/types";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -12,9 +12,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const user = await api<User>("/users/me", { token });
     return json({ user });
   } catch (err) {
-    // 토큰 만료/무효 → 로그아웃 처리
+    // 토큰 만료/무효 → 세션을 지우고 로그인으로(다시 로그인하면 보던 페이지로 복귀).
+    // GET /logout 은 쿠키를 지우지 않아 /login ↔ /app 무한 리다이렉트가 났으므로 여기서 직접 정리한다.
     if (err instanceof ApiError && err.status === 401) {
-      throw redirect("/logout");
+      throw await logout(request, getReturnPath(request));
     }
     throw err;
   }

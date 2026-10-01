@@ -1,6 +1,9 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
+import { KeyRound, UserCheck } from "lucide-react";
+
+import { HeroHeader, PageBody, PageHero } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
@@ -55,97 +58,111 @@ export default function AdminPage() {
   const actionData = useActionData<typeof action>();
 
   return (
-    <div className="space-y-6">
-      {/* 가입 신청 관리 */}
-      <section className="space-y-3">
-        <h1 className="text-lg font-bold sm:text-xl">🛠️ 가입 신청 관리</h1>
+    <>
+      <PageHero>
+        <HeroHeader
+          title="관리자"
+          sub={pending.length > 0 ? `가입 신청 ${pending.length}건이 승인을 기다려요` : "가입 승인과 회원 계정을 관리해요"}
+        />
+      </PageHero>
 
-        {actionData?.error ? (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{actionData.error}</p>
-        ) : null}
+      <PageBody>
+        {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
 
-        {pending.length === 0 ? (
-          <div className="card text-center text-sm text-slate-500">
-            대기 중인 가입 신청이 없습니다.
+        {/* 가입 신청 */}
+        <section className="card">
+          <div className="flex items-center gap-2">
+            <h2 className="section-title">가입 신청</h2>
+            {pending.length > 0 ? <span className="badge-amber">{pending.length}</span> : null}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {pending.map((u) => (
-              <div key={u.id} className="card flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">
-                    {u.name}
-                    <span className="ml-2 text-xs text-slate-400">@{u.username}</span>
+
+          {pending.length === 0 ? (
+            <p className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+              <UserCheck size={16} />
+              대기 중인 가입 신청이 없어요.
+            </p>
+          ) : (
+            <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+              {pending.map((u) => (
+                <li key={u.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-900 dark:text-white">
+                      {u.name}
+                      <span className="ml-2 text-xs font-normal text-slate-400">@{u.username}</span>
+                    </p>
+                    <p className="truncate text-[13px] text-slate-500">
+                      {u.gender === "male" ? "남" : u.gender === "female" ? "여" : "성별 미입력"}
+                      {u.ntrp ? ` · NTRP ${u.ntrp}` : ""}
+                      {u.email ? ` · ${u.email}` : ""}
+                    </p>
                   </div>
-                  <div className="truncate text-xs text-slate-500">
-                    {u.gender === "male" ? "남" : u.gender === "female" ? "여" : "-"}
-                    {u.ntrp ? ` · NTRP ${u.ntrp}` : ""}
-                    {u.email ? ` · ${u.email}` : ""}
+                  <div className="flex shrink-0 gap-1.5">
+                    <Form method="post">
+                      <input type="hidden" name="user_id" value={u.id} />
+                      <button name="intent" value="reject" className="btn-ghost btn-sm">
+                        거절
+                      </button>
+                    </Form>
+                    <Form method="post">
+                      <input type="hidden" name="user_id" value={u.id} />
+                      <button name="intent" value="approve" className="btn-primary btn-sm">
+                        승인
+                      </button>
+                    </Form>
                   </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Form method="post">
-                    <input type="hidden" name="user_id" value={u.id} />
-                    <button name="intent" value="approve" className="btn-primary px-3 py-1.5 text-sm">
-                      승인
-                    </button>
-                  </Form>
-                  <Form method="post">
-                    <input type="hidden" name="user_id" value={u.id} />
-                    <button name="intent" value="reject" className="btn-ghost px-3 py-1.5 text-sm text-red-500">
-                      거절
-                    </button>
-                  </Form>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* 회원 비밀번호 초기화 */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-bold sm:text-xl">🔑 회원 비밀번호 초기화</h2>
-        <p className="text-sm text-slate-500">
-          비밀번호를 잊은 회원의 비밀번호를 새로 지정해 줍니다. 회원에게 새 비밀번호를 알려주고,
-          로그인 후 마이페이지에서 직접 변경하도록 안내하세요.
-        </p>
-
-        {actionData?.ok && actionData.reset ? (
-          <p className="rounded-md bg-court-50 px-3 py-2 text-sm text-court-700 dark:bg-court-900/30 dark:text-court-300">
-            비밀번호를 초기화했습니다.
-          </p>
-        ) : null}
-
-        <Form method="post" className="card space-y-3">
-          <input type="hidden" name="intent" value="reset_password" />
-          <div>
-            <label className="label" htmlFor="user_id">회원</label>
-            <select id="user_id" name="user_id" className="input" required defaultValue="">
-              <option value="" disabled>회원 선택</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.nickname ? ` (@${m.nickname})` : ""} · @{m.username}
-                </option>
+                </li>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="label" htmlFor="new_password">새 비밀번호 (4자 이상)</label>
-            <input
-              id="new_password"
-              name="new_password"
-              type="text"
-              className="input"
-              required
-              minLength={4}
-              placeholder="예: tennis123"
-            />
-          </div>
-          <button type="submit" className="btn-primary">비밀번호 초기화</button>
-        </Form>
-      </section>
-    </div>
+            </ul>
+          )}
+        </section>
+
+        {/* 회원 비밀번호 초기화 */}
+        <section className="card">
+          <h2 className="section-title flex items-center gap-2">
+            <KeyRound size={16} className="text-slate-400" />
+            비밀번호 초기화
+          </h2>
+          <p className="mt-1 text-[13px] text-slate-500">
+            비밀번호를 잊은 회원에게 새 비밀번호를 정해 주세요. 로그인 후 마이페이지에서 직접 바꾸도록 안내하면 돼요.
+          </p>
+
+          <Form method="post" className="mt-5 space-y-4">
+            <input type="hidden" name="intent" value="reset_password" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="user_id">회원</label>
+                <select id="user_id" name="user_id" className="input" required defaultValue="">
+                  <option value="" disabled>회원 선택</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                      {m.nickname ? ` (${m.nickname})` : ""} · @{m.username}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="new_password">새 비밀번호</label>
+                <input
+                  id="new_password"
+                  name="new_password"
+                  type="text"
+                  className="input"
+                  required
+                  minLength={4}
+                  placeholder="4자 이상"
+                />
+              </div>
+            </div>
+
+            {actionData?.ok && actionData.reset ? <p className="alert-success">비밀번호를 초기화했어요.</p> : null}
+
+            <div className="flex justify-end">
+              <button type="submit" className="btn-primary">초기화</button>
+            </div>
+          </Form>
+        </section>
+      </PageBody>
+    </>
   );
 }

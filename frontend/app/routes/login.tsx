@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remi
 import { redirect } from "@remix-run/node";
 import { Form, Link, useActionData, useNavigation, useSearchParams } from "@remix-run/react";
 
+import { Logo } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
 import { createUserSession, getToken, safeRedirect } from "~/lib/session.server";
 import type { LoginResponse } from "~/lib/types";
@@ -47,19 +48,16 @@ export default function LoginPage() {
   const redirectTo = searchParams.get("redirectTo") ?? "";
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm animate-fade-in-up">
-        <div className="mb-7 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-court-500 to-court-700 text-2xl shadow-soft-lg shadow-court-600/25">
-            🎾
-          </div>
-          <h1 className="bg-gradient-to-r from-court-600 to-court-800 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent dark:from-court-400 dark:to-court-600">
-            테니스 매니저
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">테니스 팀 매니지먼트</p>
+    <div className="min-h-screen">
+      <div className="bg-slate-900 px-4 pb-28 pt-16 text-center text-white dark:border-b dark:border-slate-800 sm:pt-24">
+        <div className="flex justify-center">
+          <Logo size={52} />
         </div>
-
-        <Form method="post" className="card space-y-4">
+        <h1 className="mt-4 text-[28px] font-bold tracking-tight">테니스 매니저</h1>
+        <p className="mt-1.5 text-sm text-white/60">우리 팀 일정 · 전적 · 회비를 한곳에서</p>
+      </div>
+      <div className="mx-auto -mt-16 w-full max-w-sm animate-fade-in px-4 pb-10 motion-reduce:animate-none">
+        <Form method="post" className="card space-y-4 sm:!p-6">
           <input type="hidden" name="redirectTo" value={redirectTo} />
           <div>
             <label className="label" htmlFor="username">아이디</label>
@@ -70,18 +68,16 @@ export default function LoginPage() {
             <input id="password" name="password" type="password" className="input" autoComplete="current-password" required />
           </div>
 
-          {actionData?.error ? (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{actionData.error}</p>
-          ) : null}
+          {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
 
-          <button type="submit" className="btn-primary w-full" disabled={submitting}>
+          <button type="submit" className="btn-primary h-11 w-full" disabled={submitting}>
             {submitting ? "로그인 중…" : "로그인"}
           </button>
         </Form>
 
-        <p className="mt-4 text-center text-sm text-slate-500">
+        <p className="mt-5 text-center text-sm text-slate-500">
           아직 회원이 아니신가요?{" "}
-          <Link to="/signup" className="font-semibold text-court-600 hover:underline">
+          <Link to="/signup" className="font-semibold text-slate-900 underline-offset-4 hover:underline dark:text-white">
             가입 신청
           </Link>
         </p>

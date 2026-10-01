@@ -1,6 +1,9 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
+import { ArrowLeft } from "lucide-react";
+
+import { PageBody, PageHero } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
@@ -27,121 +30,117 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
 function RecordCell({ record }: { record: RecordStats }) {
   return (
-    <span>
-      <span className="text-court-600">{record.wins}</span>
-      <span className="text-slate-400"> / </span>
-      <span className="text-red-500">{record.losses}</span>
-      <span className="ml-2 font-semibold">{(record.win_rate * 100).toFixed(0)}%</span>
+    <span className="flex items-center gap-3 text-[13px]">
+      <span className="text-slate-500">
+        {record.wins}승 {record.losses}패
+      </span>
+      <span className="w-10 text-right font-semibold tabular-nums text-slate-900 dark:text-white">
+        {(record.win_rate * 100).toFixed(0)}%
+      </span>
     </span>
   );
 }
 
+const GENDER_LABEL = { male: "남", female: "여" } as const;
+
 export default function MemberDetailPage() {
   const { stats, partners, opponents } = useLoaderData<typeof loader>();
+  const u = stats.user;
+  const meta = [u.gender ? GENDER_LABEL[u.gender] : null, u.ntrp ? `NTRP ${u.ntrp}` : null].filter(Boolean);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold sm:text-xl">
-          {stats.user.name}
-          {stats.user.nickname ? (
-            <span className="ml-2 text-sm text-slate-400">@{stats.user.nickname}</span>
-          ) : null}
-        </h1>
-        <Link to="/app/members" className="btn-ghost px-3 py-1.5 text-sm">← 목록</Link>
-      </div>
-
-      {/* 종합 전적 */}
-      <div className="card">
-        <h2 className="mb-3 font-semibold">종합 전적</h2>
-        <div className="grid grid-cols-4 gap-2 text-center sm:gap-3">
-          <Stat label="경기" value={stats.overall.total} tint="slate" />
-          <Stat label="승" value={stats.overall.wins} tint="green" />
-          <Stat label="패" value={stats.overall.losses} tint="red" />
-          <Stat label="승률" value={`${(stats.overall.win_rate * 100).toFixed(0)}%`} tint="blue" />
+    <>
+      <PageHero>
+        <Link to="/app/members" className="back-link-hero">
+          <ArrowLeft size={16} />
+          회원
+        </Link>
+        <div className="flex items-center gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ball-400 text-xl font-bold text-slate-900">
+            {u.name.charAt(0)}
+          </span>
+          <div className="min-w-0">
+            <h1 className="hero-title truncate">
+              {u.name}
+              {u.nickname ? <span className="ml-2 text-lg font-medium text-white/60">{u.nickname}</span> : null}
+            </h1>
+            {meta.length ? <p className="hero-sub !mt-0.5">{meta.join(" · ")}</p> : null}
+          </div>
         </div>
-      </div>
+      </PageHero>
 
-      {/* 유형별 */}
-      <div className="card">
-        <h2 className="mb-3 font-semibold">유형별 전적</h2>
-        {stats.by_type.length === 0 ? (
-          <p className="text-sm text-slate-500">기록이 없습니다.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {stats.by_type.map((t) => (
-              <li key={t.match_type} className="flex justify-between py-2 text-sm">
-                <span className="font-medium">{MATCH_TYPE_LABEL[t.match_type]}</span>
-                <RecordCell record={t.record} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* 페어 전적 */}
-        <div className="card">
-          <h2 className="mb-3 font-semibold">🤝 페어 전적</h2>
-          {partners.length === 0 ? (
-            <p className="text-sm text-slate-500">기록이 없습니다.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {partners.map((p) => (
-                <li key={p.partner.id} className="flex justify-between py-2 text-sm">
-                  <Link to={`/app/members/${p.partner.id}`} className="font-medium hover:text-court-600">
-                    {p.partner.name}
-                  </Link>
-                  <RecordCell record={p.record} />
-                </li>
-              ))}
-            </ul>
-          )}
+      <PageBody>
+        {/* 종합 전적 */}
+        <div className="grid grid-cols-4 gap-2 sm:gap-3">
+          <Stat label="경기" value={stats.overall.total} />
+          <Stat label="승" value={stats.overall.wins} tone="text-ball-800 dark:text-ball-300" />
+          <Stat label="패" value={stats.overall.losses} tone="text-rose-600 dark:text-rose-400" />
+          <Stat label="승률" value={`${(stats.overall.win_rate * 100).toFixed(0)}%`} />
         </div>
 
-        {/* 상대 전적 */}
-        <div className="card">
-          <h2 className="mb-3 font-semibold">⚔️ 상대 전적</h2>
-          {opponents.length === 0 ? (
-            <p className="text-sm text-slate-500">기록이 없습니다.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {opponents.map((o) => (
-                <li key={o.opponent.id} className="flex justify-between py-2 text-sm">
-                  <Link to={`/app/members/${o.opponent.id}`} className="font-medium hover:text-court-600">
-                    {o.opponent.name}
-                  </Link>
-                  <RecordCell record={o.record} />
-                </li>
-              ))}
-            </ul>
-          )}
+        {/* 종목별 */}
+        <RecordList
+          title="종목별"
+          empty="기록이 없어요."
+          rows={stats.by_type.map((t) => ({ key: t.match_type, label: MATCH_TYPE_LABEL[t.match_type], record: t.record }))}
+        />
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <RecordList
+            title="파트너별"
+            empty="함께 뛴 기록이 없어요."
+            rows={partners.map((p) => ({ key: p.partner.id, label: p.partner.name, to: `/app/members/${p.partner.id}`, record: p.record }))}
+          />
+          <RecordList
+            title="상대별"
+            empty="상대한 기록이 없어요."
+            rows={opponents.map((o) => ({ key: o.opponent.id, label: o.opponent.name, to: `/app/members/${o.opponent.id}`, record: o.record }))}
+          />
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </>
   );
 }
 
-const STAT_TINT: Record<string, string> = {
-  slate: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100",
-  green: "bg-court-50 text-court-700 dark:bg-court-900/30 dark:text-court-300",
-  red: "bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300",
-  blue: "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
-};
-
-function Stat({
-  label,
-  value,
-  tint = "slate",
+function RecordList({
+  title,
+  empty,
+  rows,
 }: {
-  label: string;
-  value: string | number;
-  tint?: "slate" | "green" | "red" | "blue";
+  title: string;
+  empty: string;
+  rows: { key: string | number; label: string; to?: string; record: RecordStats }[];
 }) {
   return (
-    <div className={`rounded-2xl px-2 py-3 ${STAT_TINT[tint]}`}>
-      <div className="text-xl font-extrabold sm:text-2xl">{value}</div>
-      <div className="mt-0.5 text-xs font-semibold opacity-70">{label}</div>
+    <section className="card">
+      <h2 className="section-title">{title}</h2>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">{empty}</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((r) => (
+            <li key={r.key} className="flex items-center justify-between py-2.5 text-sm">
+              {r.to ? (
+                <Link to={r.to} className="font-medium text-slate-800 hover:underline dark:text-slate-100">
+                  {r.label}
+                </Link>
+              ) : (
+                <span className="font-medium text-slate-800 dark:text-slate-100">{r.label}</span>
+              )}
+              <RecordCell record={r.record} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Stat({ label, value, tone = "text-slate-900 dark:text-white" }: { label: string; value: string | number; tone?: string }) {
+  return (
+    <div className="card !p-3 text-center sm:!p-4">
+      <p className={`text-xl font-bold tabular-nums sm:text-2xl ${tone}`}>{value}</p>
+      <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
     </div>
   );
 }

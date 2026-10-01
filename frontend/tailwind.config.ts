@@ -7,46 +7,52 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 테니스 코트 그린 계열 브랜드 컬러 (full scale)
-        court: {
-          50: "#f0fdf4",
-          100: "#dcfce7",
-          200: "#bbf7d0",
-          300: "#86efac",
-          400: "#4ade80",
-          500: "#22c55e",
-          600: "#16a34a",
-          700: "#15803d",
-          800: "#166534",
-          900: "#14532d",
-          950: "#052e16",
+        // 차분한 중립 회색 (앱 전체의 slate-* 클래스가 이 톤으로 바뀐다)
+        slate: {
+          50: "#F7F8FA",
+          100: "#F1F3F5",
+          200: "#E5E8EB",
+          300: "#D1D6DB",
+          400: "#B0B8C1",
+          500: "#8B95A1",
+          600: "#6B7684",
+          700: "#4E5968",
+          800: "#333D4B",
+          900: "#191F28",
+          950: "#101318",
+        },
+        // 브랜드 포인트: 테니스공 라임. 바탕·주요 버튼은 차콜(slate-900)이고,
+        // 라임은 선택·활성·강조에만 쓴다. 흰 바탕 위 글자는 800 이상(대비 4.5:1↑).
+        ball: {
+          50: "#FAFDEB",
+          100: "#F3FBCF",
+          200: "#E8F7A3",
+          300: "#DDF86B",
+          400: "#D4F53C",
+          500: "#BADC1E",
+          600: "#93B012",
+          700: "#6E840F",
+          800: "#526310",
+          900: "#3F4C10",
+          950: "#222A05",
         },
       },
       fontFamily: {
-        sans: [
-          "Pretendard",
-          "Pretendard Variable",
-          ...defaultTheme.fontFamily.sans,
-        ],
+        sans: ["Pretendard Variable", "Pretendard", ...defaultTheme.fontFamily.sans],
       },
       boxShadow: {
-        // 다층의 은은한 그림자 — 카드/버튼에 깊이감을 준다
-        soft: "0 1px 2px rgba(15,23,42,0.04), 0 4px 14px rgba(15,23,42,0.06)",
-        "soft-lg": "0 6px 20px rgba(15,23,42,0.08), 0 16px 40px rgba(15,23,42,0.08)",
-        focus: "0 0 0 3px rgba(34,197,94,0.18)",
-      },
-      borderRadius: {
-        xl: "0.85rem",
-        "2xl": "1.1rem",
+        card: "0 1px 2px rgba(16, 24, 40, 0.04)",
+        pop: "0 12px 32px -8px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.06)",
       },
       keyframes: {
-        "fade-in-up": {
-          "0%": { opacity: "0", transform: "translateY(6px)" },
+        "fade-in": {
+          "0%": { opacity: "0", transform: "translateY(4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
       },
       animation: {
-        "fade-in-up": "fade-in-up 0.3s ease-out both",
+        // backwards: 끝난 뒤 transform을 남기지 않는다(남으면 안쪽 position:fixed 모달의 기준이 틀어짐)
+        "fade-in": "fade-in 0.18s ease-out backwards",
       },
     },
   },

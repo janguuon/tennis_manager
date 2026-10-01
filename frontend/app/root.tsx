@@ -9,17 +9,21 @@ import {
   useRouteLoaderData,
 } from "@remix-run/react";
 
+import { LOGO_FAVICON } from "~/components/Logo";
 import { getTheme } from "~/lib/theme.server";
 import stylesheet from "~/tailwind.css?url";
 
 export const links: LinksFunction = () => [
-  { rel: "stylesheet", href: stylesheet },
-  // 🎾 이모지 파비콘 (별도 파일 없이 /favicon.ico 자동요청 404 방지)
+  // 한글 웹폰트 Pretendard (가변 폰트, 쓰는 글자만 받는 dynamic subset)
+  { rel: "preconnect", href: "https://cdn.jsdelivr.net", crossOrigin: "anonymous" },
   {
-    rel: "icon",
-    href:
-      "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>",
+    rel: "stylesheet",
+    href: "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css",
+    crossOrigin: "anonymous",
   },
+  { rel: "stylesheet", href: stylesheet },
+  // 로고 마크 파비콘 (별도 파일 없이 /favicon.ico 자동요청 404 방지)
+  { rel: "icon", href: LOGO_FAVICON },
 ];
 
 export async function loader({ request }: LoaderFunctionArgs) {

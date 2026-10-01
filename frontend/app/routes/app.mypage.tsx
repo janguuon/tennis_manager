@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remi
 import { json } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
 
+import { PageBody, PageHero } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import type { User } from "~/lib/types";
@@ -74,128 +75,114 @@ export default function MyPage() {
   const profileMsg = actionData?.intent === "profile" ? actionData : undefined;
   const passwordMsg = actionData?.intent === "password" ? actionData : undefined;
 
+  const msg = (m: typeof profileMsg) =>
+    m?.ok ? <p className="alert-success">{m.message}</p> : m?.error ? <p className="alert-error">{m.error}</p> : null;
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-court-700 sm:text-2xl">마이페이지</h1>
-        <p className="mt-1 text-sm text-slate-500">내 정보를 확인하고 수정할 수 있어요.</p>
-      </div>
-
-      {/* 계정 정보 (읽기 전용) */}
-      <section className="card space-y-3">
-        <h2 className="text-lg font-semibold">계정 정보</h2>
-        <dl className="grid grid-cols-3 gap-y-2 text-sm">
-          <dt className="text-slate-500">아이디</dt>
-          <dd className="col-span-2 font-medium">{user.username}</dd>
-          <dt className="text-slate-500">이메일</dt>
-          <dd className="col-span-2 font-medium">{user.email ?? "—"}</dd>
-          <dt className="text-slate-500">권한</dt>
-          <dd className="col-span-2 font-medium">{user.is_admin ? "관리자" : "회원"}</dd>
-          <dt className="text-slate-500">가입일</dt>
-          <dd className="col-span-2 font-medium">{user.created_at.slice(0, 10)}</dd>
-        </dl>
-      </section>
-
-      {/* 내 정보 수정 */}
-      <section className="card">
-        <h2 className="mb-4 text-lg font-semibold">내 정보 수정</h2>
-        <Form method="post" className="space-y-4">
-          <input type="hidden" name="intent" value="profile" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="name">이름 *</label>
-              <input id="name" name="name" className="input" required defaultValue={user.name} />
+    <>
+      <PageHero>
+        <div className="mx-auto flex max-w-2xl items-center gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ball-400 text-xl font-bold text-slate-900">
+            {user.name.charAt(0)}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="hero-title truncate">{user.name}</h1>
+              <span className="badge-hero">{user.is_admin ? "관리자" : "회원"}</span>
             </div>
-            <div>
-              <label className="label" htmlFor="nickname">닉네임</label>
-              <input id="nickname" name="nickname" className="input" defaultValue={user.nickname ?? ""} />
-            </div>
+            <p className="hero-sub !mt-0.5 truncate">
+              @{user.username}
+              {user.email ? ` · ${user.email}` : ""} · {user.created_at.slice(0, 10)} 가입
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="gender">성별</label>
-              <select id="gender" name="gender" className="input" defaultValue={user.gender ?? ""}>
-                <option value="">선택 안 함</option>
-                <option value="male">남성</option>
-                <option value="female">여성</option>
-              </select>
+        </div>
+      </PageHero>
+
+      <PageBody narrow>
+        {/* 내 정보 수정 */}
+        <section className="card">
+          <h2 className="section-title">프로필</h2>
+          <p className="mt-1 text-[13px] text-slate-500">대진 편성에 쓰이는 정보예요 (성별 · NTRP).</p>
+          <Form method="post" className="mt-5 space-y-4">
+            <input type="hidden" name="intent" value="profile" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="name">이름</label>
+                <input id="name" name="name" className="input" required defaultValue={user.name} />
+              </div>
+              <div>
+                <label className="label" htmlFor="nickname">닉네임</label>
+                <input id="nickname" name="nickname" className="input" defaultValue={user.nickname ?? ""} />
+              </div>
+              <div>
+                <label className="label" htmlFor="gender">성별</label>
+                <select id="gender" name="gender" className="input" defaultValue={user.gender ?? ""}>
+                  <option value="">선택 안 함</option>
+                  <option value="male">남성</option>
+                  <option value="female">여성</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="ntrp">NTRP</label>
+                <input
+                  id="ntrp"
+                  name="ntrp"
+                  type="number"
+                  step="0.5"
+                  min="1"
+                  max="7"
+                  className="input"
+                  placeholder="1.0 ~ 7.0"
+                  defaultValue={user.ntrp ?? ""}
+                />
+              </div>
             </div>
             <div>
-              <label className="label" htmlFor="ntrp">NTRP (1.0~7.0)</label>
-              <input
-                id="ntrp"
-                name="ntrp"
-                type="number"
-                step="0.5"
-                min="1"
-                max="7"
-                className="input"
-                defaultValue={user.ntrp ?? ""}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="label" htmlFor="phone">연락처</label>
-            <input id="phone" name="phone" className="input" defaultValue={user.phone ?? ""} />
-          </div>
-          <div>
-            <label className="label" htmlFor="bio">소개</label>
-            <textarea id="bio" name="bio" rows={2} className="input" defaultValue={user.bio ?? ""} />
-          </div>
-
-          {profileMsg?.ok ? (
-            <p className="rounded-md bg-court-50 px-3 py-2 text-sm text-court-700">{profileMsg.message}</p>
-          ) : profileMsg?.error ? (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{profileMsg.error}</p>
-          ) : null}
-
-          <button type="submit" className="btn-primary" disabled={submittingIntent === "profile"}>
-            {submittingIntent === "profile" ? "저장 중…" : "저장"}
-          </button>
-        </Form>
-      </section>
-
-      {/* 비밀번호 변경 */}
-      <section className="card">
-        <h2 className="mb-4 text-lg font-semibold">비밀번호 변경</h2>
-        <Form method="post" className="space-y-4">
-          <input type="hidden" name="intent" value="password" />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label" htmlFor="new_password">새 비밀번호 (4자 이상)</label>
-              <input
-                id="new_password"
-                name="new_password"
-                type="password"
-                className="input"
-                required
-                minLength={4}
-              />
+              <label className="label" htmlFor="phone">연락처</label>
+              <input id="phone" name="phone" className="input" defaultValue={user.phone ?? ""} />
             </div>
             <div>
-              <label className="label" htmlFor="confirm_password">새 비밀번호 확인</label>
-              <input
-                id="confirm_password"
-                name="confirm_password"
-                type="password"
-                className="input"
-                required
-                minLength={4}
-              />
+              <label className="label" htmlFor="bio">소개</label>
+              <textarea id="bio" name="bio" rows={2} className="input" defaultValue={user.bio ?? ""} />
             </div>
-          </div>
 
-          {passwordMsg?.ok ? (
-            <p className="rounded-md bg-court-50 px-3 py-2 text-sm text-court-700">{passwordMsg.message}</p>
-          ) : passwordMsg?.error ? (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{passwordMsg.error}</p>
-          ) : null}
+            {msg(profileMsg)}
 
-          <button type="submit" className="btn-primary" disabled={submittingIntent === "password"}>
-            {submittingIntent === "password" ? "변경 중…" : "비밀번호 변경"}
-          </button>
-        </Form>
-      </section>
-    </div>
+            <div className="flex justify-end">
+              <button type="submit" className="btn-primary" disabled={submittingIntent === "profile"}>
+                {submittingIntent === "profile" ? "저장 중…" : "저장"}
+              </button>
+            </div>
+          </Form>
+        </section>
+
+        {/* 비밀번호 변경 */}
+        <section className="card">
+          <h2 className="section-title">비밀번호</h2>
+          <p className="mt-1 text-[13px] text-slate-500">4자 이상으로 바꿀 수 있어요.</p>
+          <Form method="post" className="mt-5 space-y-4">
+            <input type="hidden" name="intent" value="password" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="new_password">새 비밀번호</label>
+                <input id="new_password" name="new_password" type="password" className="input" required minLength={4} />
+              </div>
+              <div>
+                <label className="label" htmlFor="confirm_password">새 비밀번호 확인</label>
+                <input id="confirm_password" name="confirm_password" type="password" className="input" required minLength={4} />
+              </div>
+            </div>
+
+            {msg(passwordMsg)}
+
+            <div className="flex justify-end">
+              <button type="submit" className="btn-primary" disabled={submittingIntent === "password"}>
+                {submittingIntent === "password" ? "변경 중…" : "비밀번호 변경"}
+              </button>
+            </div>
+          </Form>
+        </section>
+      </PageBody>
+    </>
   );
 }

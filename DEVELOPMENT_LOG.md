@@ -1,6 +1,6 @@
-# 🎾 팀 브레이커(Team Breaker) 개발 기록
+# 🎾 오테식 매니저 개발 기록
 
-테니스 팀 매니지먼트 웹 서비스 — 회원 / 전적 / 모임 관리.
+테니스 팀 **오테식**(오순도순 테니스 식구) 매니지먼트 웹 서비스 — 회원 / 전적 / 모임 / 회비 관리.
 이 문서는 지금까지 진행한 설계·구현·트러블슈팅 전체 내역을 정리한 것이다.
 
 ---
@@ -17,7 +17,7 @@
 ## 2. 프로젝트 구조
 
 ```
-teambreaker_manager/
+tennis_manager/
 ├── README.md                 # 실행 가이드
 ├── DEVELOPMENT_LOG.md         # (이 문서)
 │
@@ -306,7 +306,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
   - **`nginx_proxy`(nginx:latest)** 컨테이너가 80/443을 잡는 **공용 리버스 프록시**.
   - **`duckdns`** 컨테이너로 이미 DuckDNS 도메인 운영 중.
   - usuniverse-frontend/backend, pathfinder 등 다른 프로젝트도 전부 컨테이너.
-- 따라서 **호스트 nginx 설치 불가**(80 점유 충돌) → **systemd 방식 폐기**, 테니스 매니저도 **Docker로 패키징**해 기존 `nginx_proxy`에 연동하기로 결정.
+- 따라서 **호스트 nginx 설치 불가**(80 점유 충돌) → **systemd 방식 폐기**, 오테식 매니저도 **Docker로 패키징**해 기존 `nginx_proxy`에 연동하기로 결정.
 
 ### Docker 패키징 (구성)
 - 추가 파일: `backend/Dockerfile`, `frontend/Dockerfile`(멀티스테이지), 각 `.dockerignore`,
@@ -314,7 +314,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 - `app/database.py`가 `DATABASE_URL` 환경변수 지원 → 컨테이너에서 볼륨(`tennis-data:/app/data`)에 SQLite 영속.
 - 구조: `tennis-backend`(5005, 내부) + `tennis-frontend`(5555, 호스트 공개). 프론트→백엔드는 compose 네트워크(`http://tennis-backend:5005`).
 - 실행: 루트에 `.env`(SECRET_KEY/SESSION_SECRET) 생성 후 `docker compose up -d --build`.
-- **도메인 정책**: DuckDNS는 쓰지 않음(그 컨테이너는 다른 프로젝트용). 테니스 매니저는 **sslip.io**(`13.125.173.69.sslip.io`)로 IP 기반 접속/HTTPS.
+- **도메인 정책**: DuckDNS는 쓰지 않음(그 컨테이너는 다른 프로젝트용). 오테식 매니저는 **sslip.io**(`13.125.173.69.sslip.io`)로 IP 기반 접속/HTTPS.
 
 ### 기존 nginx_proxy(UsUniverse) 연동 — 실제 적용
 - 공용 프록시: `nginx_proxy`(nginx:latest), 네트워크 **`usuniverse_app-network`**, 설정 단일 파일 `/home/ubuntu/UsUniverse/nginx/nginx.conf`(컨테이너에 bind-mount), 인증서 `certbot/certbot` 컨테이너(webroot `/var/www/certbot`, 저장 `/home/ubuntu/UsUniverse/certbot/conf`).
@@ -512,3 +512,24 @@ feat : UI 리디자인 및 엑셀 참가비/계좌 등록, 리스트 뒤로가�
 
 ### 배포 시 참고
 - `lucide-react` 의존성이 추가되어 프론트 이미지 재빌드 필요(`docker compose up -d --build`).
+
+## 14. 팀 이름 변경: 오테식 (2026-10-01)
+
+팀 이름이 **오테식**(오순도순 테니스 식구)으로 바뀌어, 서비스 이름을 "테니스 매니저" → **"오테식 매니저"**로 통일했다.
+- 화면: 헤더 로고 옆 이름, 로그인 제목(부제 "오순도순 테니스 식구의 일정 · 전적 · 회비"), 모든 페이지 탭 제목.
+- 백엔드: API 이름·설명(`main.py`, Swagger 제목), 모델 주석.
+- 문서·설정: README, 이 문서 머리말, `deploy/DEPLOY.md`, nginx 블록 주석, systemd `Description`, `docker-compose.yml` 주석, `frontend/package.json` 이름(`otesik-web`).
+- **유지**: 서버와 맞물린 식별자는 바꾸지 않았다 — 컨테이너 이름(`tennis-frontend`/`tennis-backend`), DB 파일(`tennismanager.db`), 볼륨(`tennis-data`), 배포 설정 파일명. 바꾸면 기존 DB 볼륨·nginx 프록시 연결이 끊긴다.
+
+## 15. 주소 변경(otesik.duckdns.org) 준비 + 링크 미리보기 (2026-10-01)
+
+**문제**: `13.125.173.69.sslip.io` 링크를 카톡(데스크톱)에 올리면 어스유니버스 미리보기가 떴다.
+- 점검: 도메인을 붙인 정상 요청은 테니스 앱으로 가지만, **IP로 직접 접속하거나 SNI 없이 접속하면 서버 기본 사이트(어스유니버스)**로 간다.
+- 추정 원인: 테니스용 nginx 설정 전(이 주소가 기본 사이트로 가던 때)에 카톡이 미리보기를 캐시했거나, IP가 들어간 주소라 카톡 수집기가 IP 접속처럼 처리.
+
+**대응**
+- 새 주소 **`otesik.duckdns.org`** (무료 DuckDNS). nginx에 전용 server 블록 + 인증서, 예전 sslip 주소는 새 주소로 301 (`deploy/nginx-tennismanager-block.conf` [A]/[B]/[C], 절차는 `deploy/DEPLOY.md` "주소 변경").
+- **링크 미리보기 태그** (`root.tsx`): `og:title`·`og:description`·`og:image`·`description`. 라우트 `meta`는 부모 것을 덮어쓰므로 Layout `<head>`에 직접 둬 모든 페이지 공통. 비로그인 수집기는 로그인 페이지로 리다이렉트되므로 그 페이지에서 읽힌다.
+  - `og:image`는 절대 주소여야 해서, nginx가 넘기는 `X-Forwarded-Proto` + `Host`로 접속 주소를 만든다.
+- 미리보기 이미지 `frontend/public/og-image.png` (1200×630, 차콜 + 라임, Pretendard).
+- 앱 코드에는 주소가 하드코딩된 곳이 없다(카톡 공유 링크는 `window.location.origin`).

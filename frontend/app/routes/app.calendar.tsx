@@ -12,7 +12,7 @@ import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_DOT, WEEKDAYS } from "~/lib/status";
 import type { Gathering, GatheringStatus } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "캘린더 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "캘린더 · 오테식 매니저" }];
 
 function currentMonth(): string {
   const now = new Date();

@@ -7,7 +7,7 @@ import { ApiError, api } from "~/lib/api.server";
 import { createUserSession, getToken, safeRedirect } from "~/lib/session.server";
 import type { LoginResponse } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "로그인 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "로그인 · 오테식 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // 이미 로그인 상태면 원래 가려던 페이지(없으면 /app)로
@@ -53,8 +53,8 @@ export default function LoginPage() {
         <div className="flex justify-center">
           <Logo size={52} />
         </div>
-        <h1 className="mt-4 text-[28px] font-bold tracking-tight">테니스 매니저</h1>
-        <p className="mt-1.5 text-sm text-white/60">우리 팀 일정 · 전적 · 회비를 한곳에서</p>
+        <h1 className="mt-4 text-[28px] font-bold tracking-tight">오테식 매니저</h1>
+        <p className="mt-1.5 text-sm text-white/60">오순도순 테니스 식구의 일정 · 전적 · 회비</p>
       </div>
       <div className="mx-auto -mt-16 w-full max-w-sm animate-fade-in px-4 pb-10 motion-reduce:animate-none">
         <Form method="post" className="card space-y-4 sm:!p-6">

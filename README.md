@@ -1,11 +1,11 @@
-# 🎾 팀 브레이커 (Team Breaker)
+# 🎾 오테식 매니저
 
-테니스 팀 매니지먼트 서비스 — 회원/전적/모임 관리.
+테니스 팀 **오테식**(오순도순 테니스 식구) 매니지먼트 서비스 — 회원/전적/모임/회비 관리.
 
 ## 구성
 
 ```
-teambreaker_manager/
+tennis_manager/
 ├── backend/    # FastAPI + SQLAlchemy + SQLite
 └── frontend/   # Remix + TailwindCSS
 ```

@@ -1,4 +1,4 @@
-# 테니스 매니저 Docker 배포.
+# 오테식 매니저 Docker 배포.
 # 백엔드(FastAPI)와 프론트(Remix)를 컨테이너로 띄우고, 기존 nginx_proxy와 같은
 # 외부 네트워크(usuniverse_app-network)에 붙여 nginx_proxy가 컨테이너 이름으로 프록시한다.
 #

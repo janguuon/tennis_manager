@@ -10,7 +10,7 @@ import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import type { MonthlyPaymentSummary, MyPaymentDue, PaymentLine } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "회비 정산 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "회비 정산 · 오테식 매니저" }];
 
 function currentMonth(): string {
   const now = new Date();

@@ -1,6 +1,6 @@
 # 🚀 AWS Lightsail 배포 가이드
 
-테니스 매니저(Remix + FastAPI + SQLite)를 **Lightsail 인스턴스 1대**에 배포한다.
+오테식 매니저(Remix + FastAPI + SQLite)를 **Lightsail 인스턴스 1대**에 배포한다.
 
 > ⚠️ **이 서버는 이미 Docker + 공용 `nginx_proxy`(80/443 점유) 환경이다.**
 > 따라서 호스트에 nginx를 까는 아래 1~11절(systemd 방식)은 **사용하지 않는다.**
@@ -221,11 +221,11 @@ cp /home/ubuntu/tennis_manager/backend/tennismanager.db ~/backup-$(date +%F).db
 
 ## 12. 다른 프로젝트와 같은 서버에서 함께 운영하기
 
-이미 다른 웹 프로젝트가 돌고 있는 Lightsail 인스턴스에 테니스 매니저를 **추가로** 올려도 된다.
+이미 다른 웹 프로젝트가 돌고 있는 Lightsail 인스턴스에 오테식 매니저를 **추가로** 올려도 된다.
 아래 3가지 충돌만 피하면 된다.
 
 ### (1) 포트 충돌 — 가장 중요
-다른 백엔드 프로젝트와의 충돌을 피하기 위해 테니스 매니저는 **백엔드 5005 / 프론트 5555**를 사용한다
+다른 백엔드 프로젝트와의 충돌을 피하기 위해 오테식 매니저는 **백엔드 5005 / 프론트 5555**를 사용한다
 (아래 배포 파일에 이미 반영됨). 배포 전 두 포트가 비어 있는지 확인한다:
 ```bash
 sudo ss -tlnp | grep -E ':(5005|5555)'    # 아무것도 안 나오면 OK
@@ -247,10 +247,10 @@ ls -l /etc/nginx/sites-enabled/
 ```
 규칙:
 - **기존 사이트 설정은 절대 지우지 않는다** (`rm default` 등 금지).
-- 테니스 매니저용 **별도 서브도메인**을 정한다. 예:
+- 오테식 매니저용 **별도 서브도메인**을 정한다. 예:
   ```
   project-A.com         → 기존 프로젝트
-  tennis.project-A.com  → 테니스 매니저   (DNS A레코드를 같은 공인 IP로 추가)
+  tennis.project-A.com  → 오테식 매니저   (DNS A레코드를 같은 공인 IP로 추가)
   ```
 - `nginx-tennismanager.conf`의 `server_name`을 그 서브도메인으로 설정하고 그 사이트만 추가로 enable.
 - HTTPS도 도메인별로 따로 발급:
@@ -277,7 +277,7 @@ free -h
 ## 13. Docker 배포 (이 서버 환경)
 
 **실제 운영 서버는 Docker + 공용 `nginx_proxy`(80/443) + `duckdns` 구조다.** 다른 프로젝트들도 전부 컨테이너로 돌고 있어,
-호스트 nginx를 새로 깔 수 없다(80 충돌). 그래서 테니스 매니저도 **컨테이너로 패키징**해 기존 `nginx_proxy`에 연동한다.
+호스트 nginx를 새로 깔 수 없다(80 충돌). 그래서 오테식 매니저도 **컨테이너로 패키징**해 기존 `nginx_proxy`에 연동한다.
 
 ### 구성 파일 (레포에 포함)
 - `backend/Dockerfile` (FastAPI/uvicorn, 5005), `frontend/Dockerfile` (Remix 멀티스테이지, 5555)
@@ -306,6 +306,8 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5555   # 200/302 면 �
 > 더미 데이터는 넣지 않는다(`seed.py` 미실행). 빈 DB로 시작 → 첫 가입자가 관리자.
 
 ### 기존 nginx_proxy(UsUniverse) 연동 (HTTPS) — sslip.io 사용
+> 처음 연동할 때의 기록이다. **현재 주소는 아래 "주소 변경: otesik.duckdns.org"** 를 따른다.
+
 공용 프록시 `nginx_proxy`는 네트워크 `usuniverse_app-network`에서 **컨테이너 이름으로 proxy_pass**한다.
 테니스 컨테이너를 같은 네트워크에 붙이고 `tennis-frontend:5555`로 보낸다. (DuckDNS 미사용 — sslip.io는 IP 기반)
 
@@ -333,12 +335,81 @@ docker run --rm \
 
 # 5) 반영 (⚠️ reload가 아니라 restart — 아래 주의 참고)
 docker restart nginx_proxy
-curl -sk https://13.125.173.69.sslip.io/login | grep -o "테니스 매니저"
+curl -sk https://13.125.173.69.sslip.io/login | grep -o "오테식 매니저"
 ```
 
 > ⚠️ **단일 파일 bind-mount inode 함정**: 호스트에서 `nginx.conf`를 편집기로 저장하면 inode가 바뀌어
 > 컨테이너가 옛 파일을 계속 본다(`nginx -t`/`reload`가 "성공"이라도 미반영). 반드시 **`docker restart nginx_proxy`**로 반영하고,
 > 재시작 전 위 4단계로 검증한다(인증서 없는 443 블록 참조 시 nginx 起動 실패 → 전체 다운 방지).
+
+### 주소 변경: otesik.duckdns.org (현재 주소)
+sslip.io 주소는 IP가 그대로 보이고, 카톡 링크 미리보기에 어스유니버스가 뜨는 문제가 있어 **`https://otesik.duckdns.org`**로 옮긴다.
+예전 sslip 주소는 새 주소로 넘겨(301) 이미 공유된 링크도 그대로 열린다.
+
+> 원리: DNS(DuckDNS)는 "이름 → IP"만 알려준다. 같은 IP로 들어온 요청을 어느 사이트로 보낼지는 nginx가 **주소 이름(server_name)**으로 정한다.
+> 설정이 없는 이름은 기본 사이트(어스유니버스)로 간다 → DuckDNS 등록만 하고 nginx 설정 전에 카톡에 링크를 올리면 어스유니버스 미리보기가 캐시된다.
+> **브라우저에서 오테식 매니저가 뜨는 것을 확인한 뒤에 카톡에 공유할 것.**
+
+**1) DuckDNS 등록** — https://www.duckdns.org 로그인 → 서브도메인 `otesik` 추가 → current ip `13.125.173.69` → update ip.
+고정 IP라 IP 자동 갱신은 필요 없다. 확인:
+```bash
+dig +short otesik.duckdns.org    # 13.125.173.69 이 나오면 OK
+```
+
+**2) 앱 업데이트** (미리보기 태그·이미지 포함)
+```bash
+cd /home/ubuntu/tennis_manager && git pull && docker compose up -d --build
+```
+
+**3) nginx에 [A] 블록 추가 → 재시작** (`deploy/nginx-tennismanager-block.conf`의 [A]만)
+```bash
+cp /home/ubuntu/UsUniverse/nginx/nginx.conf /home/ubuntu/UsUniverse/nginx/nginx.conf.bak-$(date +%Y%m%d)
+nano /home/ubuntu/UsUniverse/nginx/nginx.conf     # http { } 안, 기존 sslip 블록 옆에 [A] 붙여넣기
+
+# 검증 (임시 컨테이너 — 실행 중인 nginx_proxy는 inode 함정 때문에 새 파일을 못 볼 수 있음)
+docker run --rm --network usuniverse_app-network \
+  -v /home/ubuntu/UsUniverse/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+  -v /home/ubuntu/UsUniverse/certbot/conf:/etc/letsencrypt:ro \
+  nginx:latest nginx -t
+
+docker restart nginx_proxy
+curl -sI http://otesik.duckdns.org | head -3     # 301 → https://otesik.duckdns.org/ 이면 OK
+```
+
+**4) 인증서 발급**
+```bash
+docker run --rm \
+  -v /home/ubuntu/UsUniverse/certbot/conf:/etc/letsencrypt \
+  -v /home/ubuntu/UsUniverse/certbot/www:/var/www/certbot \
+  certbot/certbot certonly --webroot -w /var/www/certbot \
+  -d otesik.duckdns.org --email <본인 이메일> --agree-tos --no-eff-email
+```
+`Successfully received certificate`가 나오면 OK.
+
+**5) [B] 추가 + 기존 sslip 블록 2개를 [C]로 교체 → 검증 → 재시작**
+```bash
+nano /home/ubuntu/UsUniverse/nginx/nginx.conf     # [B] 추가, 예전 sslip 80/443 블록을 [C]로 교체
+docker run --rm --network usuniverse_app-network \
+  -v /home/ubuntu/UsUniverse/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+  -v /home/ubuntu/UsUniverse/certbot/conf:/etc/letsencrypt:ro \
+  nginx:latest nginx -t
+docker restart nginx_proxy
+```
+확인:
+```bash
+curl -s https://otesik.duckdns.org/login | grep -o "오테식 매니저" | head -1          # 오테식 매니저
+curl -s https://otesik.duckdns.org/login | grep -o 'og:image" content="[^"]*'         # https://otesik.duckdns.org/og-image.png
+curl -sI https://13.125.173.69.sslip.io/app | grep -i location                         # https://otesik.duckdns.org/app
+curl -sI https://www.usuniverse.com | head -1                                          # 어스유니버스 정상
+```
+> 문제가 생기면 백업으로 되돌리고 재시작: `cp nginx.conf.bak-날짜 nginx.conf && docker restart nginx_proxy`
+
+**6) 카카오 디벨로퍼스** — sslip 주소가 등록된 곳(플랫폼 Web 사이트 도메인, JavaScript SDK 도메인)에 `https://otesik.duckdns.org`를 추가한다. 빠지면 카톡 공유 버튼이 동작하지 않는다.
+이어서 [공유 디버거](https://developers.kakao.com/tool/debugger/sharing)에 새 주소를 넣어 미리보기(오테식 매니저 카드)를 확인하고, 예전 주소는 "캐시 초기화".
+
+**참고**
+- 로그인 쿠키는 주소별이라 회원들은 새 주소에서 한 번 다시 로그인한다.
+- 인증서 갱신은 기존 인증서들과 같은 방식으로 된다. 점검: `docker run --rm -v /home/ubuntu/UsUniverse/certbot/conf:/etc/letsencrypt -v /home/ubuntu/UsUniverse/certbot/www:/var/www/certbot certbot/certbot renew --dry-run`
 
 ### 업데이트(재배포)
 ```bash

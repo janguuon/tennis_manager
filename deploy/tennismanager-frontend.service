@@ -1,5 +1,5 @@
 [Unit]
-Description=Tennis Manager Frontend (Remix)
+Description=Otesik Manager Frontend (Remix)
 After=network.target tennismanager-backend.service
 
 [Service]

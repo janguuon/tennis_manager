@@ -15,7 +15,7 @@ import {
   type RecordStats,
 } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "회원 전적 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "회원 전적 · 오테식 매니저" }];
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const token = await requireToken(request);

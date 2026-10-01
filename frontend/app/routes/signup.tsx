@@ -8,7 +8,7 @@ import { ApiError, api } from "~/lib/api.server";
 import { getToken } from "~/lib/session.server";
 import type { SignupResponse } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "가입 신청 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "가입 신청 · 오테식 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   if (await getToken(request)) throw redirect("/app");

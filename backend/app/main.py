@@ -1,5 +1,5 @@
 """
-Team Breaker 매니지먼트 API — FastAPI 진입점 (Step 1 초기 세팅).
+오테식 매니저 API — FastAPI 진입점 (Step 1 초기 세팅).
 
 - 앱 시작 시 SQLite 테이블을 생성한다 (개발용; 운영 시 Alembic 마이그레이션 권장).
 - Remix 프론트엔드와의 통신을 위해 CORS를 허용한다.
@@ -25,8 +25,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Team Breaker API",
-    description="테니스 팀 '팀 브레이커' 회원/전적/모임 관리 서비스",
+    title="오테식 매니저 API",
+    description="테니스 팀 '오테식'(오순도순 테니스 식구) 회원/전적/모임 관리 서비스",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -56,7 +56,7 @@ app.include_router(draws.router)
 
 @app.get("/")
 def root():
-    return {"service": "Team Breaker API", "version": "0.1.0"}
+    return {"service": "오테식 매니저 API", "version": "0.1.0"}
 
 
 @app.get("/health")

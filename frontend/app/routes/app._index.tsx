@@ -17,7 +17,7 @@ import type {
   User,
 } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "홈 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "홈 · 오테식 매니저" }];
 
 /** 오늘 날짜 "YYYY-MM-DD" (서버가 어느 시간대에 있든 한국 기준) */
 function todayKST(): string {

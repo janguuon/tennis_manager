@@ -7,7 +7,7 @@ import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import type { User } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "마이페이지 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "마이페이지 · 오테식 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);

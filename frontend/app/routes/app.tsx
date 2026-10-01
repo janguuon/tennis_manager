@@ -51,7 +51,7 @@ export default function AppLayout() {
           <div className="flex items-center gap-8">
             <NavLink to="/app" className="flex items-center gap-2">
               <Logo size={26} />
-              <span className="text-[15px] font-bold tracking-tight">테니스 매니저</span>
+              <span className="text-[15px] font-bold tracking-tight">오테식 매니저</span>
             </NavLink>
             <nav className="hidden items-center gap-1 sm:flex">
               {items.map((item) => (

@@ -41,7 +41,7 @@ import {
   type UserBrief,
 } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "모임 상세 · 테니스 매니저" }];
+export const meta: MetaFunction = () => [{ title: "모임 상세 · 오테식 매니저" }];
 
 // 정시(00분) 단위 시간 옵션, 06시~22시
 const TIME_OPTIONS: string[] = [];

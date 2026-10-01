@@ -1,5 +1,5 @@
 [Unit]
-Description=Tennis Manager Backend (FastAPI)
+Description=Otesik Manager Backend (FastAPI)
 After=network.target
 
 [Service]

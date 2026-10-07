@@ -34,18 +34,18 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-slate-900/40 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="fixed inset-0 z-30 flex items-end justify-center bg-ink/45 backdrop-blur-[2px] sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="max-h-[92vh] w-full animate-fade-in overflow-y-auto rounded-t-2xl bg-white p-5 shadow-pop motion-reduce:animate-none dark:bg-slate-900 sm:max-w-md sm:rounded-2xl sm:p-6"
+        className="max-h-[92vh] w-full animate-fade-in overflow-y-auto rounded-t-[28px] bg-paper p-5 shadow-pop motion-reduce:animate-none dark:bg-slate-900 sm:max-w-md sm:rounded-[28px] sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[17px] font-bold tracking-tight">{title}</h2>
+          <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em]">{title}</h2>
           <button type="button" className="icon-btn -mr-2" onClick={onClose} aria-label="닫기">
             <X size={18} />
           </button>
@@ -61,7 +61,7 @@ export function Modal({
 export function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="space-y-3">
-      <legend className="mb-3 text-xs font-semibold text-slate-400">{title}</legend>
+      <legend className="mb-3 text-xs font-bold text-slate-500">{title}</legend>
       {children}
     </fieldset>
   );

@@ -7,52 +7,57 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 차분한 중립 회색 (앱 전체의 slate-* 클래스가 이 톤으로 바뀐다)
+        // 따뜻한 중립색 (크림 바탕). 앱 전체의 slate-* 클래스가 이 톤으로 바뀐다.
         slate: {
-          50: "#F7F8FA",
-          100: "#F1F3F5",
-          200: "#E5E8EB",
-          300: "#D1D6DB",
-          400: "#B0B8C1",
-          500: "#8B95A1",
-          600: "#6B7684",
-          700: "#4E5968",
-          800: "#333D4B",
-          900: "#191F28",
-          950: "#101318",
+          50: "#F3EAE2",
+          100: "#EBE1D7",
+          200: "#DED2C6",
+          300: "#C9BBAE",
+          400: "#A3968A",
+          500: "#74685C",
+          600: "#5E554C",
+          700: "#4A423B",
+          800: "#2D2824",
+          900: "#1B1816",
+          950: "#121110",
         },
-        // 브랜드 포인트: 테니스공 라임. 바탕·주요 버튼은 차콜(slate-900)이고,
-        // 라임은 선택·활성·강조에만 쓴다. 흰 바탕 위 글자는 800 이상(대비 4.5:1↑).
-        ball: {
-          50: "#FAFDEB",
-          100: "#F3FBCF",
-          200: "#E8F7A3",
-          300: "#DDF86B",
-          400: "#D4F53C",
-          500: "#BADC1E",
-          600: "#93B012",
-          700: "#6E840F",
-          800: "#526310",
-          900: "#3F4C10",
-          950: "#222A05",
+        // 하우스 원색: 메뉴 타일·카드 배경. 이 위의 글자는 다크 모드에서도 항상 ink(검정).
+        house: {
+          blue: "#3F6CE1",
+          yellow: "#F7C32E",
+          orange: "#EF6A30",
+          green: "#4CB35A",
+          lav: "#B596F5",
+          red: "#E4513A",
+          ball: "#DCEB45",
         },
+        ink: "#121212",
+        // 중립 카드(폼·목록) 바탕
+        paper: "#FFFBF7",
       },
       fontFamily: {
         sans: ["Pretendard Variable", "Pretendard", ...defaultTheme.fontFamily.sans],
+        // 제목·큰 숫자·로고: 라틴/숫자는 Bricolage, 한글은 Pretendard로 이어진다
+        display: ["Bricolage Grotesque", "Pretendard Variable", "Pretendard", ...defaultTheme.fontFamily.sans],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(16, 24, 40, 0.04)",
-        pop: "0 12px 32px -8px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.06)",
+        pop: "0 16px 40px -12px rgba(18, 18, 18, 0.35)",
       },
       keyframes: {
         "fade-in": {
           "0%": { opacity: "0", transform: "translateY(4px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        // 소식 띠: 같은 내용을 두 번 이어 붙이고 절반만큼 흘려 끊김 없이 반복
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
       },
       animation: {
         // backwards: 끝난 뒤 transform을 남기지 않는다(남으면 안쪽 position:fixed 모달의 기준이 틀어짐)
         "fade-in": "fade-in 0.18s ease-out backwards",
+        marquee: "marquee 40s linear infinite",
       },
     },
   },

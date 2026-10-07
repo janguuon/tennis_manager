@@ -21,6 +21,13 @@ export const links: LinksFunction = () => [
     href: "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css",
     crossOrigin: "anonymous",
   },
+  // 제목·숫자용 Bricolage Grotesque (한글은 Pretendard로 이어짐)
+  { rel: "preconnect", href: "https://fonts.googleapis.com" },
+  { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+  {
+    rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap",
+  },
   { rel: "stylesheet", href: stylesheet },
   // 로고 마크 파비콘 (별도 파일 없이 /favicon.ico 자동요청 404 방지)
   { rel: "icon", href: LOGO_FAVICON },

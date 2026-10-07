@@ -3,7 +3,7 @@ import { json, redirect } from "@remix-run/node";
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import { KeyRound, UserCheck } from "lucide-react";
 
-import { HeroHeader, PageBody, PageHero } from "~/components/Page";
+import { PageBody, PageHeader } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
@@ -58,39 +58,36 @@ export default function AdminPage() {
   const actionData = useActionData<typeof action>();
 
   return (
-    <>
-      <PageHero>
-        <HeroHeader
-          title="관리자"
-          sub={pending.length > 0 ? `가입 신청 ${pending.length}건이 승인을 기다려요` : "가입 승인과 회원 계정을 관리해요"}
-        />
-      </PageHero>
+    <PageBody>
+      <PageHeader
+        title="관리자"
+        sub={pending.length > 0 ? `가입 신청 ${pending.length}건이 승인을 기다려요` : "가입 승인과 회원 계정을 관리해요"}
+      />
 
-      <PageBody>
         {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
 
         {/* 가입 신청 */}
-        <section className="card">
+        <section className="tile-orange">
           <div className="flex items-center gap-2">
-            <h2 className="section-title">가입 신청</h2>
-            {pending.length > 0 ? <span className="badge-amber">{pending.length}</span> : null}
+            <h2 className="tile-title">가입 신청</h2>
+            {pending.length > 0 ? <span className="chip-ink">{pending.length}</span> : null}
           </div>
 
           {pending.length === 0 ? (
-            <p className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+            <p className="mt-3 flex items-center gap-2 text-sm font-bold">
               <UserCheck size={16} />
               대기 중인 가입 신청이 없어요.
             </p>
           ) : (
-            <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+            <ul className="tile-rows mt-2">
               {pending.map((u) => (
-                <li key={u.id} className="flex items-center justify-between gap-3 py-3">
+                <li key={u.id}>
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-900 dark:text-white">
+                    <p className="truncate font-extrabold">
                       {u.name}
-                      <span className="ml-2 text-xs font-normal text-slate-400">@{u.username}</span>
+                      <span className="ml-2 text-xs font-semibold opacity-70">@{u.username}</span>
                     </p>
-                    <p className="truncate text-[13px] text-slate-500">
+                    <p className="truncate text-[13px] font-medium">
                       {u.gender === "male" ? "남" : u.gender === "female" ? "여" : "성별 미입력"}
                       {u.ntrp ? ` · NTRP ${u.ntrp}` : ""}
                       {u.email ? ` · ${u.email}` : ""}
@@ -99,13 +96,13 @@ export default function AdminPage() {
                   <div className="flex shrink-0 gap-1.5">
                     <Form method="post">
                       <input type="hidden" name="user_id" value={u.id} />
-                      <button name="intent" value="reject" className="btn-ghost btn-sm">
+                      <button name="intent" value="reject" className="btn-line btn-sm">
                         거절
                       </button>
                     </Form>
                     <Form method="post">
                       <input type="hidden" name="user_id" value={u.id} />
-                      <button name="intent" value="approve" className="btn-primary btn-sm">
+                      <button name="intent" value="approve" className="btn-ink btn-sm">
                         승인
                       </button>
                     </Form>
@@ -122,7 +119,7 @@ export default function AdminPage() {
             <KeyRound size={16} className="text-slate-400" />
             비밀번호 초기화
           </h2>
-          <p className="mt-1 text-[13px] text-slate-500">
+          <p className="mt-1 text-[13px] font-medium text-slate-500">
             비밀번호를 잊은 회원에게 새 비밀번호를 정해 주세요. 로그인 후 마이페이지에서 직접 바꾸도록 안내하면 돼요.
           </p>
 
@@ -162,7 +159,6 @@ export default function AdminPage() {
             </div>
           </Form>
         </section>
-      </PageBody>
-    </>
+    </PageBody>
   );
 }

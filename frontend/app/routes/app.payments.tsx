@@ -4,7 +4,7 @@ import { Link, useLoaderData, useSearchParams } from "@remix-run/react";
 import { ChevronLeft, ChevronRight, CircleCheck, Undo2, Wallet } from "lucide-react";
 
 import { CopyButton } from "~/components/CopyButton";
-import { HeroHeader, PageBody, PageHero } from "~/components/Page";
+import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -48,169 +48,173 @@ export default function PaymentsPage() {
   const goMonth = (m: string) => setSearchParams({ month: m });
   const [yy, mm] = month.split("-");
   const myTotal = myDues.reduce((s, d) => s + d.amount, 0);
+  // 낼 돈의 입금 계좌가 모두 같으면 한 번만 보여준다
+  const sharedAccount =
+    myDues.length > 0 && myDues.every((d) => d.account_number && d.account_number === myDues[0].account_number)
+      ? myDues[0]
+      : null;
 
   return (
-    <>
-      <PageHero>
-        <HeroHeader
-          title="회비 정산"
-          sub={`걷힌 돈 ${won(summary.total_collected)} · 미입금 ${won(summary.total_outstanding)}`}
-          actions={
-            <div className="flex items-center">
-              <button className="icon-btn-hero" aria-label="이전 달" onClick={() => goMonth(shiftMonth(month, -1))}>
-                <ChevronLeft size={20} />
+    <PageBody>
+      <PageHeader
+        title="회비 정산"
+        sub={`걷힌 돈 ${won(summary.total_collected)} · 미입금 ${won(summary.total_outstanding)}`}
+        actions={
+          <div className="flex items-center gap-1">
+            <button className="icon-btn" aria-label="이전 달" onClick={() => goMonth(shiftMonth(month, -1))}>
+              <ChevronLeft size={22} />
+            </button>
+            <span className="min-w-[6.5rem] text-center font-display text-[17px] font-extrabold tracking-[-0.03em]">
+              {yy}년 {Number(mm)}월
+            </span>
+            <button className="icon-btn" aria-label="다음 달" onClick={() => goMonth(shiftMonth(month, 1))}>
+              <ChevronRight size={22} />
+            </button>
+            {month !== currentMonth() ? (
+              <button className="btn-ghost btn-sm ml-1" onClick={() => goMonth(currentMonth())}>
+                이번 달
               </button>
-              <span className="w-24 text-center text-[15px] font-semibold">
-                {yy}년 {Number(mm)}월
-              </span>
-              <button className="icon-btn-hero" aria-label="다음 달" onClick={() => goMonth(shiftMonth(month, 1))}>
-                <ChevronRight size={20} />
-              </button>
-              {month !== currentMonth() ? (
-                <button className="btn-hero btn-sm ml-1" onClick={() => goMonth(currentMonth())}>
-                  이번 달
-                </button>
-              ) : null}
-            </div>
-          }
-        />
-      </PageHero>
+            ) : null}
+          </div>
+        }
+      />
 
-      <PageBody>
+      <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         {/* 내가 낼 참가비 (달과 상관없이 전체) */}
         {myDues.length > 0 ? (
-          <section className="card border-amber-200/80 dark:border-amber-500/30">
-            <div className="flex items-center justify-between">
-              <h2 className="section-title flex items-center gap-2">
-                <Wallet size={17} className="text-amber-600" />
-                내가 낼 참가비
-              </h2>
-              <span className="text-xl font-bold text-slate-900 dark:text-white">{won(myTotal)}</span>
+          <section className="tile-orange">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="tile-title">내가 낼 참가비</h2>
+                <p className="tile-sub">{myDues.length}건 입금 전</p>
+              </div>
+              <p className="font-display text-[34px] font-extrabold leading-none tracking-[-0.05em] sm:text-[44px]">{won(myTotal)}</p>
             </div>
-            <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-              {myDues.map((d) => {
-                return (
-                  <li key={d.gathering_id} className="space-y-2 py-3">
-                    <div className="flex items-center justify-between gap-2 text-sm">
-                      <Link
-                        to={`/app/gatherings/${d.gathering_id}?from=${d.event_date}`}
-                        className="min-w-0 truncate font-medium text-slate-800 hover:underline dark:text-slate-100"
-                      >
-                        <span className="mr-2 text-slate-400">{shortDate(d.event_date)}</span>
-                        {d.title}
-                      </Link>
-                      <span className="shrink-0 font-semibold">
-                        {d.partial ? <span className="badge-amber mr-1.5">추가 입금</span> : null}
-                        {won(d.amount)}
-                      </span>
-                    </div>
-                    {d.account_number ? (
-                      <div className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
-                        <span className="min-w-0 text-[13px]">
-                          <span className="block text-xs text-slate-400">
-                            {[d.bank, d.account_holder].filter(Boolean).join(" · ") || "입금 계좌"}
-                          </span>
-                          <span className="break-all font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                            {d.account_number}
-                          </span>
-                        </span>
-                        <CopyButton text={d.account_number} label="계좌 복사" className="!h-7" />
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400">입금 계좌가 아직 등록되지 않았어요.</p>
-                    )}
-                  </li>
-                );
-              })}
+            <ul className="tile-rows mt-3">
+              {myDues.map((d) => (
+                <li key={d.gathering_id} className="!block">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link to={`/app/gatherings/${d.gathering_id}?from=${d.event_date}`} className="min-w-0 truncate font-bold hover:underline">
+                      <span className="mr-2 font-extrabold">{shortDate(d.event_date)}</span>
+                      {d.title}
+                    </Link>
+                    <span className="flex shrink-0 items-center gap-1.5 font-extrabold">
+                      {d.partial ? <span className="chip-white">추가 입금</span> : null}
+                      {won(d.amount)}
+                    </span>
+                  </div>
+                  {/* 계좌가 모임마다 다르면 줄마다 보여준다 */}
+                  {!sharedAccount && d.account_number ? <AccountBox due={d} className="mt-2" /> : null}
+                </li>
+              ))}
             </ul>
+            {sharedAccount ? <AccountBox due={sharedAccount} className="mt-4" /> : null}
           </section>
         ) : null}
 
         {/* 월 합계 */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <Stat label="걷힌 돈" value={won(summary.total_collected)} tone="text-ball-800 dark:text-ball-300" />
-          <Stat label="미입금" value={won(summary.total_outstanding)} tone="text-amber-600 dark:text-amber-400" />
-          <Stat label="합계" value={won(summary.total_expected)} tone="text-slate-900 dark:text-white" />
+        <div className={`grid grid-cols-3 gap-2.5 sm:gap-3.5 ${myDues.length > 0 ? "lg:grid-cols-1" : "lg:col-span-2"}`}>
+          <StatTile tile="tile-green" label="걷힌 돈" value={won(summary.total_collected)} />
+          <StatTile tile="tile-yellow" label="미입금" value={won(summary.total_outstanding)} />
+          <StatTile tile="tile-ink" label="합계" value={won(summary.total_expected)} />
         </div>
-        {summary.total_refund > 0 ? (
-          <p className="flex items-center gap-2 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">
-            <Undo2 size={16} className="shrink-0" />
-            돌려줄 참가비 {won(summary.total_refund)}이 있어요. 아래 모임에서 확인하세요.
-          </p>
-        ) : null}
+      </div>
+      {summary.total_refund > 0 ? (
+        <p className="flex items-center gap-2 rounded-2xl bg-house-blue/15 px-4 py-3 text-sm font-semibold text-[#2447B8] dark:text-blue-300">
+          <Undo2 size={16} className="shrink-0" />
+          돌려줄 참가비 {won(summary.total_refund)}이 있어요. 아래 모임에서 확인하세요.
+        </p>
+      ) : null}
 
-        {/* 모임별 정산 */}
-        {summary.gatherings.length === 0 ? (
-          <div className="card flex flex-col items-center gap-3 py-14 text-center">
-            <Wallet size={28} className="text-slate-300" />
-            <p className="text-sm text-slate-500">이 달에 참가비가 있는 모임이 없어요.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {summary.gatherings.map((g) => {
-              const pct = g.expected > 0 ? Math.min(100, (g.collected / g.expected) * 100) : 0;
-              return (
-                <section key={g.id} className="card space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <Link
-                        to={`/app/gatherings/${g.id}?from=${g.event_date}`}
-                        className="flex min-w-0 items-center gap-2 font-semibold text-slate-900 hover:underline dark:text-white"
-                      >
-                        <span className="truncate">{g.title}</span>
-                        {g.status === "canceled" ? <span className="badge-red">취소</span> : null}
-                      </Link>
-                      <p className="shrink-0 text-sm font-semibold text-slate-900 dark:text-white">
-                        {won(g.collected)}
-                        <span className="font-normal text-slate-400"> / {won(g.expected)}</span>
-                      </p>
-                    </div>
-                    <p className="mt-0.5 text-[13px] text-slate-500">
-                      {shortDate(g.event_date)} · 총 {won(g.fee)} · 1인 {won(g.per_person)} · 입금 {g.paid_count}/{g.attending}명
+      {/* 모임별 정산 */}
+      {summary.gatherings.length === 0 ? (
+        <EmptyCard icon={<Wallet size={28} />}>이 달에 참가비가 있는 모임이 없어요.</EmptyCard>
+      ) : (
+        <div className="grid gap-3.5 lg:grid-cols-2">
+          {summary.gatherings.map((g) => {
+            const pct = g.expected > 0 ? Math.min(100, (g.collected / g.expected) * 100) : 0;
+            return (
+              <section key={g.id} className="card space-y-3.5">
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      to={`/app/gatherings/${g.id}?from=${g.event_date}`}
+                      className="flex min-w-0 items-center gap-2 font-display text-[19px] font-extrabold tracking-[-0.03em] hover:underline"
+                    >
+                      <span className="truncate">{g.title}</span>
+                      {g.status === "canceled" ? <span className="badge-red">취소</span> : null}
+                    </Link>
+                    <p className="shrink-0 font-display text-[17px] font-extrabold tracking-[-0.03em]">
+                      {won(g.collected)}
+                      <span className="font-sans text-[13px] font-semibold text-slate-400"> / {won(g.expected)}</span>
                     </p>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                    <div className="h-full rounded-full bg-ball-500 dark:bg-ball-400" style={{ width: `${pct}%` }} />
+                  <p className="mt-0.5 text-[13px] font-medium text-slate-500">
+                    {shortDate(g.event_date)} · 총 {won(g.fee)} · 1인 {won(g.per_person)} · 입금 {g.paid_count}/{g.attending}명
+                  </p>
+                </div>
+                {g.attending > 0 && g.attending <= 20 ? (
+                  <div className="seg">
+                    {Array.from({ length: g.attending }, (_, i) => (
+                      <i key={i} className={i < g.paid_count ? "on" : ""} />
+                    ))}
                   </div>
+                ) : (
+                  <div className="h-3.5 overflow-hidden rounded-[4px] border-[1.5px] border-ink dark:border-slate-400">
+                    <div className="h-full bg-ink dark:bg-slate-300" style={{ width: `${pct}%` }} />
+                  </div>
+                )}
 
-                  {g.dues.length > 0 ? (
-                    <p className="text-[13px] text-slate-600 dark:text-slate-300">
-                      <span className="font-semibold text-amber-600 dark:text-amber-400">
-                        미입금 {g.dues.length}명 · {won(g.outstanding)}
-                      </span>
-                      <span className="mx-1.5 text-slate-300">|</span>
-                      {lineNames(g.dues, g.per_person)}
-                    </p>
-                  ) : g.attending > 0 ? (
-                    <p className="flex items-center gap-1.5 text-[13px] font-medium text-ball-800 dark:text-ball-300">
-                      <CircleCheck size={15} />
-                      전원 입금 완료
-                    </p>
-                  ) : null}
-                  {g.refunds.length > 0 ? (
-                    <p className="text-[13px] text-slate-600 dark:text-slate-300">
-                      <span className="font-semibold text-sky-700 dark:text-sky-300">돌려줄 돈</span>
-                      <span className="mx-1.5 text-slate-300">|</span>
-                      {lineNames(g.refunds)}
-                    </p>
-                  ) : null}
-                </section>
-              );
-            })}
-          </div>
-        )}
+                {g.dues.length > 0 ? (
+                  <p className="text-[13px] font-medium text-slate-600 dark:text-slate-300">
+                    <span className="font-extrabold text-[#B4461B] dark:text-orange-300">
+                      미입금 {g.dues.length}명 · {won(g.outstanding)}
+                    </span>
+                    <span className="mx-1.5 text-slate-300">|</span>
+                    {lineNames(g.dues, g.per_person)}
+                  </p>
+                ) : g.attending > 0 ? (
+                  <span className="badge-ink">
+                    <CircleCheck size={13} />
+                    전원 입금 완료
+                  </span>
+                ) : null}
+                {g.refunds.length > 0 ? (
+                  <p className="text-[13px] font-medium text-slate-600 dark:text-slate-300">
+                    <span className="font-extrabold text-[#2447B8] dark:text-blue-300">돌려줄 돈</span>
+                    <span className="mx-1.5 text-slate-300">|</span>
+                    {lineNames(g.refunds)}
+                  </p>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
+      )}
 
-        <p className="text-center text-xs text-slate-400">입금·환불 처리는 각 모임 상세의 ‘참가비’에서 할 수 있어요.</p>
-      </PageBody>
-    </>
+      <p className="text-center text-xs font-semibold text-slate-400">입금·환불 처리는 각 모임 상세의 ‘참가비 정산’에서 할 수 있어요.</p>
+    </PageBody>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
+function AccountBox({ due, className = "" }: { due: MyPaymentDue; className?: string }) {
+  if (!due.account_number) return null;
   return (
-    <div className="card !p-3.5 sm:!p-4">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className={`mt-1 truncate text-base font-bold sm:text-xl ${tone}`}>{value}</p>
+    <div className={`flex items-center justify-between gap-2 rounded-2xl bg-white/70 px-4 py-2.5 ${className}`}>
+      <span className="min-w-0 text-[13px]">
+        <span className="block text-xs font-bold">{[due.bank, due.account_holder].filter(Boolean).join(" · ") || "입금 계좌"}</span>
+        <span className="break-all font-extrabold tabular-nums">{due.account_number}</span>
+      </span>
+      <CopyButton text={due.account_number} label="계좌 복사" tone="ink" className="!h-7" />
+    </div>
+  );
+}
+
+function StatTile({ tile, label, value }: { tile: string; label: string; value: string }) {
+  return (
+    <div className={`${tile} !rounded-3xl !px-3.5 !py-4 sm:!p-5`}>
+      <p className="text-[13px] font-bold">{label}</p>
+      <p className="mt-3 whitespace-nowrap font-display text-[16px] font-extrabold leading-none tracking-[-0.05em] min-[400px]:text-[18px] sm:text-[30px] lg:mt-6">{value}</p>
     </div>
   );
 }

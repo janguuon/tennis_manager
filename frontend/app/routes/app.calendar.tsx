@@ -6,11 +6,11 @@ import { useEffect, useState } from "react";
 
 import { GatheringRow } from "~/components/GatheringRow";
 import { FieldGroup, Modal } from "~/components/Modal";
-import { PageBody, PageHero } from "~/components/Page";
+import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
-import { GATHERING_STATUS_DOT, WEEKDAYS } from "~/lib/status";
-import type { Gathering, GatheringStatus } from "~/lib/types";
+import { GATHERING_STATUS_CHIP, GATHERING_STATUS_DOT, WEEKDAYS } from "~/lib/status";
+import type { Gathering } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "캘린더 · 오테식 매니저" }];
 
@@ -112,14 +112,6 @@ function addHours(time: string, hours: number): string {
   return TIME_OPTIONS.includes(target) ? target : TIME_OPTIONS[TIME_OPTIONS.length - 1];
 }
 
-/** 달력 칸 안의 일정 칩 색 (상태별) */
-const CHIP: Record<GatheringStatus, string> = {
-  planned: "bg-ball-100 text-ball-900 dark:bg-ball-400/15 dark:text-ball-200",
-  ongoing: "bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200",
-  completed: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
-  canceled: "bg-red-50 text-red-400 line-through dark:bg-red-500/10",
-};
-
 export default function CalendarPage() {
   const { month, gatherings, view } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -185,73 +177,71 @@ export default function CalendarPage() {
   // 리스트 뷰: 일정이 있는 날짜만 오름차순으로
   const listDates = [...byDate.keys()].sort();
   const cellBase =
-    "min-h-[3.75rem] border-b border-r border-slate-100 p-1.5 text-center dark:border-slate-800 [&:nth-child(7n)]:border-r-0 sm:min-h-[6.5rem] sm:p-2 sm:text-left";
+    "min-h-[3.75rem] border-b border-r border-slate-200/70 p-1.5 text-center dark:border-slate-800 [&:nth-child(7n)]:border-r-0 sm:min-h-[6.5rem] sm:p-2 sm:text-left";
 
   return (
     <>
-      <PageHero>
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-          <div>
-            <div className="flex items-center">
-              <h1 className="hero-title mr-1">
-                {yy}년 {Number(mm)}월
-              </h1>
-              <button className="icon-btn-hero" aria-label="이전 달" onClick={() => goMonth(shiftMonth(month, -1))}>
-                <ChevronLeft size={22} />
+      <PageBody>
+        <PageHeader
+          title={
+            <span className="inline-flex items-center gap-1">
+              {yy}년 {Number(mm)}월
+              <button className="icon-btn ml-1" aria-label="이전 달" onClick={() => goMonth(shiftMonth(month, -1))}>
+                <ChevronLeft size={24} />
               </button>
-              <button className="icon-btn-hero" aria-label="다음 달" onClick={() => goMonth(shiftMonth(month, 1))}>
-                <ChevronRight size={22} />
+              <button className="icon-btn" aria-label="다음 달" onClick={() => goMonth(shiftMonth(month, 1))}>
+                <ChevronRight size={24} />
               </button>
+            </span>
+          }
+          sub={
+            <>
+              {gatherings.length > 0 ? `이 달 일정 ${gatherings.length}개` : "이 달 일정이 아직 없어요"}
               {month !== currentMonth() ? (
-                <button className="btn-hero btn-sm ml-1" onClick={() => goMonth(currentMonth())}>
-                  오늘
+                <button className="badge-yellow ml-2 align-middle" onClick={() => goMonth(currentMonth())}>
+                  오늘로
                 </button>
               ) : null}
-            </div>
-            <p className="hero-sub">
-              {gatherings.length > 0 ? `이 달 일정 ${gatherings.length}개` : "이 달 일정이 아직 없어요"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="segmented-hero">
-              <button
-                className={`segmented-hero-item ${view === "calendar" ? "segmented-hero-item-active" : ""}`}
-                onClick={() => updateParams({ view: "calendar" })}
-              >
-                <CalendarDays size={14} />
-                달력
+            </>
+          }
+          actions={
+            <>
+              <div className="segmented">
+                <button
+                  className={`segmented-item ${view === "calendar" ? "segmented-item-active" : ""}`}
+                  onClick={() => updateParams({ view: "calendar" })}
+                >
+                  <CalendarDays size={14} />
+                  달력
+                </button>
+                <button
+                  className={`segmented-item ${view === "list" ? "segmented-item-active" : ""}`}
+                  onClick={() => updateParams({ view: "list" })}
+                >
+                  <List size={14} />
+                  리스트
+                </button>
+              </div>
+              <button className="btn-ghost btn-sm !h-10" onClick={() => setImporting(true)} title="엑셀로 여러 일정 등록">
+                <Upload size={15} />
+                <span className="hidden sm:inline">엑셀</span>
               </button>
-              <button
-                className={`segmented-hero-item ${view === "list" ? "segmented-hero-item-active" : ""}`}
-                onClick={() => updateParams({ view: "list" })}
-              >
-                <List size={14} />
-                리스트
+              <button className="btn-accent btn-sm !h-10" onClick={() => setShowCreate(true)}>
+                <Plus size={16} />
+                일정 등록
               </button>
-            </div>
-            <button className="btn-hero btn-sm" onClick={() => setImporting(true)} title="엑셀로 여러 일정 등록">
-              <Upload size={15} />
-              <span className="hidden sm:inline">엑셀</span>
-            </button>
-            <button className="btn-hero-primary btn-sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} />
-              일정 등록
-            </button>
-          </div>
-        </div>
-      </PageHero>
+            </>
+          }
+        />
 
-      <PageBody>
         {view === "calendar" ? (
           /* 달력 그리드 */
           <div className="card overflow-hidden !p-0">
-            <div className="grid grid-cols-7 border-b border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-7 bg-house-yellow">
               {WEEKDAYS.map((w, i) => (
                 <div
                   key={w}
-                  className={`py-2.5 text-center text-xs font-medium ${
-                    i === 0 ? "text-rose-500" : i === 6 ? "text-sky-600" : "text-slate-400"
-                  }`}
+                  className={`py-2.5 text-center text-xs font-extrabold text-ink ${i === 0 || i === 6 ? "" : "opacity-70"}`}
                 >
                   {w}
                 </div>
@@ -262,7 +252,7 @@ export default function CalendarPage() {
             <div className="-mb-px grid grid-cols-7">
               {cells.map((day, idx) => {
                 if (day === null) {
-                  return <div key={idx} className={`${cellBase} bg-slate-50/70 dark:bg-slate-950/40`} />;
+                  return <div key={idx} className={`${cellBase} bg-slate-100/60 dark:bg-slate-950/40`} />;
                 }
                 const dateStr = `${month}-${String(day).padStart(2, "0")}`;
                 const isToday = dateStr === todayStr;
@@ -274,19 +264,19 @@ export default function CalendarPage() {
                   <Link
                     key={idx}
                     to={`/app/day/${dateStr}`}
-                    className={`${cellBase} block transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50`}
+                    className={`${cellBase} block transition-colors hover:bg-white dark:hover:bg-slate-800/50`}
                   >
                     <span
-                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[13px] font-medium ${
+                      className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1 font-display text-[14px] font-extrabold ${
                         isToday
-                          ? "bg-ball-400 font-semibold text-slate-900"
+                          ? "bg-ink text-house-yellow dark:bg-house-yellow dark:text-ink"
                           : isPast
                             ? "text-slate-400 dark:text-slate-600"
                             : weekday === 0
-                              ? "text-rose-500"
+                              ? "text-[#D2381F] dark:text-red-400"
                               : weekday === 6
-                                ? "text-sky-600"
-                                : "text-slate-700 dark:text-slate-200"
+                                ? "text-[#2F5BD3] dark:text-blue-400"
+                                : "text-ink dark:text-slate-100"
                       }`}
                     >
                       {day}
@@ -304,7 +294,7 @@ export default function CalendarPage() {
                       {dayGatherings.slice(0, 3).map((g) => (
                         <div
                           key={g.id}
-                          className={`truncate rounded-md px-1.5 py-[3px] text-[11px] font-medium leading-tight ${CHIP[g.status]}`}
+                          className={`truncate rounded-full px-2 py-[3px] text-[11px] font-bold leading-tight ${GATHERING_STATUS_CHIP[g.status]}`}
                           title={g.title}
                         >
                           {g.start_time ? <span className="mr-1 opacity-60">{g.start_time.slice(0, 5)}</span> : null}
@@ -312,7 +302,7 @@ export default function CalendarPage() {
                         </div>
                       ))}
                       {dayGatherings.length > 3 ? (
-                        <div className="px-1 text-[11px] text-slate-400">+{dayGatherings.length - 3}개</div>
+                        <div className="px-1 text-[11px] font-bold text-slate-500">+{dayGatherings.length - 3}개</div>
                       ) : null}
                     </div>
                   </Link>
@@ -321,14 +311,17 @@ export default function CalendarPage() {
             </div>
           </div>
         ) : listDates.length === 0 ? (
-          <div className="card flex flex-col items-center gap-3 py-14 text-center">
-            <CalendarDays size={28} className="text-slate-300" />
-            <p className="text-sm text-slate-500">이 달에 등록된 일정이 없어요.</p>
-            <button className="btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-              <Plus size={16} />
-              일정 등록
-            </button>
-          </div>
+          <EmptyCard
+            icon={<CalendarDays size={28} />}
+            action={
+              <button className="btn-accent btn-sm" onClick={() => setShowCreate(true)}>
+                <Plus size={16} />
+                일정 등록
+              </button>
+            }
+          >
+            이 달에 등록된 일정이 없어요.
+          </EmptyCard>
         ) : (
           /* 리스트 보기: 날짜별 소제목 + 일정 줄을 카드 한 장에 */
           <section className="card overflow-hidden !p-0">
@@ -339,12 +332,12 @@ export default function CalendarPage() {
                 (a.start_time ?? "99").localeCompare(b.start_time ?? "99"),
               );
               return (
-                <div key={dateStr} className={i > 0 ? "border-t border-slate-100 dark:border-slate-800" : ""}>
-                  <h2 className="flex items-center gap-1.5 bg-slate-50 px-4 py-2 text-[13px] font-semibold text-slate-700 dark:bg-slate-800/40 dark:text-slate-200 sm:px-5">
-                    {lm}월 {ld}일 <span className="font-normal text-slate-400">{wd}요일</span>
-                    {dateStr === todayStr ? <span className="badge-accent">오늘</span> : null}
+                <div key={dateStr} className={i > 0 ? "border-t-[1.5px] border-slate-200 dark:border-slate-800" : ""}>
+                  <h2 className="flex items-center gap-2 px-5 pb-1 pt-4 font-display text-[17px] font-extrabold tracking-[-0.03em] sm:px-6">
+                    {lm}.{ld} <span className="font-sans text-[13px] font-bold text-slate-500">{wd}요일</span>
+                    {dateStr === todayStr ? <span className="badge-yellow">오늘</span> : null}
                   </h2>
-                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
                     {list.map((g) => (
                       <li key={g.id}>
                         <GatheringRow g={g} to={`/app/gatherings/${g.id}?from=list:${month}`} />

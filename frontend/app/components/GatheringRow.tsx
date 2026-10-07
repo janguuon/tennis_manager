@@ -1,5 +1,5 @@
 import { Link } from "@remix-run/react";
-import { ChevronRight, MapPin, Users } from "lucide-react";
+import { ArrowUpRight, Users } from "lucide-react";
 
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
@@ -12,6 +12,7 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
   const muted = g.status === "completed" || g.status === "canceled";
   // 좁은 화면에서 잘리므로 회원에게 중요한 금액을 코트보다 앞에 둔다
   const meta = [
+    g.location ?? "장소 미정",
     g.fee > 0 && g.per_person > 0 ? `1인 ${won(g.per_person)}` : g.fee > 0 ? `총 ${won(g.fee)}` : "",
     `코트 ${g.court_numbers ? g.court_numbers : `${g.court_count}면`}`,
   ].filter(Boolean);
@@ -19,19 +20,23 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
   return (
     <Link
       to={to}
-      className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 sm:px-5"
+      className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white dark:hover:bg-slate-800/60 sm:px-6"
     >
-      <div className="w-11 shrink-0 text-center">
-        <div className={`text-[15px] font-bold ${muted ? "text-slate-400" : "text-slate-900 dark:text-white"}`}>
+      <div className="w-12 shrink-0">
+        <div
+          className={`font-display text-[17px] font-extrabold tracking-[-0.03em] ${
+            muted ? "text-slate-400" : "text-ink dark:text-white"
+          }`}
+        >
           {start ?? "미정"}
         </div>
-        {end ? <div className="text-xs text-slate-400">{end}</div> : null}
+        {end ? <div className="text-xs font-semibold text-slate-400">{end}</div> : null}
       </div>
-      <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 dark:border-slate-800">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span
-            className={`truncate font-semibold ${
-              g.status === "canceled" ? "text-slate-400 line-through" : "text-slate-900 dark:text-white"
+            className={`truncate text-[15px] font-bold ${
+              g.status === "canceled" ? "text-slate-400 line-through" : "text-ink dark:text-white"
             }`}
           >
             {g.title}
@@ -40,20 +45,14 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
             <span className={GATHERING_STATUS_BADGE[g.status]}>{GATHERING_STATUS_LABEL[g.status]}</span>
           ) : null}
         </div>
-        <p className="mt-1 flex items-center gap-1 truncate text-[13px] text-slate-500 dark:text-slate-400">
-          <MapPin size={13} className="shrink-0" />
-          <span className="truncate">
-            {g.location ?? "장소 미정"}
-            {meta.map((m) => ` · ${m}`).join("")}
-          </span>
-        </p>
+        <p className="mt-0.5 truncate text-[13px] font-medium text-slate-500 dark:text-slate-400">{meta.join(" · ")}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-1 text-[13px] font-medium text-slate-500 dark:text-slate-400">
-        <Users size={14} />
+      <span className="badge-line shrink-0">
+        <Users size={12} />
         {g.attendance?.attending ?? 0}
         {g.max_participants ? `/${g.max_participants}` : ""}
-        <ChevronRight size={16} className="ml-1 text-slate-300 dark:text-slate-600" />
-      </div>
+      </span>
+      <ArrowUpRight size={16} className="hidden shrink-0 text-slate-400 transition-colors group-hover:text-ink dark:group-hover:text-white sm:block" />
     </Link>
   );
 }

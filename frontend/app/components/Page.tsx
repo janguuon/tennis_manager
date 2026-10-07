@@ -1,43 +1,55 @@
+import { Link } from "@remix-run/react";
+import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
-/**
- * 페이지 상단의 차콜 띠. 제목·요약·주요 버튼을 흰 글씨로 올린다.
- * 바로 아래 <PageBody>의 첫 카드가 띠 위로 겹쳐 올라온다(그래서 첫 요소는 카드여야 한다).
- */
-export function PageHero({ children }: { children: ReactNode }) {
-  return (
-    <section className="bg-slate-900 text-white dark:border-b dark:border-slate-800">
-      <div className="mx-auto max-w-5xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8">{children}</div>
-    </section>
-  );
-}
-
-/** 히어로 아래 본문. 위로 살짝 끌어올려 첫 카드가 차콜 띠에 걸치게 한다. */
+/** 페이지 본문 폭 + 카드 간격 (머리말도 이 안에 둔다) */
 export function PageBody({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
   return (
-    <div className={`relative mx-auto -mt-10 space-y-5 px-4 sm:px-6 ${narrow ? "max-w-2xl" : "max-w-5xl"}`}>
-      {children}
-    </div>
+    <div className={`mx-auto w-full space-y-3.5 ${narrow ? "max-w-2xl" : "max-w-[1120px]"}`}>{children}</div>
   );
 }
 
-/** 히어로 제목 + 부제 + 오른쪽 버튼 영역 */
-export function HeroHeader({
+/** 큰 제목 + 부제 + 오른쪽 버튼 영역 */
+export function PageHeader({
   title,
   sub,
   actions,
+  back,
 }: {
   title: ReactNode;
   sub?: ReactNode;
   actions?: ReactNode;
+  back?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+    <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1 pb-1.5 pt-1 md:pt-2">
       <div className="min-w-0">
-        <h1 className="hero-title">{title}</h1>
-        {sub ? <p className="hero-sub">{sub}</p> : null}
+        {back ? <div className="mb-3">{back}</div> : null}
+        <h1 className="page-title">{title}</h1>
+        {sub ? <p className="page-sub">{sub}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </header>
+  );
+}
+
+/** 뒤로 가기: 검정 알약 */
+export function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="btn-primary btn-sm">
+      <ArrowLeft size={15} />
+      {children}
+    </Link>
+  );
+}
+
+/** 빈 상태 카드 */
+export function EmptyCard({ icon, children, action }: { icon: ReactNode; children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="card flex flex-col items-center gap-3 py-14 text-center">
+      <span className="text-slate-300 dark:text-slate-600">{icon}</span>
+      <p className="text-sm font-medium text-slate-500">{children}</p>
+      {action}
     </div>
   );
 }

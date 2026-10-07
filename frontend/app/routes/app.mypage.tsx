@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remi
 import { json } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
 
-import { PageBody, PageHero } from "~/components/Page";
+import { PageBody } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import type { User } from "~/lib/types";
@@ -79,30 +79,26 @@ export default function MyPage() {
     m?.ok ? <p className="alert-success">{m.message}</p> : m?.error ? <p className="alert-error">{m.error}</p> : null;
 
   return (
-    <>
-      <PageHero>
-        <div className="mx-auto flex max-w-2xl items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ball-400 text-xl font-bold text-slate-900">
-            {user.name.charAt(0)}
-          </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="hero-title truncate">{user.name}</h1>
-              <span className="badge-hero">{user.is_admin ? "관리자" : "회원"}</span>
-            </div>
-            <p className="hero-sub !mt-0.5 truncate">
-              @{user.username}
-              {user.email ? ` · ${user.email}` : ""} · {user.created_at.slice(0, 10)} 가입
-            </p>
+    <PageBody narrow>
+      {/* 프로필 머리 */}
+      <section className="tile-lav flex items-center gap-4 sm:gap-5">
+        <span className="avatar h-16 w-16 bg-house-yellow text-[26px] text-ink sm:h-20 sm:w-20 sm:text-[32px]">{user.name.charAt(0)}</span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="truncate font-display text-[30px] font-extrabold leading-tight tracking-[-0.05em] sm:text-[40px]">{user.name}</h1>
+            <span className="chip-ink">{user.is_admin ? "관리자" : "회원"}</span>
           </div>
+          <p className="mt-0.5 truncate text-[14px] font-bold">
+            @{user.username}
+            {user.email ? ` · ${user.email}` : ""} · {user.created_at.slice(0, 10)} 가입
+          </p>
         </div>
-      </PageHero>
+      </section>
 
-      <PageBody narrow>
         {/* 내 정보 수정 */}
         <section className="card">
           <h2 className="section-title">프로필</h2>
-          <p className="mt-1 text-[13px] text-slate-500">대진 편성에 쓰이는 정보예요 (성별 · NTRP).</p>
+          <p className="mt-1 text-[13px] font-medium text-slate-500">대진 편성에 쓰이는 정보예요 (성별 · NTRP).</p>
           <Form method="post" className="mt-5 space-y-4">
             <input type="hidden" name="intent" value="profile" />
             <div className="grid grid-cols-2 gap-3">
@@ -159,7 +155,7 @@ export default function MyPage() {
         {/* 비밀번호 변경 */}
         <section className="card">
           <h2 className="section-title">비밀번호</h2>
-          <p className="mt-1 text-[13px] text-slate-500">4자 이상으로 바꿀 수 있어요.</p>
+          <p className="mt-1 text-[13px] font-medium text-slate-500">4자 이상으로 바꿀 수 있어요.</p>
           <Form method="post" className="mt-5 space-y-4">
             <input type="hidden" name="intent" value="password" />
             <div className="grid grid-cols-2 gap-3">
@@ -182,7 +178,6 @@ export default function MyPage() {
             </div>
           </Form>
         </section>
-      </PageBody>
-    </>
+    </PageBody>
   );
 }

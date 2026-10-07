@@ -1,10 +1,10 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, useLoaderData } from "@remix-run/react";
-import { ArrowLeft, CalendarDays } from "lucide-react";
+import { useLoaderData } from "@remix-run/react";
+import { CalendarDays } from "lucide-react";
 
 import { GatheringRow } from "~/components/GatheringRow";
-import { HeroHeader, PageBody, PageHero } from "~/components/Page";
+import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import { WEEKDAYS } from "~/lib/status";
@@ -31,38 +31,28 @@ export default function DayPage() {
   const weekday = WEEKDAYS[new Date(y, m - 1, d).getDay()];
 
   return (
-    <>
-      <PageHero>
-        <Link to={`/app/calendar?month=${month}`} className="back-link-hero">
-          <ArrowLeft size={16} />
-          캘린더
-        </Link>
-        <HeroHeader
-          title={
-            <>
-              {m}월 {d}일 <span className="font-medium text-white/60">{weekday}요일</span>
-            </>
-          }
-          sub={gatherings.length > 0 ? `일정 ${gatherings.length}개` : "등록된 일정이 없어요"}
-        />
-      </PageHero>
+    <PageBody>
+      <PageHeader
+        back={<BackLink to={`/app/calendar?month=${month}`}>캘린더</BackLink>}
+        title={
+          <>
+            {m}월 {d}일 <span className="text-slate-400">{weekday}요일</span>
+          </>
+        }
+        sub={gatherings.length > 0 ? `일정 ${gatherings.length}개` : "등록된 일정이 없어요"}
+      />
 
-      <PageBody>
-        {gatherings.length === 0 ? (
-          <div className="card flex flex-col items-center gap-3 py-14 text-center">
-            <CalendarDays size={28} className="text-slate-300" />
-            <p className="text-sm text-slate-500">이 날 등록된 일정이 없어요.</p>
-          </div>
-        ) : (
-          <ul className="card divide-y divide-slate-100 overflow-hidden !p-0 dark:divide-slate-800">
-            {gatherings.map((g) => (
-              <li key={g.id}>
-                <GatheringRow g={g} to={`/app/gatherings/${g.id}?from=${date}`} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </PageBody>
-    </>
+      {gatherings.length === 0 ? (
+        <EmptyCard icon={<CalendarDays size={28} />}>이 날 등록된 일정이 없어요.</EmptyCard>
+      ) : (
+        <ul className="card divide-y divide-slate-200/70 overflow-hidden !p-0 dark:divide-slate-800">
+          {gatherings.map((g) => (
+            <li key={g.id}>
+              <GatheringRow g={g} to={`/app/gatherings/${g.id}?from=${date}`} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </PageBody>
   );
 }

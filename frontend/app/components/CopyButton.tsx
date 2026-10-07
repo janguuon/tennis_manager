@@ -1,14 +1,19 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
-/** 클립보드 복사 버튼. 클립보드는 HTTPS 또는 localhost에서만 동작한다. */
+/**
+ * 클립보드 복사 버튼. 클립보드는 HTTPS 또는 localhost에서만 동작한다.
+ * tone="ink"는 원색 타일 안에서 쓰는 검정 알약.
+ */
 export function CopyButton({
   text,
   label = "복사",
+  tone = "ghost",
   className = "",
 }: {
   text: string;
   label?: string;
+  tone?: "ghost" | "ink";
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -24,7 +29,7 @@ export function CopyButton({
           // 클립보드 접근이 불가하면 무시
         }
       }}
-      className={`btn-ghost btn-sm shrink-0 ${copied ? "!text-ball-800 dark:!text-ball-300" : ""} ${className}`}
+      className={`${tone === "ink" ? "btn-ink" : "btn-ghost"} btn-sm shrink-0 ${className}`}
     >
       {copied ? <Check size={14} /> : <Copy size={14} />}
       {copied ? "복사됨" : label}

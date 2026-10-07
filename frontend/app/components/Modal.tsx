@@ -2,11 +2,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-/**
- * 모달: 데스크톱은 가운데 창, 모바일은 아래에서 올라오는 시트. 바깥을 누르거나 Esc로 닫힌다.
- * body에 포털로 그려서 부모의 transform/overflow와 상관없이 화면 전체를 덮는다.
- * (열릴 때만 렌더되므로 서버 렌더링에서는 호출되지 않는다)
- */
+/** Native dialog provides focus trapping, Escape, and focus restoration. */
 export function Modal({
   title,
   onClose,
@@ -16,52 +12,73 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
-  // onClose는 부모가 렌더할 때마다 새 함수라, 최신 값을 ref로 들고 효과는 한 번만 건다
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
-
-  // 열려 있는 동안 뒤 페이지 스크롤 잠금 + Esc로 닫기
   useEffect(() => {
-    const prev = document.body.style.overflow;
+    const dialog = dialogRef.current;
+    const previous = document.body.style.overflow;
+    const trigger = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeRef.current();
-    window.addEventListener("keydown", onKey);
+    dialog?.showModal();
     return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
+      dialog?.close();
+      document.body.style.overflow = previous;
+      trigger?.focus();
     };
   }, []);
-
   return createPortal(
-    <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-ink/45 backdrop-blur-[2px] sm:items-center sm:p-4"
-      onClick={onClose}
+    <dialog
+      ref={dialogRef}
+      className="club-modal"
+      aria-label={title}
+      onCancel={(event) => {
+        event.preventDefault();
+        closeRef.current();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+          )
+            closeRef.current();
+        }
+      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="max-h-[92vh] w-full animate-fade-in overflow-y-auto rounded-t-[28px] bg-paper p-5 shadow-pop motion-reduce:animate-none dark:bg-slate-900 sm:max-w-md sm:rounded-[28px] sm:p-7"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="font-display text-[24px] font-extrabold tracking-[-0.04em]">{title}</h2>
-          <button type="button" className="icon-btn -mr-2" onClick={onClose} aria-label="닫기">
-            <X size={18} />
-          </button>
-        </div>
-        {children}
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h2 className="font-display text-2xl font-bold tracking-tight">
+          {title}
+        </h2>
+        <button
+          type="button"
+          className="icon-btn -mr-2"
+          onClick={onClose}
+          aria-label="닫기"
+        >
+          <X size={20} />
+        </button>
       </div>
-    </div>,
-    document.body,
+      {children}
+    </dialog>,
+    document.body
   );
 }
-
-/** 모달 폼 안의 소제목 (필드 묶음 구분) */
-export function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+export function FieldGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <fieldset className="space-y-3">
-      <legend className="mb-3 text-xs font-bold text-slate-500">{title}</legend>
+      <legend className="mb-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
+        {title}
+      </legend>
       {children}
     </fieldset>
   );

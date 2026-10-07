@@ -1,10 +1,24 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  MetaFunction,
+} from "@remix-run/node";
 import { redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useNavigation, useSearchParams } from "@remix-run/react";
+import {
+  Form,
+  Link,
+  useActionData,
+  useNavigation,
+  useSearchParams,
+} from "@remix-run/react";
 
 import { AuthLayout } from "~/components/AuthLayout";
 import { ApiError, api } from "~/lib/api.server";
-import { createUserSession, getToken, safeRedirect } from "~/lib/session.server";
+import {
+  createUserSession,
+  getToken,
+  safeRedirect,
+} from "~/lib/session.server";
 import type { LoginResponse } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "로그인 · 오테식 매니저" }];
@@ -35,7 +49,8 @@ export async function action({ request }: ActionFunctionArgs) {
     });
     return createUserSession(res.access_token, redirectTo);
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : "로그인에 실패했습니다.";
+    const message =
+      err instanceof ApiError ? err.message : "로그인에 실패했습니다.";
     return { error: message };
   }
 }
@@ -51,26 +66,58 @@ export default function LoginPage() {
     <AuthLayout>
       <Form method="post" className="card space-y-4 sm:!p-8">
         <input type="hidden" name="redirectTo" value={redirectTo} />
-        <h1 className="font-display text-[32px] font-extrabold tracking-[-0.05em]">로그인</h1>
-        <div>
-          <label className="label" htmlFor="username">아이디</label>
-          <input id="username" name="username" className="input" autoComplete="username" required />
+        <div className="pb-3">
+          <p className="eyebrow mb-3 text-slate-500">WELCOME BACK</p>
+          <h1 className="page-title">
+            다시 만나 반가워요<span className="text-house-blue">.</span>
+          </h1>
+          <p className="page-sub">로그인하고 우리 클럽 소식을 확인하세요.</p>
         </div>
         <div>
-          <label className="label" htmlFor="password">비밀번호</label>
-          <input id="password" name="password" type="password" className="input" autoComplete="current-password" required />
+          <label className="label" htmlFor="username">
+            아이디
+          </label>
+          <input
+            id="username"
+            name="username"
+            className="input"
+            autoComplete="username"
+            required
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="password">
+            비밀번호
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="input"
+            autoComplete="current-password"
+            required
+          />
         </div>
 
-        {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
+        {actionData?.error ? (
+          <p className="alert-error">{actionData.error}</p>
+        ) : null}
 
-        <button type="submit" className="btn-primary h-12 w-full text-[15px]" disabled={submitting}>
+        <button
+          type="submit"
+          className="btn-primary h-12 w-full text-[15px]"
+          disabled={submitting}
+        >
           {submitting ? "로그인 중…" : "로그인"}
         </button>
       </Form>
 
       <p className="mt-5 text-center text-sm font-medium text-slate-500">
         아직 회원이 아니신가요?{" "}
-        <Link to="/signup" className="font-extrabold text-ink underline decoration-2 underline-offset-4 dark:text-white">
+        <Link
+          to="/signup"
+          className="font-extrabold text-ink underline decoration-2 underline-offset-4 dark:text-white"
+        >
           가입 신청
         </Link>
       </p>

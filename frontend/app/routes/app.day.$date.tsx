@@ -17,10 +17,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const date = params.date as string;
   const gatherings = await api<Gathering[]>(
     `/gatherings?date_from=${date}&date_to=${date}`,
-    { token },
+    { token }
   );
   // 시작 시간 순으로 정렬 (시간 미정은 뒤로)
-  gatherings.sort((a, b) => (a.start_time ?? "99").localeCompare(b.start_time ?? "99"));
+  gatherings.sort((a, b) =>
+    (a.start_time ?? "99").localeCompare(b.start_time ?? "99")
+  );
   return json({ date, gatherings });
 }
 
@@ -33,17 +35,24 @@ export default function DayPage() {
   return (
     <PageBody>
       <PageHeader
+        eyebrow="A DAY ON COURT."
         back={<BackLink to={`/app/calendar?month=${month}`}>캘린더</BackLink>}
         title={
           <>
             {m}월 {d}일 <span className="text-slate-400">{weekday}요일</span>
           </>
         }
-        sub={gatherings.length > 0 ? `일정 ${gatherings.length}개` : "등록된 일정이 없어요"}
+        sub={
+          gatherings.length > 0
+            ? `일정 ${gatherings.length}개`
+            : "등록된 일정이 없어요"
+        }
       />
 
       {gatherings.length === 0 ? (
-        <EmptyCard icon={<CalendarDays size={28} />}>이 날 등록된 일정이 없어요.</EmptyCard>
+        <EmptyCard icon={<CalendarDays size={28} />}>
+          이 날 등록된 일정이 없어요.
+        </EmptyCard>
       ) : (
         <ul className="card divide-y divide-slate-200/70 overflow-hidden !p-0 dark:divide-slate-800">
           {gatherings.map((g) => (

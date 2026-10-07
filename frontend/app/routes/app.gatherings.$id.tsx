@@ -1,13 +1,23 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  MetaFunction,
+} from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useOutletContext, useSearchParams } from "@remix-run/react";
 import {
-  CalendarDays,
+  Form,
+  Link,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useOutletContext,
+  useSearchParams,
+} from "@remix-run/react";
+import {
   Check,
   CircleAlert,
   Dices,
   Landmark,
-  LayoutGrid,
   Lock,
   MapPin,
   Pencil,
@@ -16,15 +26,14 @@ import {
   Share2,
   Trash2,
   Undo2,
-  Wallet,
-  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { BallBasket } from "~/components/BallBasket";
+import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
 import { FieldGroup, Modal } from "~/components/Modal";
-import { BackLink, PageBody } from "~/components/Page";
+import { BackLink, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { accountText, won } from "~/lib/format";
 import { shareToKakao } from "~/lib/kakao";
@@ -37,14 +46,16 @@ import {
   type DrawMatch,
   type GatheringDetail,
   type User,
-  type UserBrief,
 } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "모임 상세 · 오테식 매니저" }];
+export const meta: MetaFunction = () => [
+  { title: "모임 상세 · 오테식 매니저" },
+];
 
 // 정시(00분) 단위 시간 옵션, 06시~22시
 const TIME_OPTIONS: string[] = [];
-for (let h = 6; h <= 22; h++) TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:00`);
+for (let h = 6; h <= 22; h++)
+  TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:00`);
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const token = await requireToken(request);
@@ -79,13 +90,19 @@ export async function action({ request, params }: ActionFunctionArgs) {
         },
       });
     } else if (intent === "toggle_payment") {
-      await api(`/gatherings/${id}/participants/${formData.get("user_id")}/payment`, {
-        method: "PUT",
-        token,
-        body: { paid: formData.get("paid") === "true" },
-      });
+      await api(
+        `/gatherings/${id}/participants/${formData.get("user_id")}/payment`,
+        {
+          method: "PUT",
+          token,
+          body: { paid: formData.get("paid") === "true" },
+        }
+      );
     } else if (intent === "delete_draw") {
-      await api(`/draws/${formData.get("draw_id")}`, { method: "DELETE", token });
+      await api(`/draws/${formData.get("draw_id")}`, {
+        method: "DELETE",
+        token,
+      });
     } else if (intent === "result") {
       await api(`/draw-matches/${formData.get("draw_match_id")}/result`, {
         method: "POST",
@@ -127,13 +144,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
     } else if (intent === "delete_gathering") {
       await api(`/gatherings/${id}`, { method: "DELETE", token });
       const from = String(formData.get("from") || "");
-      if (from.startsWith("list:")) return redirect(`/app/calendar?view=list&month=${from.slice(5)}`);
+      if (from.startsWith("list:"))
+        return redirect(`/app/calendar?view=list&month=${from.slice(5)}`);
       if (/^\d{4}-\d{2}-\d{2}$/.test(from)) return redirect(`/app/day/${from}`);
       return redirect(from ? `/app/calendar?month=${from}` : "/app/calendar");
     }
     return json({ ok: true, error: null as string | null });
   } catch (err) {
-    const message = err instanceof ApiError ? err.message : "처리에 실패했습니다.";
+    const message =
+      err instanceof ApiError ? err.message : "처리에 실패했습니다.";
     return json({ ok: false, error: message }, { status: 400 });
   }
 }
@@ -144,10 +163,6 @@ const VOTE_LABEL: Record<AttendanceStatus, string> = {
   maybe: "미정",
 };
 
-function names(players: UserBrief[]): string {
-  return players.map((p) => p.name).join(", ") || "—";
-}
-
 export default function GatheringDetailPage() {
   const { gathering, draws } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -157,7 +172,10 @@ export default function GatheringDetailPage() {
   const [editing, setEditing] = useState(false);
   // 등록된 실제 코트 번호 ("3, 5" → ["3","5"]). 대진의 코트 순번을 실제 번호로 변환하는 데 사용.
   const courtLabels = gathering.court_numbers
-    ? gathering.court_numbers.split(",").map((s) => s.trim()).filter(Boolean)
+    ? gathering.court_numbers
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
   // 참석 변경 마감: 모임 3일 전부터는 일반 회원이 불참/미정으로 못 바꿈(관리자만 가능)
@@ -165,7 +183,7 @@ export default function GatheringDetailPage() {
   const daysUntilEvent = Math.round(
     (new Date(gathering.event_date + "T00:00:00").getTime() -
       new Date(new Date().toDateString()).getTime()) /
-      86400000,
+      86400000
   );
   const attendanceLocked = daysUntilEvent <= ATTENDANCE_LOCK_DAYS;
   const canSetAbsence = user.is_admin || !attendanceLocked;
@@ -185,7 +203,9 @@ export default function GatheringDetailPage() {
     backHref = `/app/day/${from}`;
     backLabel = "목록";
   } else {
-    backHref = `/app/calendar?month=${from || gathering.event_date.slice(0, 7)}`;
+    backHref = `/app/calendar?month=${
+      from || gathering.event_date.slice(0, 7)
+    }`;
     backLabel = "캘린더";
   }
 
@@ -197,17 +217,25 @@ export default function GatheringDetailPage() {
   // 참가비 정산: 금액은 모두 서버 계산값(1인 금액 = 총액 ÷ 참석 인원, 100원 단위 올림)
   const perPerson = gathering.per_person;
   const payment = gathering.payment;
-  const attendees = gathering.participants.filter((p) => p.status === "attending");
+  const attendees = gathering.participants.filter(
+    (p) => p.status === "attending"
+  );
   const dueOf = new Map(payment?.dues.map((d) => [d.user.id, d.amount]) ?? []);
-  const refundOf = new Map(payment?.refunds.map((r) => [r.user.id, r.amount]) ?? []);
+  const refundOf = new Map(
+    payment?.refunds.map((r) => [r.user.id, r.amount]) ?? []
+  );
   // 입금 후 불참으로 바뀐 사람 (돌려줄 돈)
-  const refundAbsentees = gathering.participants.filter((p) => p.status !== "attending" && refundOf.has(p.user.id));
+  const refundAbsentees = gathering.participants.filter(
+    (p) => p.status !== "attending" && refundOf.has(p.user.id)
+  );
   const me = gathering.participants.find((p) => p.user.id === user.id);
   const myAttending = me?.status === "attending";
-  const myDue = me ? (dueOf.get(me.user.id) ?? 0) : 0;
-  const myRefund = me ? (refundOf.get(me.user.id) ?? 0) : 0;
+  const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
+  const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
   const account = accountText(gathering);
-  const dateLine = `📅 ${gathering.event_date}${gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""}${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`;
+  const dateLine = `📅 ${gathering.event_date}${
+    gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""
+  }${gathering.end_time ? `~${gathering.end_time.slice(0, 5)}` : ""}`;
   const path = `/app/gatherings/${gathering.id}`;
 
   // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
@@ -215,8 +243,14 @@ export default function GatheringDetailPage() {
     `🎾 ${gathering.title}`,
     dateLine,
     gathering.location ? `📍 ${gathering.location}` : "",
-    `🟩 코트 ${gathering.court_numbers ? `${gathering.court_numbers} (${gathering.court_count}면)` : `${gathering.court_count}면`}`,
-    gathering.fee > 0 ? `💰 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})` : "",
+    `🟩 코트 ${
+      gathering.court_numbers
+        ? `${gathering.court_numbers} (${gathering.court_count}면)`
+        : `${gathering.court_count}면`
+    }`,
+    gathering.fee > 0
+      ? `💰 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})`
+      : "",
     account ? `🏦 ${account}` : "",
   ]
     .filter(Boolean)
@@ -235,32 +269,51 @@ export default function GatheringDetailPage() {
   const [ey, em, ed] = gathering.event_date.split("-").map(Number);
   const weekday = WEEKDAYS[new Date(ey, em - 1, ed).getDay()];
   const timeText = gathering.start_time
-    ? `${gathering.start_time.slice(0, 5)}${gathering.end_time ? ` – ${gathering.end_time.slice(0, 5)}` : ""}`
+    ? `${gathering.start_time.slice(0, 5)}${
+        gathering.end_time ? ` – ${gathering.end_time.slice(0, 5)}` : ""
+      }`
     : "시간 미정";
-  const collectedPct = payment && payment.expected > 0 ? Math.min(100, (payment.collected / payment.expected) * 100) : 0;
+  const collectedPct =
+    payment && payment.expected > 0
+      ? Math.min(100, (payment.collected / payment.expected) * 100)
+      : 0;
 
   const statusText = `${GATHERING_STATUS_LABEL[gathering.status]}${
-    gathering.status === "planned" && daysUntilEvent >= 0 ? ` · ${daysUntilEvent === 0 ? "오늘" : `D-${daysUntilEvent}`}` : ""
+    gathering.status === "planned" && daysUntilEvent >= 0
+      ? ` · ${daysUntilEvent === 0 ? "오늘" : `D-${daysUntilEvent}`}`
+      : ""
   }`;
-  const showSegments = payment ? payment.attending > 0 && payment.attending <= 20 : false;
+  const showSegments = payment
+    ? payment.attending > 0 && payment.attending <= 20
+    : false;
 
   return (
     <PageBody>
       {/* 뒤로가기 + 액션 */}
-      <div className="flex items-center justify-between gap-2 px-1 pt-1 md:pt-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-5">
         <BackLink to={backHref}>{backLabel}</BackLink>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             className="btn-accent btn-sm"
-            onClick={() => shareToKakao({ base: shareBase, names: attendees.map((p) => p.user.name), path })}
+            onClick={() =>
+              shareToKakao({
+                base: shareBase,
+                names: attendees.map((p) => p.user.name),
+                path,
+              })
+            }
           >
             <Share2 size={14} />
             카톡 공유
           </button>
           {isOrganizer ? (
             <>
-              <button className="btn-ghost btn-sm" onClick={() => setEditing(true)} aria-label="수정">
+              <button
+                className="btn-ghost btn-sm"
+                onClick={() => setEditing(true)}
+                aria-label="수정"
+              >
                 <Pencil size={14} />
                 <span className="hidden sm:inline">수정</span>
               </button>
@@ -271,7 +324,11 @@ export default function GatheringDetailPage() {
                   className="btn-danger btn-sm"
                   aria-label="삭제"
                   onClick={(e) => {
-                    if (!confirm("이 모임을 삭제할까요? 관련 참석/대진 정보도 함께 삭제됩니다.")) {
+                    if (
+                      !confirm(
+                        "이 모임을 삭제할까요? 관련 참석/대진 정보도 함께 삭제됩니다."
+                      )
+                    ) {
                       e.preventDefault();
                     }
                   }}
@@ -285,6 +342,12 @@ export default function GatheringDetailPage() {
         </div>
       </div>
 
+      <PageHeader
+        eyebrow="LET’S PLAY TOGETHER."
+        title={gathering.title}
+        sub={gathering.description || "좋아하는 사람들과, 좋아하는 운동."}
+      />
+
       {/* 처리 실패 알림 (참석 투표 정원 초과·마감, 입금 처리 등). 수정 모달이 열려 있으면 모달 안에서 보여준다. */}
       {actionData?.error && !editing ? (
         <p className="alert-error flex items-center gap-2">
@@ -293,50 +356,57 @@ export default function GatheringDetailPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-3.5 lg:grid-cols-3">
-        {/* 모임 정보 */}
-        <section className="tile-orange sm:p-7 lg:col-span-2">
-          <span className="chip-line h-8 px-3.5 text-[13px]">{statusText}</span>
-          <BallBasket className="pointer-events-none absolute right-6 top-6 hidden w-36 sm:block lg:w-44" />
-          <h1 className="mt-5 font-display text-[36px] font-extrabold leading-[1.02] tracking-[-0.05em] sm:max-w-[68%] sm:text-[54px]">
-            {gathering.title}
-          </h1>
-          <div className="mt-5 flex flex-wrap gap-2 sm:max-w-[72%]">
-            <InfoChip icon={CalendarDays}>
-              {em}.{ed} {weekday} · {timeText}
-            </InfoChip>
-            <InfoChip icon={MapPin}>{gathering.location ?? "장소 미정"}</InfoChip>
-            <InfoChip icon={LayoutGrid}>
-              {gathering.court_numbers
-                ? `코트 ${gathering.court_numbers} (${gathering.court_count}면)`
-                : `코트 ${gathering.court_count}면`}
-            </InfoChip>
-            {gathering.fee > 0 ? (
-              <InfoChip icon={Wallet}>
-                총 {won(gathering.fee)} · 1인 {won(perPerson)}
-              </InfoChip>
-            ) : null}
+      <div className="detail-top-grid">
+        <section className="tile-orange min-h-[285px] sm:p-7">
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <Eyebrow>OUR NEXT GATHERING</Eyebrow>
+            <span className="chip-white !bg-white/25">{statusText}</span>
           </div>
-          {gathering.description ? (
-            <p className="mt-5 whitespace-pre-line text-[15px] font-medium leading-relaxed sm:max-w-[72%]">
-              {gathering.description}
+          <p className="relative z-10 mt-5 font-display text-[64px] font-bold leading-none tracking-[-0.06em] sm:text-[76px]">
+            {em}.{String(ed).padStart(2, "0")}
+            <span className="ml-3 align-top font-sans text-base font-medium tracking-normal">
+              {weekday}요일
+            </span>
+          </p>
+          <p className="relative z-10 mt-4 text-base font-semibold">
+            {timeText}
+          </p>
+          <div className="relative z-10 mt-6 max-w-[72%] space-y-2 text-[13px]">
+            <p className="flex items-start gap-2">
+              <MapPin size={16} className="mt-0.5 shrink-0" />
+              <strong>{gathering.location ?? "장소 미정"}</strong>
             </p>
-          ) : null}
+            <p className="pl-6">
+              {gathering.court_numbers
+                ? `${gathering.court_numbers}번 코트`
+                : `코트 ${gathering.court_count}면`}{" "}
+              · 총 {gathering.court_count}면
+            </p>
+            {gathering.fee > 0 && (
+              <p className="pl-6">코트비 총 {won(gathering.fee)}</p>
+            )}
+          </div>
+          <BallBasket className="pointer-events-none absolute bottom-5 right-4 w-24 opacity-90 sm:right-7 sm:w-32" />
         </section>
 
         {/* 참석 (관리자는 투표 없이 현황만) */}
-        <section className="tile-blue flex flex-col">
+        <section className="card flex flex-col">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="tile-title">{user.is_admin ? "참석 현황" : "참석"}</h2>
-              <p className="tile-sub">
-                불참 {gathering.attendance?.absent ?? 0} · 미정 {gathering.attendance?.maybe ?? 0}
+              <h2 className="tile-title">
+                {user.is_admin ? "참석 현황" : "이번에도 함께할까요?"}
+              </h2>
+              <p className="tile-sub text-slate-500 dark:text-slate-400">
+                불참 {gathering.attendance?.absent ?? 0} · 미정{" "}
+                {gathering.attendance?.maybe ?? 0}
               </p>
             </div>
-            <p className="font-display text-[56px] font-extrabold leading-none tracking-[-0.05em] sm:text-[68px]">
+            <p className="shrink-0 whitespace-nowrap font-display text-[46px] font-semibold leading-none tracking-[-0.05em] sm:text-[60px]">
               {gathering.attendance?.attending ?? 0}
               {gathering.max_participants ? (
-                <span className="text-[26px] opacity-60 sm:text-[32px]">/{gathering.max_participants}</span>
+                <span className="text-[26px] opacity-60 sm:text-[32px]">
+                  /{gathering.max_participants}
+                </span>
               ) : null}
             </p>
           </div>
@@ -345,51 +415,124 @@ export default function GatheringDetailPage() {
             <div className="mt-auto pt-6">
               <Form method="post" className="flex gap-2">
                 <input type="hidden" name="intent" value="vote" />
-                {(["attending", "absent", "maybe"] as AttendanceStatus[]).map((s) => {
-                  const blocked = s !== "attending" && !canSetAbsence;
-                  const selected = me?.status === s;
-                  return (
-                    <button
-                      key={s}
-                      name="status"
-                      value={s}
-                      disabled={blocked}
-                      title={blocked ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 바꿀 수 없어요` : undefined}
-                      aria-pressed={selected}
-                      className={`${selected ? "btn-ink" : "btn-white"} h-11 flex-1 text-[15px] disabled:cursor-not-allowed`}
-                    >
-                      {selected ? <Check size={16} /> : null}
-                      {VOTE_LABEL[s]}
-                    </button>
-                  );
-                })}
+                {(["attending", "absent", "maybe"] as AttendanceStatus[]).map(
+                  (s) => {
+                    const blocked = s !== "attending" && !canSetAbsence;
+                    const selected = me?.status === s;
+                    return (
+                      <button
+                        key={s}
+                        name="status"
+                        value={s}
+                        disabled={blocked || navigation.state !== "idle"}
+                        title={
+                          blocked
+                            ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 바꿀 수 없어요`
+                            : undefined
+                        }
+                        aria-pressed={selected}
+                        className={`${
+                          selected ? "btn-primary" : "btn-ghost"
+                        } h-11 flex-1 px-2 text-sm disabled:cursor-not-allowed`}
+                      >
+                        {selected ? <Check size={16} /> : null}
+                        {VOTE_LABEL[s]}
+                      </button>
+                    );
+                  }
+                )}
               </Form>
               {attendanceLocked ? (
                 <p className="mt-3 flex items-center gap-1.5 text-xs font-bold">
                   <Lock size={12} className="shrink-0" />
-                  모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참·미정으로 바꿀 수 없어요. 필요하면 관리자에게 문의하세요.
+                  모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참·미정으로 바꿀 수
+                  없어요. 필요하면 관리자에게 문의하세요.
                 </p>
               ) : null}
             </div>
           ) : (
-            <p className="mt-auto pt-6 text-sm font-bold">관리자는 투표 없이 현황만 봐요.</p>
+            <p className="mt-auto pt-6 text-sm font-bold">
+              관리자는 투표 없이 현황만 봐요.
+            </p>
           )}
         </section>
       </div>
 
-      <div className="grid items-start gap-3.5 md:grid-cols-2 lg:grid-cols-3">
+      <div className="detail-bottom-grid">
+        <section
+          className={`card detail-attendees ${payment ? "" : "lg:col-span-2"}`}
+        >
+          <h2 className="section-title">함께하는 식구들</h2>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {attendees.length
+              ? `${attendees.length}명이 함께해요`
+              : "아직 참석자가 없어요"}
+          </p>
+          {!gathering.participants.length ? (
+            <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
+              아직 투표한 사람이 없어요.
+            </p>
+          ) : (
+            (["attending", "maybe", "absent"] as AttendanceStatus[]).map(
+              (status) => {
+                const people = gathering.participants.filter(
+                  (p) => p.status === status
+                );
+                if (!people.length) return null;
+                return (
+                  <div key={status}>
+                    {status !== "attending" && (
+                      <p className="mt-6 border-t border-slate-200 pt-4 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                        {VOTE_LABEL[status]} {people.length}명
+                      </p>
+                    )}
+                    <div className="player-grid">
+                      {people.map((p) => (
+                        <Link key={p.user.id} to={`/app/members/${p.user.id}`}>
+                          <MemberAvatar
+                            user={p.user}
+                            className={
+                              status === "attending"
+                                ? "!h-11 !w-11"
+                                : "!h-9 !w-9 opacity-60"
+                            }
+                          />
+                          <strong className="max-w-full truncate text-xs">
+                            {p.user.name}
+                            {p.user.id === user.id && (
+                              <small className="ml-1 text-[10px] font-normal text-slate-500">
+                                나
+                              </small>
+                            )}
+                          </strong>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {p.user.ntrp
+                              ? `NTRP ${p.user.ntrp}`
+                              : "NTRP 미입력"}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+            )
+          )}
+        </section>
+
         {/* 참가비 (금액은 모두 서버 계산값) */}
         {payment ? (
-          <section className="tile-yellow space-y-4">
-            <div className="flex items-start justify-between gap-3">
+          <section className="tile-yellow detail-payments space-y-4">
+            <Eyebrow>MATCH DUES</Eyebrow>
+            <div className="detail-payment-heading">
               <div className="min-w-0">
                 <h2 className="tile-title">참가비 정산</h2>
                 <p className="tile-sub">
                   {gathering.status === "canceled"
                     ? "취소된 모임이라 받을 돈이 없어요"
                     : payment.attending > 0
-                      ? `${won(gathering.fee)} ÷ ${payment.attending}명`
-                      : "참석자가 정해지면 계산돼요"}
+                    ? `${won(gathering.fee)} ÷ ${payment.attending}명`
+                    : "참석자가 정해지면 계산돼요"}
                 </p>
               </div>
               <p className="shrink-0 font-display text-[30px] font-extrabold leading-none tracking-[-0.05em] sm:text-[34px]">
@@ -405,8 +548,11 @@ export default function GatheringDetailPage() {
                   ))}
                 </div>
               ) : (
-                <div className="h-3.5 overflow-hidden rounded-[4px] border-[1.5px] border-ink">
-                  <div className="h-full bg-ink" style={{ width: `${collectedPct}%` }} />
+                <div className="h-2 overflow-hidden rounded-full bg-ink/15">
+                  <div
+                    className="h-full bg-ink"
+                    style={{ width: `${collectedPct}%` }}
+                  />
                 </div>
               )}
               <p className="mt-2 flex justify-between gap-2 text-[13.5px] font-bold">
@@ -425,19 +571,26 @@ export default function GatheringDetailPage() {
                 <p className="text-xs font-bold">내 참가비</p>
                 {myDue > 0 ? (
                   <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-display text-[24px] font-extrabold tracking-[-0.04em]">{won(myDue)}</span>
-                    <span className="text-sm font-bold">{me?.paid ? "추가 입금이 필요해요" : "입금해 주세요"}</span>
+                    <span className="font-display text-[24px] font-extrabold tracking-[-0.04em]">
+                      {won(myDue)}
+                    </span>
+                    <span className="text-sm font-bold">
+                      {me?.paid ? "추가 입금이 필요해요" : "입금해 주세요"}
+                    </span>
                   </p>
                 ) : (
                   <p className="mt-0.5 flex items-center gap-1.5 text-base font-extrabold">
                     <Check size={18} />
                     입금 완료
-                    <span className="text-sm font-semibold">({won(me?.paid_amount ?? perPerson)})</span>
+                    <span className="text-sm font-semibold">
+                      ({won(me?.paid_amount ?? perPerson)})
+                    </span>
                   </p>
                 )}
                 {myRefund > 0 ? (
                   <p className="mt-1 text-xs font-semibold">
-                    참석 인원이 늘어 {won(myRefund)}을 더 냈어요. 총무가 돌려줄 예정이에요.
+                    참석 인원이 늘어 {won(myRefund)}을 더 냈어요. 총무가 돌려줄
+                    예정이에요.
                   </p>
                 ) : null}
               </div>
@@ -449,11 +602,19 @@ export default function GatheringDetailPage() {
                 <Landmark size={18} className="shrink-0" />
                 <div className="min-w-0 flex-1 text-sm">
                   <p className="text-xs font-bold">
-                    {[gathering.bank, gathering.account_holder].filter(Boolean).join(" · ") || "입금 계좌"}
+                    {[gathering.bank, gathering.account_holder]
+                      .filter(Boolean)
+                      .join(" · ") || "입금 계좌"}
                   </p>
-                  <p className="break-all font-extrabold tabular-nums">{gathering.account_number}</p>
+                  <p className="break-all font-extrabold tabular-nums">
+                    {gathering.account_number}
+                  </p>
                 </div>
-                <CopyButton text={gathering.account_number} label="계좌 복사" tone="ink" />
+                <CopyButton
+                  text={gathering.account_number}
+                  label="계좌 복사"
+                  tone="ink"
+                />
               </div>
             ) : null}
 
@@ -468,23 +629,41 @@ export default function GatheringDetailPage() {
                   // 입금 뒤 참석 인원이 바뀌어 1인 금액과 입금 금액이 달라진 경우
                   const note =
                     p.paid && due > 0
-                      ? `${won(p.paid_amount ?? 0)} 입금 · ${won(due)} 더 받아야 해요`
+                      ? `${won(p.paid_amount ?? 0)} 입금 · ${won(
+                          due
+                        )} 더 받아야 해요`
                       : p.paid && refund > 0
-                        ? `${won(p.paid_amount ?? 0)} 입금 · ${won(refund)} 돌려줘야 해요`
-                        : null;
+                      ? `${won(p.paid_amount ?? 0)} 입금 · ${won(
+                          refund
+                        )} 돌려줘야 해요`
+                      : null;
                   const badge = p.paid ? "chip-ink" : "chip-line";
                   return (
                     <li key={p.user.id}>
                       <div className="min-w-0">
                         <span className="font-bold">{p.user.name}</span>
-                        {p.user.id === user.id ? <span className="ml-1 text-xs font-semibold">(나)</span> : null}
-                        {note ? <p className="text-xs font-semibold">{note}</p> : null}
+                        {p.user.id === user.id ? (
+                          <span className="ml-1 text-xs font-semibold">
+                            (나)
+                          </span>
+                        ) : null}
+                        {note ? (
+                          <p className="text-xs font-semibold">{note}</p>
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {isOrganizer && note ? (
                           <Form method="post">
-                            <input type="hidden" name="intent" value="toggle_payment" />
-                            <input type="hidden" name="user_id" value={p.user.id} />
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="toggle_payment"
+                            />
+                            <input
+                              type="hidden"
+                              name="user_id"
+                              value={p.user.id}
+                            />
                             <input type="hidden" name="paid" value="true" />
                             <button
                               className="chip-white cursor-pointer transition-opacity hover:opacity-80"
@@ -496,15 +675,31 @@ export default function GatheringDetailPage() {
                         ) : null}
                         {isOrganizer ? (
                           <Form method="post">
-                            <input type="hidden" name="intent" value="toggle_payment" />
-                            <input type="hidden" name="user_id" value={p.user.id} />
-                            <input type="hidden" name="paid" value={p.paid ? "false" : "true"} />
-                            <button className={`${badge} cursor-pointer transition-opacity hover:opacity-80`}>
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="toggle_payment"
+                            />
+                            <input
+                              type="hidden"
+                              name="user_id"
+                              value={p.user.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="paid"
+                              value={p.paid ? "false" : "true"}
+                            />
+                            <button
+                              className={`${badge} cursor-pointer transition-opacity hover:opacity-80`}
+                            >
                               {p.paid ? "입금" : "미입금"}
                             </button>
                           </Form>
                         ) : (
-                          <span className={badge}>{p.paid ? "입금" : "미입금"}</span>
+                          <span className={badge}>
+                            {p.paid ? "입금" : "미입금"}
+                          </span>
                         )}
                       </div>
                     </li>
@@ -522,16 +717,29 @@ export default function GatheringDetailPage() {
                 </p>
                 <ul className="space-y-1.5 text-sm">
                   {refundAbsentees.map((p) => (
-                    <li key={p.user.id} className="flex items-center justify-between gap-2">
+                    <li
+                      key={p.user.id}
+                      className="flex items-center justify-between gap-2"
+                    >
                       <span className="font-semibold">
                         {p.user.name} · {won(refundOf.get(p.user.id) ?? 0)}
                       </span>
                       {isOrganizer ? (
                         <Form method="post">
-                          <input type="hidden" name="intent" value="toggle_payment" />
-                          <input type="hidden" name="user_id" value={p.user.id} />
+                          <input
+                            type="hidden"
+                            name="intent"
+                            value="toggle_payment"
+                          />
+                          <input
+                            type="hidden"
+                            name="user_id"
+                            value={p.user.id}
+                          />
                           <input type="hidden" name="paid" value="false" />
-                          <button className="chip-ink cursor-pointer transition-opacity hover:opacity-80">환불 완료</button>
+                          <button className="chip-ink cursor-pointer transition-opacity hover:opacity-80">
+                            환불 완료
+                          </button>
                         </Form>
                       ) : null}
                     </li>
@@ -561,76 +769,48 @@ export default function GatheringDetailPage() {
                   </button>
                 ) : null}
                 <p className="text-xs font-semibold">
-                  상태를 누르면 입금/미입금이 바뀌어요. 입금 처리하면 그때의 1인 금액이 기록돼요. 1인 금액은 100원 단위로 올림해요.
+                  상태를 누르면 입금/미입금이 바뀌어요. 입금 처리하면 그때의 1인
+                  금액이 기록돼요. 1인 금액은 100원 단위로 올림해요.
                 </p>
               </div>
             ) : null}
           </section>
         ) : null}
 
-        {/* 참석 명단 */}
-        <section className="tile-lav">
-          <h2 className="tile-title">참석 명단</h2>
-          <p className="tile-sub">
-            {attendees.length > 0 ? `${attendees.length}명이 함께해요` : "아직 참석자가 없어요"}
-          </p>
-          {gathering.participants.length === 0 ? (
-            <p className="mt-4 text-sm font-semibold">아직 투표한 사람이 없어요.</p>
-          ) : (
-            <div className="mt-4 space-y-4">
-              {(["attending", "maybe", "absent"] as AttendanceStatus[]).map((s) => {
-                const list = gathering.participants.filter((p) => p.status === s);
-                if (list.length === 0) return null;
-                return (
-                  <div key={s}>
-                    {s !== "attending" ? (
-                      <p className="mb-1.5 text-xs font-extrabold">
-                        {VOTE_LABEL[s]} {list.length}
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-1.5">
-                      {list.map((p) => (
-                        <span
-                          key={p.user.id}
-                          className={`inline-flex h-9 items-center rounded-full px-3.5 text-[13.5px] font-bold ${
-                            s === "attending" ? "bg-white" : "border-[1.5px] border-ink/60 text-ink/75"
-                          }`}
-                        >
-                          {p.user.name}
-                          {p.user.id === user.id ? <span className="ml-1 font-semibold opacity-60">(나)</span> : null}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
         {/* 대진 */}
-        <section className="tile-green space-y-4">
+        <section className="card detail-draws space-y-5">
           <div>
-            <h2 className="tile-title">대진</h2>
+            <h2 className="section-title">오늘의 매치업</h2>
             <p className="tile-sub">
-              {draws.length > 0 ? `대진표 ${draws.length}개` : isOrganizer ? "종목과 방식을 고르면 참석자로 대진을 짜요" : "아직 대진표가 없어요"}
+              {draws.length > 0
+                ? `대진표 ${draws.length}개`
+                : isOrganizer
+                ? "종목과 방식을 고르면 참석자로 대진을 짜요"
+                : "아직 대진표가 없어요"}
             </p>
           </div>
 
           {/* 대진 만들기 (주최자/관리자) */}
           {isOrganizer ? (
-            <Form method="post" className="grid grid-cols-2 gap-2">
+            <Form method="post" className="grid grid-cols-2 gap-2 sm:max-w-md">
               <input type="hidden" name="intent" value="generate" />
-              <select name="match_type" aria-label="종목" className="input col-span-2 !border-ink !bg-white !text-ink" defaultValue="mens_doubles">
+              <select
+                name="match_type"
+                aria-label="종목"
+                className="input col-span-2"
+                defaultValue="mens_doubles"
+              >
                 {Object.entries(MATCH_TYPE_LABEL).map(([v, label]) => (
-                  <option key={v} value={v}>{label}</option>
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
                 ))}
               </select>
-              <button name="method" value="random" className="btn-line">
+              <button name="method" value="random" className="btn-ghost">
                 <Dices size={16} />
                 랜덤
               </button>
-              <button name="method" value="skill" className="btn-ink">
+              <button name="method" value="skill" className="btn-primary">
                 <Scale size={16} />
                 실력 균형
               </button>
@@ -640,9 +820,14 @@ export default function GatheringDetailPage() {
           {/* 대진표 */}
           {draws.map((draw) => (
             <div key={draw.id}>
-              <div className="flex items-center justify-between gap-2 border-b-[1.5px] border-ink pb-2">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
                 <p className="text-[15px] font-extrabold">
-                  대진표 · {draw.generation_method === "skill" ? "실력 균형" : draw.generation_method === "random" ? "랜덤" : "수동"}
+                  대진표 ·{" "}
+                  {draw.generation_method === "skill"
+                    ? "실력 균형"
+                    : draw.generation_method === "random"
+                    ? "랜덤"
+                    : "수동"}
                 </p>
                 {isOrganizer ? (
                   <Form method="post">
@@ -658,9 +843,14 @@ export default function GatheringDetailPage() {
                   </Form>
                 ) : null}
               </div>
-              <div className="tile-rows">
+              <div className="draw-grid">
                 {draw.matches.map((m) => (
-                  <DrawMatchRow key={m.id} match={m} canRecord={isOrganizer} courtLabels={courtLabels} />
+                  <DrawMatchRow
+                    key={m.id}
+                    match={m}
+                    canRecord={isOrganizer}
+                    courtLabels={courtLabels}
+                  />
                 ))}
               </div>
             </div>
@@ -675,107 +865,230 @@ export default function GatheringDetailPage() {
             <input type="hidden" name="intent" value="update_gathering" />
             <FieldGroup title="기본 정보">
               <div>
-                <label className="label" htmlFor="e_title">제목</label>
-                <input id="e_title" name="title" className="input" required defaultValue={gathering.title} />
+                <label className="label" htmlFor="e_title">
+                  제목
+                </label>
+                <input
+                  id="e_title"
+                  name="title"
+                  className="input"
+                  required
+                  defaultValue={gathering.title}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label" htmlFor="e_date">날짜</label>
-                  <input id="e_date" name="event_date" type="date" className="input" required defaultValue={gathering.event_date} />
+                  <label className="label" htmlFor="e_date">
+                    날짜
+                  </label>
+                  <input
+                    id="e_date"
+                    name="event_date"
+                    type="date"
+                    className="input"
+                    required
+                    defaultValue={gathering.event_date}
+                  />
                 </div>
                 <div>
-                  <label className="label" htmlFor="e_status">상태</label>
-                  <select id="e_status" name="status" className="input" defaultValue={gathering.status}>
-                    {Object.entries(GATHERING_STATUS_LABEL).map(([v, label]) => (
-                      <option key={v} value={v}>{label}</option>
+                  <label className="label" htmlFor="e_status">
+                    상태
+                  </label>
+                  <select
+                    id="e_status"
+                    name="status"
+                    className="input"
+                    defaultValue={gathering.status}
+                  >
+                    {Object.entries(GATHERING_STATUS_LABEL).map(
+                      ([v, label]) => (
+                        <option key={v} value={v}>
+                          {label}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label" htmlFor="e_start">
+                    시작
+                  </label>
+                  <select
+                    id="e_start"
+                    name="start_time"
+                    className="input"
+                    defaultValue={gathering.start_time?.slice(0, 5) ?? ""}
+                  >
+                    <option value="">선택 안 함</option>
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="e_end">
+                    종료
+                  </label>
+                  <select
+                    id="e_end"
+                    name="end_time"
+                    className="input"
+                    defaultValue={gathering.end_time?.slice(0, 5) ?? ""}
+                  >
+                    <option value="">선택 안 함</option>
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="e_start">시작</label>
-                  <select id="e_start" name="start_time" className="input" defaultValue={gathering.start_time?.slice(0, 5) ?? ""}>
-                    <option value="">선택 안 함</option>
-                    {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="e_end">종료</label>
-                  <select id="e_end" name="end_time" className="input" defaultValue={gathering.end_time?.slice(0, 5) ?? ""}>
-                    <option value="">선택 안 함</option>
-                    {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
               <div>
-                <label className="label" htmlFor="e_location">장소</label>
-                <input id="e_location" name="location" className="input" defaultValue={gathering.location ?? ""} />
+                <label className="label" htmlFor="e_location">
+                  장소
+                </label>
+                <input
+                  id="e_location"
+                  name="location"
+                  className="input"
+                  defaultValue={gathering.location ?? ""}
+                />
               </div>
             </FieldGroup>
 
             <FieldGroup title="코트 · 인원">
               <div>
-                <label className="label" htmlFor="e_courts">코트 번호</label>
-                <input id="e_courts" name="court_numbers" className="input" placeholder="예: 3, 5 (쉼표로 구분)" defaultValue={gathering.court_numbers ?? ""} />
+                <label className="label" htmlFor="e_courts">
+                  코트 번호
+                </label>
+                <input
+                  id="e_courts"
+                  name="court_numbers"
+                  className="input"
+                  placeholder="예: 3, 5 (쉼표로 구분)"
+                  defaultValue={gathering.court_numbers ?? ""}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label" htmlFor="e_count">코트 면수</label>
-                  <input id="e_count" name="court_count" type="number" min="1" className="input" defaultValue={gathering.court_count} />
+                  <label className="label" htmlFor="e_count">
+                    코트 면수
+                  </label>
+                  <input
+                    id="e_count"
+                    name="court_count"
+                    type="number"
+                    min="1"
+                    className="input"
+                    defaultValue={gathering.court_count}
+                  />
                 </div>
                 <div>
-                  <label className="label" htmlFor="e_max">정원</label>
-                  <input id="e_max" name="max_participants" type="number" min="1" className="input" placeholder="제한 없음" defaultValue={gathering.max_participants ?? ""} />
+                  <label className="label" htmlFor="e_max">
+                    정원
+                  </label>
+                  <input
+                    id="e_max"
+                    name="max_participants"
+                    type="number"
+                    min="1"
+                    className="input"
+                    placeholder="제한 없음"
+                    defaultValue={gathering.max_participants ?? ""}
+                  />
                 </div>
               </div>
             </FieldGroup>
 
             <FieldGroup title="참가비">
               <div>
-                <label className="label" htmlFor="e_fee">총 참가비 (원)</label>
-                <input id="e_fee" name="fee" type="number" min="0" step="1000" className="input" placeholder="0 = 무료" defaultValue={gathering.fee ?? 0} />
+                <label className="label" htmlFor="e_fee">
+                  총 참가비 (원)
+                </label>
+                <input
+                  id="e_fee"
+                  name="fee"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  className="input"
+                  placeholder="0 = 무료"
+                  defaultValue={gathering.fee ?? 0}
+                />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="label" htmlFor="e_bank">은행</label>
-                  <input id="e_bank" name="bank" className="input" placeholder="국민" defaultValue={gathering.bank ?? ""} />
+                  <label className="label" htmlFor="e_bank">
+                    은행
+                  </label>
+                  <input
+                    id="e_bank"
+                    name="bank"
+                    className="input"
+                    placeholder="국민"
+                    defaultValue={gathering.bank ?? ""}
+                  />
                 </div>
                 <div className="col-span-2">
-                  <label className="label" htmlFor="e_account">계좌번호</label>
-                  <input id="e_account" name="account_number" className="input" placeholder="123-456-7890" defaultValue={gathering.account_number ?? ""} />
+                  <label className="label" htmlFor="e_account">
+                    계좌번호
+                  </label>
+                  <input
+                    id="e_account"
+                    name="account_number"
+                    className="input"
+                    placeholder="123-456-7890"
+                    defaultValue={gathering.account_number ?? ""}
+                  />
                 </div>
               </div>
               <div>
-                <label className="label" htmlFor="e_holder">예금주</label>
-                <input id="e_holder" name="account_holder" className="input" placeholder="홍길동" defaultValue={gathering.account_holder ?? ""} />
+                <label className="label" htmlFor="e_holder">
+                  예금주
+                </label>
+                <input
+                  id="e_holder"
+                  name="account_holder"
+                  className="input"
+                  placeholder="홍길동"
+                  defaultValue={gathering.account_holder ?? ""}
+                />
               </div>
             </FieldGroup>
 
             <div>
-              <label className="label" htmlFor="e_desc">메모</label>
-              <textarea id="e_desc" name="description" rows={2} className="input" defaultValue={gathering.description ?? ""} />
+              <label className="label" htmlFor="e_desc">
+                메모
+              </label>
+              <textarea
+                id="e_desc"
+                name="description"
+                rows={2}
+                className="input"
+                defaultValue={gathering.description ?? ""}
+              />
             </div>
 
-            {actionData?.error ? <p className="alert-error">{actionData.error}</p> : null}
+            {actionData?.error ? (
+              <p className="alert-error">{actionData.error}</p>
+            ) : null}
 
-            <button type="submit" className="btn-primary h-11 w-full" disabled={navigation.state === "submitting"}>
+            <button
+              type="submit"
+              className="btn-primary h-11 w-full"
+              disabled={navigation.state === "submitting"}
+            >
               {navigation.state === "submitting" ? "저장 중…" : "저장"}
             </button>
           </Form>
         </Modal>
       ) : null}
     </PageBody>
-  );
-}
-
-/** 모임 정보 칩 (아이콘 + 내용, 오렌지 타일 위) */
-function InfoChip({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/40 px-3.5 py-1.5 text-[13.5px] font-bold">
-      <Icon size={14} className="shrink-0" />
-      {children}
-    </span>
   );
 }
 
@@ -788,40 +1101,98 @@ function DrawMatchRow({
   canRecord: boolean;
   courtLabels: string[];
 }) {
+  const navigation = useNavigation();
   const recorded = match.result_match_id !== null;
-  // 대진의 코트 순번(1-based)을 등록된 실제 코트 번호로 변환
+  const busy =
+    navigation.state !== "idle" &&
+    navigation.formData?.get("draw_match_id") === String(match.id);
   const courtLabel =
     match.court_number != null && courtLabels[match.court_number - 1]
       ? courtLabels[match.court_number - 1]
-      : (match.court_number ?? "-");
+      : match.court_number ?? "—";
   return (
-    <div className="!block space-y-2">
-      <div className="flex items-start gap-2">
-        <span className="chip-white mt-px shrink-0">
-          코트 {courtLabel} · {match.round_number ?? 1}R
+    <div className="draw-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="badge-gray">
+          COURT {courtLabel} · {match.round_number ?? 1}R
         </span>
-        <p className="min-w-0 text-[14px] font-bold leading-6">
-          {names(match.team1)}
-          <span className="mx-1.5 text-xs font-semibold opacity-60">vs</span>
-          {names(match.team2)}
-        </p>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {MATCH_TYPE_LABEL[match.match_type]}
+        </span>
       </div>
-
-      {recorded ? (
-        <span className="chip-ink">
-          <Check size={12} />
-          기록됨
-        </span>
-      ) : canRecord ? (
-        <Form method="post" className="flex items-center gap-1.5">
-          <input type="hidden" name="intent" value="result" />
-          <input type="hidden" name="draw_match_id" value={match.id} />
-          <input name="team1_score" type="number" min="0" className="input !w-14 !border-ink !bg-white !px-2 !py-1.5 text-center !text-ink" placeholder="0" aria-label="팀1 점수" />
-          <span className="font-bold">:</span>
-          <input name="team2_score" type="number" min="0" className="input !w-14 !border-ink !bg-white !px-2 !py-1.5 text-center !text-ink" placeholder="0" aria-label="팀2 점수" />
-          <button className="btn-ink btn-sm">기록</button>
-        </Form>
-      ) : null}
+      <div className="draw-teams">
+        {[match.team1, match.team2].map((team, i) => (
+          <div key={i} className={i ? "contents" : "space-y-3"}>
+            {i === 1 && (
+              <span className="text-center font-display text-xs text-slate-400">
+                VS
+              </span>
+            )}
+            {i === 1 ? (
+              <div className="space-y-3">
+                {team.map((p) => (
+                  <Link
+                    key={p.id}
+                    to={`/app/members/${p.id}`}
+                    className="draw-player"
+                  >
+                    <MemberAvatar user={p} className="!h-8 !w-8 !text-xs" />
+                    <span className="truncate">{p.name}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              team.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/app/members/${p.id}`}
+                  className="draw-player"
+                >
+                  <MemberAvatar user={p} className="!h-8 !w-8 !text-xs" />
+                  <span className="truncate">{p.name}</span>
+                </Link>
+              ))
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+        {recorded ? (
+          <span className="badge-gray">
+            <Check size={13} />
+            결과 기록 완료
+          </span>
+        ) : canRecord ? (
+          <Form method="post" className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="intent" value="result" />
+            <input type="hidden" name="draw_match_id" value={match.id} />
+            <input
+              name="team1_score"
+              type="number"
+              min="0"
+              className="input !w-16 !px-2 !py-2 text-center"
+              placeholder="0"
+              aria-label="팀1 점수"
+            />
+            <span className="text-slate-400">:</span>
+            <input
+              name="team2_score"
+              type="number"
+              min="0"
+              className="input !w-16 !px-2 !py-2 text-center"
+              placeholder="0"
+              aria-label="팀2 점수"
+            />
+            <button className="btn-primary btn-sm ml-auto" disabled={busy}>
+              {busy ? "저장 중…" : "결과 기록"}
+            </button>
+          </Form>
+        ) : (
+          <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+            경기 예정
+          </p>
+        )}
+      </div>
     </div>
   );
 }

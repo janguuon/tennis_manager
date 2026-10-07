@@ -3,6 +3,7 @@ import { json } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
 import { ArrowUpRight, Trophy } from "lucide-react";
 
+import { MemberAvatar, SectionHeading } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
@@ -17,89 +18,93 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json({ ranking });
 }
 
-/** 1~3위 시상대 타일 색 */
-const PODIUM_TILE = ["tile-yellow", "tile-blue", "tile-orange"];
-
+const PODIUM_TILE = ["tile-green", "tile-yellow", "tile-lav"];
 export default function RankingPage() {
   const { ranking } = useLoaderData<typeof loader>();
-  const podium = ranking.slice(0, 3);
-  const rest = ranking.slice(3);
-
   return (
     <PageBody>
       <PageHeader
-        title="랭킹"
-        sub={ranking.length > 0 ? `${ranking.length}명 · 기록된 경기의 승률 순위예요` : "기록된 경기의 승률 순위예요"}
+        eyebrow="EVERY GAME COUNTS."
+        title="함께 쌓아온 기록"
+        sub="이기는 날도, 배우는 날도. 모두 우리의 테니스."
+        actions={
+          <span className="badge-gray !h-9 px-4">전체 경기 · 승률순</span>
+        }
       />
-
-      {ranking.length === 0 ? (
-        <EmptyCard icon={<Trophy size={28} />}>아직 집계된 전적이 없어요.</EmptyCard>
+      {!ranking.length ? (
+        <EmptyCard icon={<Trophy size={28} />}>
+          아직 집계된 전적이 없어요. 첫 경기를 기다리고 있어요.
+        </EmptyCard>
       ) : (
         <>
-          {/* 시상대 */}
-          <div className="grid gap-3.5 sm:grid-cols-3">
-            {podium.map((row, i) => {
-              const pct = Math.round(row.record.win_rate * 100);
-              return (
-                <Link
-                  key={row.user.id}
-                  to={`/app/members/${row.user.id}`}
-                  className={`${PODIUM_TILE[i]} flex min-h-[180px] flex-col transition-transform hover:-translate-y-0.5 sm:min-h-[220px]`}
-                >
-                  <span className="flex items-start justify-between">
-                    <span className="font-display text-[56px] font-extrabold leading-[0.85] tracking-[-0.06em] sm:text-[72px]">
-                      {row.rank}
-                    </span>
-                    <ArrowUpRight size={18} />
+          <div className="podium-grid">
+            {ranking.slice(0, 3).map((row, i) => (
+              <Link
+                key={row.user.id}
+                to={`/app/members/${row.user.id}`}
+                className={`${PODIUM_TILE[i]} podium-card transition-transform hover:-translate-y-1`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="eyebrow !text-[8px] sm:!text-[10px]">
+                    CLUB RANKING
                   </span>
-                  <span className="mt-auto pt-4">
-                    <span className="block truncate font-display text-[24px] font-extrabold tracking-[-0.04em]">
-                      {row.user.name}
-                      {row.user.nickname ? <span className="ml-2 text-[14px] font-bold opacity-70">{row.user.nickname}</span> : null}
-                    </span>
-                    <span className="mt-1 flex items-baseline justify-between gap-2 text-[14.5px] font-bold">
-                      <span>
-                        {row.record.wins}승 {row.record.losses}패
-                      </span>
-                      <span className="font-display text-[26px] font-extrabold tracking-[-0.04em]">{pct}%</span>
-                    </span>
+                  <Trophy size={18} className="hidden sm:block" />
+                </div>
+                <span className="podium-number" aria-hidden="true">
+                  {String(row.rank).padStart(2, "0")}
+                </span>
+                <span className="sr-only">{row.rank}위</span>
+                <MemberAvatar
+                  user={row.user}
+                  className="relative mt-8 border-2 border-white/40 !bg-white/30"
+                />
+                <h2 className="relative mt-3 truncate text-base font-bold sm:text-xl">
+                  {row.user.name}
+                </h2>
+                <div className="relative mt-2 flex flex-wrap items-baseline justify-between gap-1">
+                  <span className="text-[11px] sm:text-sm">
+                    {row.record.wins}승 {row.record.losses}패
                   </span>
-                </Link>
-              );
-            })}
+                  <strong className="whitespace-nowrap font-display text-[28px] font-semibold tracking-tight sm:text-[36px]">
+                    {Math.round(row.record.win_rate * 100)}%
+                  </strong>
+                </div>
+              </Link>
+            ))}
           </div>
-
-          {/* 4위부터 */}
-          {rest.length > 0 ? (
-            <section className="tile-green">
-              <h2 className="tile-title">전체 순위</h2>
-              <ol className="tile-rows mt-2">
-                {rest.map((row) => {
-                  const pct = Math.round(row.record.win_rate * 100);
-                  return (
-                    <li key={row.user.id}>
-                      <Link to={`/app/members/${row.user.id}`} className="flex min-w-0 items-center gap-4 hover:underline">
-                        <b className="w-6 text-center font-display text-[17px] font-extrabold">{row.rank}</b>
-                        <span className="truncate font-bold">
-                          {row.user.name}
-                          {row.user.nickname ? <span className="ml-1.5 text-xs font-semibold opacity-70">{row.user.nickname}</span> : null}
-                        </span>
-                      </Link>
-                      <span className="flex shrink-0 items-center gap-3">
-                        <span className="hidden text-[13.5px] sm:inline">
-                          {row.record.wins}승 {row.record.losses}패
-                        </span>
-                        <span className="hidden h-3 w-28 overflow-hidden rounded-full border-[1.5px] border-ink md:block">
-                          <span className="block h-full bg-ink" style={{ width: `${pct}%` }} />
-                        </span>
-                        <b className="w-11 text-right font-display font-extrabold">{pct}%</b>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
-          ) : null}
+          <section className="card">
+            <SectionHeading
+              title="우리 클럽 랭킹"
+              sub="승률 → 승수 → 경기수 순으로 집계해요. 무승부는 승률에서 제외해요."
+            />
+            <ol className="mt-4">
+              {ranking.map((row) => (
+                <li key={row.user.id}>
+                  <Link
+                    to={`/app/members/${row.user.id}`}
+                    className="ranking-row"
+                  >
+                    <span className="w-5 shrink-0 font-display text-sm text-slate-500">
+                      {String(row.rank).padStart(2, "0")}
+                    </span>
+                    <MemberAvatar
+                      user={row.user}
+                      className="!h-8 !w-8 !text-xs sm:!h-10 sm:!w-10"
+                    />
+                    <strong>{row.user.name}</strong>
+                    <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400 sm:text-sm">
+                      {row.record.wins}승 {row.record.losses}패
+                    </span>
+                    <b>{Math.round(row.record.win_rate * 100)}%</b>
+                    <ArrowUpRight
+                      size={16}
+                      className="hidden shrink-0 text-slate-400 sm:block"
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </section>
         </>
       )}
     </PageBody>

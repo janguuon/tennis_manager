@@ -1,6 +1,13 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, NavLink, Outlet, useLoaderData, useLocation, useRouteLoaderData } from "@remix-run/react";
+import {
+  Form,
+  NavLink,
+  Outlet,
+  useLoaderData,
+  useLocation,
+  useRouteLoaderData,
+} from "@remix-run/react";
 import {
   ArrowUpRight,
   CalendarDays,
@@ -15,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { MemberAvatar } from "~/components/Club";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
@@ -35,20 +43,59 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
-/** 메뉴: 페이지마다 대표색 타일 (그 페이지의 강조색과 같다) */
-type NavItem = { to: string; label: string; icon: LucideIcon; tile: string; end?: boolean };
+/** Navigation colors remain consistent with each section's accent. */
+type NavItem = {
+  to: string;
+  label: string;
+  short: string;
+  icon: LucideIcon;
+  color: string;
+  end?: boolean;
+};
 const navItems: NavItem[] = [
-  { to: "/app", label: "홈", icon: House, tile: "bg-house-blue text-ink", end: true },
-  { to: "/app/calendar", label: "캘린더", icon: CalendarDays, tile: "bg-house-yellow text-ink" },
-  { to: "/app/payments", label: "정산", icon: Wallet, tile: "bg-house-orange text-ink" },
-  { to: "/app/ranking", label: "랭킹", icon: Trophy, tile: "bg-house-green text-ink" },
-  { to: "/app/members", label: "회원", icon: Users, tile: "bg-house-lav text-ink" },
+  {
+    to: "/app",
+    label: "클럽 홈",
+    short: "홈",
+    icon: House,
+    color: "blue",
+    end: true,
+  },
+  {
+    to: "/app/calendar",
+    label: "캘린더",
+    short: "캘린더",
+    icon: CalendarDays,
+    color: "yellow",
+  },
+  {
+    to: "/app/payments",
+    label: "회비 정산",
+    short: "정산",
+    icon: Wallet,
+    color: "orange",
+  },
+  {
+    to: "/app/ranking",
+    label: "우리의 기록",
+    short: "랭킹",
+    icon: Trophy,
+    color: "green",
+  },
+  {
+    to: "/app/members",
+    label: "테니스 식구",
+    short: "회원",
+    icon: Users,
+    color: "lav",
+  },
 ];
 const adminItem: NavItem = {
   to: "/app/admin",
-  label: "관리자",
+  label: "클럽 관리",
+  short: "관리자",
   icon: ShieldCheck,
-  tile: "bg-ink text-white dark:ring-1 dark:ring-inset dark:ring-white/15",
+  color: "neutral",
 };
 
 export default function AppLayout() {
@@ -57,134 +104,164 @@ export default function AppLayout() {
   const theme = rootData?.theme === "dark" ? "dark" : "light";
   const location = useLocation();
   const items = user.is_admin ? [...navItems, adminItem] : navItems;
-  // 모임 상세·일자 페이지는 캘린더 메뉴 소속으로 표시
   const inCalendar = /^\/app\/(gatherings|day)\//.test(location.pathname);
-  const isCurrent = (to: string, isActive: boolean) => isActive || (inCalendar && to === "/app/calendar");
-  const initial = user.name.charAt(0);
-
-  const themeToggle = (className: string, iconSize: number) => (
+  const isCurrent = (to: string, isActive: boolean) =>
+    isActive || (inCalendar && to === "/app/calendar");
+  const section = inCalendar
+    ? "모임 상세"
+    : location.pathname === "/app/mypage"
+    ? "마이페이지"
+    : items.find((item) =>
+        item.end
+          ? location.pathname === item.to
+          : location.pathname.startsWith(item.to)
+      )?.label ?? "오테식";
+  const themeToggle = (
     <Form method="post" action="/resources/theme">
-      <input type="hidden" name="theme" value={theme === "dark" ? "light" : "dark"} />
-      <input type="hidden" name="redirectTo" value={location.pathname + location.search} />
+      <input
+        type="hidden"
+        name="theme"
+        value={theme === "dark" ? "light" : "dark"}
+      />
+      <input
+        type="hidden"
+        name="redirectTo"
+        value={location.pathname + location.search}
+      />
       <button
         type="submit"
-        className={className}
+        className="icon-btn"
         title={theme === "dark" ? "라이트 모드로" : "다크 모드로"}
         aria-label="테마 전환"
       >
-        {theme === "dark" ? <Sun size={iconSize} /> : <Moon size={iconSize} />}
+        {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
       </button>
     </Form>
   );
-  const logoutButton = (className: string, iconSize: number) => (
+  const logoutButton = (
     <Form method="post" action="/logout">
-      <button type="submit" className={className} title="로그아웃" aria-label="로그아웃">
-        <LogOut size={iconSize} />
+      <button
+        type="submit"
+        className="icon-btn"
+        title="로그아웃"
+        aria-label="로그아웃"
+      >
+        <LogOut size={18} />
       </button>
     </Form>
   );
-  const sideIconBtn =
-    "inline-flex h-9 w-9 items-center justify-center rounded-full text-white/75 transition-colors hover:bg-white/10 hover:text-white";
-
   return (
-    <div className="min-h-screen">
-      {/* 데스크톱: 왼쪽 번호 타일 메뉴 */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-[156px] flex-col gap-2 overflow-y-auto p-3 md:flex">
-        <NavLink to="/app" className="px-1.5 pb-3 pt-2">
+    <div className="club-shell">
+      <a href="#main-content" className="skip-link">
+        본문으로 바로가기
+      </a>
+      <aside className="club-sidebar">
+        <NavLink to="/app" className="club-wordmark">
           <Wordmark />
         </NavLink>
-        {items.map((item, i) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              `flex h-[84px] shrink-0 flex-col justify-between rounded-2xl p-3 font-bold transition-transform hover:-translate-y-0.5 ${item.tile} ${
-                isCurrent(item.to, isActive)
-                  ? item.to === adminItem.to
-                    ? "ring-[3px] ring-inset ring-house-yellow"
-                    : "ring-[3px] ring-inset ring-ink"
-                  : ""
-              }`
-            }
-          >
-            <span className="flex items-center justify-between text-[13px]">
-              {String(i + 1).padStart(2, "0")}
-              <ArrowUpRight size={15} />
+        <p className="eyebrow mb-4 mt-12 text-slate-500">OUR CLUBHOUSE</p>
+        <nav aria-label="주 메뉴" className="space-y-2">
+          {items.map(({ to, label, icon: Icon, color, end }, i) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                `club-nav club-nav-${color} ${
+                  isCurrent(to, isActive) ? "is-current" : ""
+                }`
+              }
+            >
+              <span className="club-nav-icon">
+                <Icon size={18} />
+              </span>
+              <span>{label}</span>
+              <span className="club-nav-number">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+            </NavLink>
+          ))}
+        </nav>
+        <div className="mt-auto pt-8">
+          <p className="club-motto">
+            <span className="mini-tennis-ball" aria-hidden="true" />
+            같이 치면,
+            <br />더 즐거우니까.
+          </p>
+          <NavLink to="/app/mypage" className="club-profile">
+            <MemberAvatar user={user} />
+            <span className="min-w-0 flex-1">
+              <strong className="block truncate text-sm">{user.name}</strong>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {user.is_admin ? "클럽 관리자" : "오늘도 반가워요"}
+              </span>
             </span>
-            <span className="text-[15px]">{item.label}</span>
+            <ArrowUpRight size={16} />
           </NavLink>
-        ))}
-
-        <div className="mt-auto space-y-2 pt-2">
-          <NavLink
-            to="/app/mypage"
-            title="마이페이지"
-            className={({ isActive }) =>
-              `flex items-center gap-2 rounded-2xl bg-ink p-2.5 text-white ${
-                isActive ? "ring-[3px] ring-inset ring-house-yellow" : "dark:ring-1 dark:ring-inset dark:ring-white/15"
-              }`
-            }
-          >
-            <span className="avatar h-7 w-7 bg-house-yellow text-[13px] text-ink">{initial}</span>
-            <span className="min-w-0 truncate text-sm font-bold">{user.name}</span>
-          </NavLink>
-          <div className="flex items-center justify-around rounded-2xl bg-ink p-1 text-white dark:ring-1 dark:ring-inset dark:ring-white/15">
-            {themeToggle(sideIconBtn, 17)}
-            {logoutButton(sideIconBtn, 17)}
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-[10px] tracking-wider text-slate-500">
+              GOOD GAMES, TOGETHER.
+            </span>
+            <div className="flex">
+              {themeToggle}
+              {logoutButton}
+            </div>
           </div>
         </div>
       </aside>
-
-      {/* 모바일: 위 로고 줄 */}
-      <header className="sticky top-0 z-20 flex h-16 items-center justify-between bg-slate-50/90 px-4 backdrop-blur-md dark:bg-slate-950/90 md:hidden">
+      <header className="club-mobile-header">
         <NavLink to="/app">
-          <Wordmark size="sm" />
+          <Wordmark size="sm" tagline={false} />
         </NavLink>
         <div className="flex items-center gap-1">
-          {themeToggle("icon-btn", 19)}
-          {logoutButton("icon-btn", 19)}
-          <NavLink
-            to="/app/mypage"
-            aria-label="마이페이지"
-            className={({ isActive }) =>
-              `avatar ml-1 h-10 w-10 rounded-xl bg-ink text-[15px] text-house-yellow dark:bg-slate-800 ${isActive ? "ring-[3px] ring-house-yellow" : ""}`
-            }
-          >
-            {initial}
+          {themeToggle}
+          {logoutButton}
+          <NavLink to="/app/mypage" aria-label="마이페이지">
+            <MemberAvatar user={user} className="!h-9 !w-9" />
           </NavLink>
         </div>
       </header>
-
-      <main className="pb-28 md:pb-10 md:pl-[156px]">
-        <div key={location.pathname} className="animate-fade-in px-3 pt-1 motion-reduce:animate-none sm:px-4 md:pr-4 md:pt-3">
+      <main id="main-content" className="club-main" tabIndex={-1}>
+        <div className="club-breadcrumb">
+          <span>
+            우리의 작은 테니스 클럽 <span className="px-3 opacity-50">/</span>{" "}
+            {section}
+          </span>
+          <span>오순도순 테니스 식구</span>
+        </div>
+        <div
+          key={location.pathname}
+          className="animate-fade-in motion-reduce:animate-none"
+        >
           <Outlet context={{ user }} />
         </div>
+        <footer className="club-footer">
+          <span className="font-display text-2xl font-extrabold tracking-[-0.07em]">
+            otesik.
+          </span>
+          <span>GOOD GAMES. BETTER TOGETHER.</span>
+          <span>오순도순 테니스 식구</span>
+        </footer>
       </main>
-
-      {/* 모바일: 떠 있는 검정 탭바 */}
-      <nav className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+12px)] z-20 flex h-16 items-center justify-around rounded-[22px] bg-ink px-1 shadow-pop dark:ring-1 dark:ring-inset dark:ring-white/10 md:hidden">
-        {items.map(({ to, label, icon: Icon, end }) => (
+      <nav className="club-bottom-nav" aria-label="모바일 주 메뉴">
+        {items.map(({ to, short, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-0.5 text-[10.5px] font-bold transition-colors ${
-                isCurrent(to, isActive) ? "text-white" : "text-white/55"
-              }`
+              isCurrent(to, isActive) ? "is-current" : ""
             }
           >
             {({ isActive }) => (
               <>
-                <span
-                  className={`flex h-8 w-11 items-center justify-center rounded-xl transition-colors ${
-                    isCurrent(to, isActive) ? "bg-house-yellow text-ink" : ""
-                  }`}
-                >
-                  <Icon size={19} strokeWidth={isCurrent(to, isActive) ? 2.3 : 1.9} />
+                <span>
+                  <Icon
+                    size={20}
+                    strokeWidth={isCurrent(to, isActive) ? 2.3 : 1.8}
+                  />
                 </span>
-                {label}
+                <small>{short}</small>
               </>
             )}
           </NavLink>

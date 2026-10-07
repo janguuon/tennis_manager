@@ -26,10 +26,10 @@
 @layer components {
   /* ---- 페이지 머리 ---- */
   .page-title {
-    @apply font-display text-[34px] font-extrabold leading-[1.04] tracking-[-0.045em] text-ink dark:text-white sm:text-[44px];
+    @apply font-display text-[30px] font-bold leading-[1.2] tracking-[-0.05em] text-ink dark:text-white sm:text-[38px];
   }
   .page-sub {
-    @apply mt-2 text-[15px] font-semibold text-slate-600 dark:text-slate-400;
+    @apply mt-2.5 text-[14px] font-normal text-slate-600 dark:text-slate-400;
   }
   .section-title {
     @apply font-display text-[19px] font-extrabold tracking-[-0.03em] text-ink dark:text-slate-100;
@@ -37,7 +37,7 @@
 
   /* ---- 원색 타일: 다크 모드에서도 색과 검정 글자를 그대로 둔다 ---- */
   .tile {
-    @apply relative overflow-hidden rounded-[28px] p-5 text-ink sm:p-6;
+    @apply relative overflow-hidden rounded-[22px] p-5 text-ink sm:p-6;
   }
   .tile-blue {
     @apply tile bg-house-blue;
@@ -58,14 +58,14 @@
     @apply tile bg-ink text-white dark:ring-1 dark:ring-inset dark:ring-white/10;
   }
   .tile-title {
-    @apply font-display text-[22px] font-extrabold leading-tight tracking-[-0.04em] sm:text-[25px];
+    @apply font-display text-[20px] font-bold leading-tight tracking-[-0.04em] sm:text-[22px];
   }
   .tile-sub {
-    @apply mt-1 text-[15px] font-bold;
+    @apply mt-1.5 text-[13px] font-medium;
   }
   /* 밑줄 목록 (타일 안) */
   .tile-rows > * {
-    @apply flex items-center justify-between gap-3 border-b-[1.5px] border-ink/75 py-2.5 text-[14.5px] font-medium;
+    @apply flex items-center justify-between gap-3 border-b border-ink/15 py-3.5 text-[14px] font-medium;
   }
   .tile-ink .tile-rows > * {
     @apply border-white/25;
@@ -73,7 +73,7 @@
 
   /* ---- 중립 카드 (폼·긴 목록) ---- */
   .card {
-    @apply rounded-[28px] bg-paper p-5 dark:bg-slate-900 sm:p-6;
+    @apply rounded-[22px] bg-paper p-5 dark:bg-slate-900 sm:p-6;
   }
   .card-link {
     @apply card block transition-colors hover:bg-white dark:hover:bg-slate-800;
@@ -95,7 +95,7 @@
     @apply btn bg-slate-200/80 text-ink hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
   }
   .btn-ghost {
-    @apply btn border-[1.5px] border-ink/80 text-ink hover:bg-ink/5
+    @apply btn border border-slate-300 text-ink hover:bg-ink/5
       dark:border-slate-500 dark:text-slate-100 dark:hover:bg-white/5;
   }
   .btn-danger {
@@ -106,7 +106,7 @@
     @apply btn bg-ink text-white hover:bg-ink/85;
   }
   .btn-line {
-    @apply btn border-[1.5px] border-ink text-ink hover:bg-ink/10;
+    @apply btn border border-ink/30 text-ink hover:bg-ink/10;
   }
   .btn-white {
     @apply btn bg-white text-ink hover:bg-white/80;
@@ -118,7 +118,7 @@
 
   /* ---- 입력 ---- */
   .input {
-    @apply w-full rounded-2xl border-[1.5px] border-slate-300 bg-paper px-4 py-2.5 text-sm text-ink outline-none
+    @apply w-full rounded-xl border border-slate-300 bg-paper px-4 py-2.5 text-sm text-ink outline-none
       transition-colors placeholder:text-slate-400 hover:border-slate-400
       focus:border-ink focus:ring-4 focus:ring-house-yellow/40
       dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:focus:border-slate-300;
@@ -135,7 +135,7 @@
     @apply badge bg-ink text-white dark:bg-white dark:text-ink;
   }
   .badge-line {
-    @apply badge border-[1.5px] border-ink/80 text-ink dark:border-slate-400 dark:text-slate-200;
+    @apply badge border border-slate-300 text-ink dark:border-slate-400 dark:text-slate-200;
   }
   .badge-yellow {
     @apply badge bg-house-yellow text-ink;
@@ -157,7 +157,7 @@
     @apply badge bg-ink text-white;
   }
   .chip-line {
-    @apply badge border-[1.5px] border-ink text-ink;
+    @apply badge border border-ink/30 text-ink;
   }
   .chip-white {
     @apply badge bg-white text-ink;
@@ -172,7 +172,7 @@
       hover:text-ink dark:text-slate-400 dark:hover:text-white;
   }
   .segmented-item-active {
-    @apply bg-ink text-white hover:text-white dark:bg-white dark:text-ink dark:hover:text-ink;
+    @apply bg-paper text-ink shadow-sm hover:text-ink dark:bg-slate-600 dark:text-white dark:hover:text-white;
   }
 
   /* ---- 칸 막대 (입금 현황): 한 칸 = 한 명 ---- */
@@ -180,13 +180,13 @@
     @apply flex gap-1;
   }
   .seg > i {
-    @apply h-3.5 flex-1 rounded-[4px] border-[1.5px] border-ink dark:border-slate-400;
+    @apply h-2 flex-1 rounded-[3px] bg-slate-200 dark:bg-slate-700;
   }
   .seg > i.on {
-    @apply bg-ink dark:bg-slate-300;
+    @apply bg-house-green dark:bg-house-green;
   }
   .tile .seg > i {
-    @apply border-ink;
+    @apply bg-ink/15;
   }
   .tile .seg > i.on {
     @apply bg-ink;
@@ -207,5 +207,596 @@
   /* 크기 수식어: 모든 버튼 변형(.btn-*) 뒤에 선언해야 높이가 덮어써진다 */
   .btn-sm {
     @apply h-8 px-3 text-[13px];
+  }
+}
+
+/* Clubhouse design system shared by the live service. */
+@layer components {
+  .eyebrow {
+    @apply block text-[10px] font-semibold leading-relaxed tracking-[0.13em];
+  }
+  .page-body {
+    @apply mx-auto w-full max-w-[1180px] space-y-5;
+  }
+  .page-body-narrow {
+    @apply max-w-3xl;
+  }
+  .page-heading {
+    @apply flex flex-wrap items-end justify-between gap-x-5 gap-y-4 pb-1 pt-7 sm:pb-2 sm:pt-8;
+  }
+  .club-shell {
+    @apply mx-auto min-h-screen max-w-[1680px];
+  }
+  .club-sidebar {
+    @apply fixed inset-y-0 z-20 hidden w-[208px] flex-col overflow-y-auto border-r border-slate-200 px-5 py-8 dark:border-slate-700 md:flex;
+  }
+  .club-main {
+    @apply min-w-0 px-4 pb-28 outline-none sm:px-6 md:ml-[208px] md:px-7 md:pb-2 xl:px-9;
+  }
+  .club-wordmark {
+    @apply block px-1;
+  }
+  .club-nav {
+    @apply flex min-h-[54px] items-center gap-3 rounded-xl px-3 text-[13px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800;
+  }
+  .club-nav-icon {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-ink;
+  }
+  .club-nav-number {
+    @apply ml-auto text-[10px] opacity-60;
+  }
+  .club-nav-blue .club-nav-icon {
+    @apply bg-house-blue;
+  }
+  .club-nav-yellow .club-nav-icon {
+    @apply bg-house-yellow;
+  }
+  .club-nav-orange .club-nav-icon {
+    @apply bg-house-orange;
+  }
+  .club-nav-green .club-nav-icon {
+    @apply bg-house-green;
+  }
+  .club-nav-lav .club-nav-icon {
+    @apply bg-house-lav;
+  }
+  .club-nav-neutral .club-nav-icon {
+    @apply bg-slate-200 dark:bg-slate-400;
+  }
+  .club-nav-blue.is-current {
+    @apply bg-house-blue text-white;
+  }
+  .club-nav-yellow.is-current {
+    @apply bg-house-yellow text-ink;
+  }
+  .club-nav-orange.is-current {
+    @apply bg-house-orange text-ink;
+  }
+  .club-nav-green.is-current {
+    @apply bg-house-green text-ink;
+  }
+  .club-nav-lav.is-current {
+    @apply bg-house-lav text-ink;
+  }
+  .club-nav-neutral.is-current {
+    @apply bg-ink text-white dark:bg-slate-600;
+  }
+  .club-nav.is-current .club-nav-icon {
+    @apply bg-white/15 text-inherit;
+  }
+  .club-motto {
+    @apply flex items-center gap-3 pb-7 text-xs leading-relaxed text-slate-500 dark:text-slate-400;
+  }
+  .club-profile {
+    @apply flex items-center gap-3 border-t border-slate-200 pt-5 dark:border-slate-700;
+  }
+  .club-mobile-header {
+    @apply flex h-[72px] items-center justify-between border-b border-slate-200 px-5 dark:border-slate-700 md:hidden;
+  }
+  .club-breadcrumb {
+    @apply mx-auto hidden h-16 max-w-[1180px] items-center justify-between gap-4 border-b border-slate-200 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400 md:flex;
+  }
+  .club-footer {
+    @apply mx-auto mt-8 flex max-w-[1180px] items-center gap-4 border-t border-slate-200 py-6 text-slate-500 dark:border-slate-700 dark:text-slate-400;
+  }
+  .club-footer > span:nth-child(2) {
+    @apply text-[8px] tracking-[0.1em];
+  }
+  .club-footer > span:last-child {
+    @apply ml-auto hidden text-xs sm:block;
+  }
+  .club-bottom-nav {
+    @apply fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+12px)] z-20 mx-auto flex max-w-lg items-center justify-around rounded-[22px] bg-ink px-1 py-2 shadow-pop ring-1 ring-white/10 md:hidden;
+  }
+  .club-bottom-nav a {
+    @apply flex min-w-0 flex-1 flex-col items-center gap-1 text-white/65;
+  }
+  .club-bottom-nav a > span {
+    @apply flex h-8 w-10 items-center justify-center rounded-xl transition-colors;
+  }
+  .club-bottom-nav a small {
+    @apply text-[10px] font-semibold;
+  }
+  .club-bottom-nav a.is-current {
+    @apply text-white;
+  }
+  .club-bottom-nav a.is-current > span {
+    @apply bg-house-yellow text-ink;
+  }
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-ink focus:px-5 focus:py-3 focus:text-white;
+  }
+  .circle-link {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800;
+  }
+  .text-link {
+    @apply inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold hover:underline hover:underline-offset-4;
+  }
+  .club-news {
+    @apply flex items-center gap-4 border-y border-slate-200 py-3.5 dark:border-slate-700;
+  }
+  .club-news > span {
+    @apply flex shrink-0 items-center gap-2 text-[9px] font-bold tracking-widest;
+  }
+  .club-news p {
+    @apply min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400;
+  }
+  .home-grid {
+    @apply grid grid-cols-2 gap-4 lg:grid-cols-12 xl:gap-5;
+  }
+  .home-next {
+    @apply relative col-span-2 flex min-h-[405px] flex-col overflow-hidden lg:col-span-8;
+  }
+  .home-dues {
+    @apply col-span-2 flex flex-col lg:col-span-4;
+  }
+  .home-upcoming {
+    @apply col-span-2 lg:col-span-12 xl:col-span-5;
+  }
+  .home-court {
+    @apply col-span-1 flex flex-col !text-white lg:col-span-7 xl:col-span-4;
+  }
+  .home-record {
+    @apply col-span-1 flex flex-col lg:col-span-5 xl:col-span-3;
+  }
+  .home-ranking {
+    @apply col-span-2 lg:col-span-12;
+  }
+  .hero-title {
+    @apply relative z-10 mt-6 max-w-[72%] font-display text-[38px] font-extrabold leading-[1.08] tracking-[-0.06em] sm:text-[48px];
+    overflow-wrap: anywhere;
+  }
+  .hero-intro {
+    display: contents;
+  }
+  .hero-time {
+    @apply relative z-10 mt-5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] font-semibold;
+  }
+  .home-votes {
+    @apply mt-4 flex gap-2;
+  }
+  .home-votes button {
+    @apply h-11 min-w-0 flex-1 px-2 text-[13px];
+  }
+  .home-votes button:first-of-type {
+    @apply flex-[1.4];
+  }
+  .dues-number {
+    @apply mt-3 break-words font-display text-[44px] font-bold leading-tight tracking-[-0.055em] sm:text-[52px];
+  }
+  .club-account {
+    @apply flex items-center justify-between gap-3 border-y border-ink/15 py-4 text-xs;
+  }
+  .upcoming-row {
+    @apply flex items-center gap-3.5 border-b border-slate-200 py-5 last:border-b-0 dark:border-slate-700;
+  }
+  .ranking-strip {
+    @apply mt-4 grid divide-y divide-slate-200 dark:divide-slate-700 sm:grid-cols-3 sm:divide-x sm:divide-y-0;
+  }
+  .ranking-strip a {
+    @apply flex min-w-0 items-center gap-3 py-4 first:pl-0 last:pr-0 sm:px-4 sm:py-1;
+  }
+  .record-meter {
+    @apply mt-6 flex h-6 gap-0.5 overflow-hidden rounded;
+  }
+  .record-meter span {
+    @apply min-w-0 bg-white/15;
+  }
+  .record-meter span:first-child {
+    @apply bg-house-green;
+  }
+  .detail-top-grid {
+    @apply grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)];
+  }
+  .detail-bottom-grid {
+    @apply grid items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)];
+  }
+  .detail-attendees {
+    @apply lg:col-start-1 lg:row-start-1;
+  }
+  .detail-payments {
+    @apply lg:col-start-2 lg:row-start-1 lg:row-span-2;
+  }
+  .detail-draws {
+    @apply lg:col-span-2;
+  }
+  .detail-payment-heading {
+    @apply flex flex-wrap items-start justify-between gap-4;
+  }
+  .player-grid {
+    @apply mt-6 grid grid-cols-3 gap-x-3 gap-y-6 min-[400px]:grid-cols-4;
+  }
+  .player-grid a {
+    @apply flex min-w-0 flex-col items-center gap-2 text-center;
+  }
+  .draw-grid {
+    @apply mt-4 grid gap-4 xl:grid-cols-2;
+  }
+  .draw-card {
+    @apply rounded-2xl border border-slate-200 p-4 dark:border-slate-700 sm:p-5;
+  }
+  .draw-teams {
+    @apply grid grid-cols-[minmax(0,1fr)_24px_minmax(0,1fr)] items-center gap-2 py-5;
+  }
+  .draw-player {
+    @apply flex min-w-0 items-center gap-2 text-[13px] font-semibold;
+  }
+  .member-grid {
+    @apply grid grid-cols-2 gap-4 xl:grid-cols-4;
+  }
+  .member-card {
+    @apply card-link overflow-hidden !p-0 transition-transform hover:-translate-y-1;
+  }
+  .member-banner {
+    @apply relative h-28 overflow-hidden p-5;
+  }
+  .member-banner::before,
+  .member-banner::after {
+    content: "";
+    @apply absolute -right-8 -top-6 h-40 w-40 rounded-full border border-white/40;
+  }
+  .member-banner::after {
+    @apply -right-3 -top-1 h-28 w-28;
+  }
+  .podium-grid {
+    @apply grid grid-cols-3 gap-2.5 sm:gap-4;
+  }
+  .podium-card {
+    @apply relative flex min-w-0 flex-col overflow-hidden !p-4 sm:!p-6;
+  }
+  .podium-number {
+    @apply pointer-events-none absolute right-3 top-8 font-display text-[64px] font-bold leading-none tracking-[-0.07em] opacity-15 sm:text-[100px];
+  }
+  .ranking-row {
+    @apply flex items-center gap-2.5 border-b border-slate-200 py-4 last:border-0 dark:border-slate-700 sm:gap-5;
+  }
+  .ranking-row > strong {
+    @apply min-w-0 flex-1 truncate text-sm;
+  }
+  .ranking-row > b {
+    @apply shrink-0 whitespace-nowrap font-display text-[24px] font-bold tracking-[-0.05em];
+  }
+  .payment-overview {
+    @apply grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)];
+  }
+  .payment-stat {
+    @apply flex items-center justify-between gap-3 border-b border-slate-200 py-5 last:border-0 last:pb-0 dark:border-slate-700;
+  }
+  .payment-stat > p {
+    @apply text-sm text-slate-500 dark:text-slate-400;
+  }
+  .payment-stat > strong {
+    @apply whitespace-nowrap font-display text-[28px] font-bold tracking-[-0.05em] sm:text-[34px];
+  }
+  .calendar-heading {
+    @apply flex flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-6;
+  }
+  .calendar-heading h2 {
+    @apply font-display text-[30px] font-bold tracking-[-0.05em];
+  }
+  .auth-shell {
+    @apply mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-5 py-8 md:grid-cols-2 md:gap-14 md:px-8;
+  }
+  .auth-intro {
+    @apply relative flex min-h-[250px] flex-col overflow-hidden rounded-[26px] bg-house-orange p-7 text-ink md:min-h-[650px] md:p-10;
+  }
+  .auth-form {
+    @apply w-full pb-8 md:py-12;
+  }
+  .auth-intro .club-illustration {
+    @apply top-9 md:left-1/2 md:right-auto md:top-40 md:w-[240px] md:-translate-x-1/2;
+  }
+  .auth-intro .club-illustration > svg {
+    @apply md:h-[245px];
+  }
+  .auth-intro .club-orbit {
+    @apply md:h-[250px] md:w-[250px];
+  }
+  .auth-intro .club-sticker {
+    @apply md:-bottom-16;
+  }
+}
+.mini-tennis-ball {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #9abb88;
+  transform: rotate(-25deg);
+}
+.mini-tennis-ball:before,
+.mini-tennis-ball:after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  width: 28px;
+  height: 45px;
+  border: 1.5px solid #f3ece3;
+  border-radius: 50%;
+}
+.mini-tennis-ball:before {
+  left: -17px;
+}
+.mini-tennis-ball:after {
+  right: -17px;
+}
+.club-illustration {
+  position: absolute;
+  pointer-events: none;
+  right: 5%;
+  top: 76px;
+  width: 170px;
+  height: 190px;
+}
+.club-orbit {
+  position: absolute;
+  inset: 0;
+  width: 178px;
+  height: 178px;
+  border-radius: 50%;
+  background: #f8b987;
+}
+.club-illustration > svg {
+  position: absolute;
+  height: 177px;
+  top: -3px;
+  left: 12px;
+  transform: rotate(8deg);
+}
+.club-sticker {
+  position: absolute;
+  right: -8px;
+  bottom: -5px;
+  display: grid;
+  place-content: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: #f7dd7b;
+  text-align: center;
+  font: 800 12px/1.05 "Bricolage Grotesque", sans-serif;
+  transform: rotate(-11deg);
+  color: #252722;
+}
+.tennis-court {
+  position: relative;
+  min-width: 0;
+  height: 120px;
+  overflow: hidden;
+  border: 1px solid #ffffffb3;
+  background: #4465c0;
+  color: white;
+}
+.court-lines {
+  position: absolute;
+  inset: 0 13%;
+  border-inline: 1px solid #ffffff99;
+}
+.court-lines:after {
+  content: "";
+  position: absolute;
+  inset: 24% 0;
+  border-block: 1px solid #ffffff99;
+}
+.court-net {
+  position: absolute;
+  top: 50%;
+  width: 100%;
+  border-top: 2px solid white;
+}
+.court-service {
+  position: absolute;
+  left: 50%;
+  top: 24%;
+  height: 52%;
+  border-left: 1px solid #ffffff99;
+}
+.tennis-court > span {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 600 24px/1 "Bricolage Grotesque", sans-serif;
+}
+.court-ball {
+  position: absolute;
+  left: 22%;
+  top: 30%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f5db52;
+}
+.club-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  max-height: 90dvh;
+  width: min(480px, calc(100% - 32px));
+  border: 0;
+  border-radius: 22px;
+  padding: 28px;
+  background: #fffcf7;
+  color: #252722;
+  box-shadow: 0 20px 80px #0002;
+}
+.dark .club-modal {
+  background: #2c2e28;
+  color: #f3ece3;
+}
+.club-modal::backdrop {
+  background: #14181288;
+  backdrop-filter: blur(4px);
+}
+@media (max-width: 1100px) and (min-width: 768px) {
+  .club-sidebar {
+    width: 178px;
+    padding-inline: 14px;
+  }
+  .club-main {
+    margin-left: 178px;
+  }
+  .club-nav {
+    gap: 8px;
+    padding-inline: 9px;
+  }
+  .club-nav-number {
+    display: none;
+  }
+  .home-next .club-illustration {
+    width: 130px;
+    right: 4%;
+    top: 87px;
+  }
+  .home-next .club-orbit {
+    width: 132px;
+    height: 132px;
+  }
+  .home-next .club-illustration > svg {
+    height: 140px;
+    left: 3px;
+  }
+  .home-next .club-sticker {
+    width: 56px;
+    height: 56px;
+    font-size: 10px;
+    bottom: 28px;
+  }
+}
+@media (max-width: 639px) {
+  .hero-intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 105px;
+    gap: 12px;
+    align-items: center;
+    min-height: 164px;
+    margin-top: 10px;
+  }
+  .hero-intro .hero-title {
+    max-width: none;
+    margin-top: 0;
+    font-size: 32px;
+  }
+  .hero-intro .club-illustration {
+    position: relative;
+    inset: auto;
+    width: 100px;
+    height: 130px;
+  }
+  .hero-intro .club-orbit {
+    width: 104px;
+    height: 104px;
+  }
+  .hero-intro .club-illustration > svg {
+    height: 115px;
+    left: 1px;
+  }
+  .hero-intro .club-sticker {
+    width: 50px;
+    height: 50px;
+    font-size: 9px;
+    right: -3px;
+    bottom: 0;
+  }
+  .home-next .hero-time {
+    margin-top: 8px;
+  }
+  .club-illustration {
+    width: 125px;
+    height: 148px;
+    right: 5%;
+    top: 87px;
+  }
+  .club-orbit {
+    width: 128px;
+    height: 128px;
+  }
+  .club-illustration > svg {
+    height: 142px;
+    left: 7px;
+    top: -5px;
+  }
+  .club-sticker {
+    width: 55px;
+    height: 55px;
+    font-size: 10px;
+    bottom: -2px;
+  }
+  .home-court,
+  .home-record {
+    padding: 18px;
+  }
+  .home-court .tennis-court {
+    height: 93px;
+  }
+  .home-court .tennis-court > span {
+    font-size: 17px;
+    right: 4px;
+  }
+  .home-court .eyebrow,
+  .home-record .eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.07em;
+  }
+  .club-modal {
+    margin: auto auto 0;
+    max-height: 90dvh;
+    width: 100%;
+    border-radius: 24px 24px 0 0;
+    padding: 24px 20px max(24px, env(safe-area-inset-bottom));
+  }
+  .auth-intro .club-illustration {
+    top: 52px;
+    right: 5%;
+    width: 105px;
+  }
+  .auth-intro .club-illustration > svg {
+    height: 122px;
+  }
+  .auth-intro .club-orbit {
+    width: 108px;
+    height: 108px;
+  }
+  .auth-intro .club-sticker {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+@layer components {
+  .record-rows > li {
+    @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 py-4 text-sm last:border-0 dark:border-slate-700;
   }
 }

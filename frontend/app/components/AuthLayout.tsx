@@ -1,25 +1,29 @@
 import type { ReactNode } from "react";
-
-import { BallBasket } from "~/components/BallBasket";
+import { ClubIllustration, Eyebrow } from "~/components/Club";
 import { Wordmark } from "~/components/Logo";
 
-/** 로그인·가입 신청 화면: 왼쪽(모바일은 위) 오렌지 소개 타일 + 오른쪽 폼 */
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen p-3 sm:p-4">
-      <div className="mx-auto grid max-w-5xl gap-3.5 md:min-h-[calc(100vh-2rem)] md:grid-cols-2">
-        <section className="tile-orange flex min-h-[250px] flex-col justify-between sm:p-8 md:min-h-0">
-          <Wordmark size="lg" className="!text-ink" />
-          <BallBasket className="pointer-events-none absolute right-5 top-5 w-24 sm:w-32 md:left-1/2 md:right-auto md:top-1/2 md:w-60 md:-translate-x-1/2 md:-translate-y-[60%]" />
-          <p className="mt-10 font-display text-[28px] font-extrabold leading-[1.08] tracking-[-0.05em] md:text-[40px]">
-            일정 · 전적 · 회비를
-            <br />
-            한곳에서.
+    <div className="auth-shell">
+      <section className="auth-intro">
+        <Wordmark size="lg" className="!text-ink" />
+        <ClubIllustration />
+        <div className="relative z-10 mt-auto max-w-[70%] pt-14 md:max-w-full md:pt-80">
+          <Eyebrow>GOOD GAMES. BETTER TOGETHER.</Eyebrow>
+          <p className="mt-4 font-display text-[28px] font-bold leading-tight tracking-[-0.05em] md:text-[38px]">
+            같이 치면,
+            <br />더 즐거우니까.
           </p>
-        </section>
-        <div className="flex animate-fade-in flex-col justify-center pb-8 motion-reduce:animate-none md:px-6 md:pb-0">
-          {children}
+          <p className="mt-4 text-xs leading-relaxed opacity-75 md:text-sm">
+            우리의 일정, 전적, 회비를 한곳에서.
+          </p>
         </div>
+      </section>
+      <div className="auth-form">
+        {children}
+        <p className="mt-8 text-center text-[10px] tracking-[0.12em] text-slate-500 dark:text-slate-400">
+          OUR LITTLE TENNIS CLUBHOUSE
+        </p>
       </div>
     </div>
   );

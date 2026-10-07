@@ -1,13 +1,24 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  MetaFunction,
+} from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "@remix-run/react";
 
-import { PageBody } from "~/components/Page";
+import { PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import type { User } from "~/lib/types";
 
-export const meta: MetaFunction = () => [{ title: "마이페이지 · 오테식 매니저" }];
+export const meta: MetaFunction = () => [
+  { title: "마이페이지 · 오테식 매니저" },
+];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
@@ -23,8 +34,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const v = formData.get(k);
     return v != null ? String(v) : undefined;
   };
-  const ok = (message: string) => json({ intent, ok: true, message, error: null as string | null });
-  const fail = (error: string) => json({ intent, ok: false, message: null as string | null, error });
+  const ok = (message: string) =>
+    json({ intent, ok: true, message, error: null as string | null });
+  const fail = (error: string) =>
+    json({ intent, ok: false, message: null as string | null, error });
 
   if (intent === "profile") {
     const body = {
@@ -39,7 +52,9 @@ export async function action({ request }: ActionFunctionArgs) {
       await api<User>("/users/me", { method: "PATCH", token, body });
       return ok("내 정보를 저장했습니다.");
     } catch (err) {
-      return fail(err instanceof ApiError ? err.message : "저장에 실패했습니다.");
+      return fail(
+        err instanceof ApiError ? err.message : "저장에 실패했습니다."
+      );
     }
   }
 
@@ -53,10 +68,16 @@ export async function action({ request }: ActionFunctionArgs) {
       return fail("새 비밀번호가 서로 일치하지 않습니다.");
     }
     try {
-      await api("/users/me/password", { method: "PUT", token, body: { new_password: newPassword } });
+      await api("/users/me/password", {
+        method: "PUT",
+        token,
+        body: { new_password: newPassword },
+      });
       return ok("비밀번호를 변경했습니다.");
     } catch (err) {
-      return fail(err instanceof ApiError ? err.message : "비밀번호 변경에 실패했습니다.");
+      return fail(
+        err instanceof ApiError ? err.message : "비밀번호 변경에 실패했습니다."
+      );
     }
   }
 
@@ -73,111 +94,197 @@ export default function MyPage() {
       : "";
 
   const profileMsg = actionData?.intent === "profile" ? actionData : undefined;
-  const passwordMsg = actionData?.intent === "password" ? actionData : undefined;
+  const passwordMsg =
+    actionData?.intent === "password" ? actionData : undefined;
 
   const msg = (m: typeof profileMsg) =>
-    m?.ok ? <p className="alert-success">{m.message}</p> : m?.error ? <p className="alert-error">{m.error}</p> : null;
+    m?.ok ? (
+      <p className="alert-success">{m.message}</p>
+    ) : m?.error ? (
+      <p className="alert-error">{m.error}</p>
+    ) : null;
 
   return (
     <PageBody narrow>
+      <PageHeader
+        eyebrow="MAKE YOURSELF AT HOME."
+        title="나의 클럽 프로필"
+        sub="함께하는 식구들에게 나를 소개해 주세요."
+      />
       {/* 프로필 머리 */}
       <section className="tile-lav flex items-center gap-4 sm:gap-5">
-        <span className="avatar h-16 w-16 bg-house-yellow text-[26px] text-ink sm:h-20 sm:w-20 sm:text-[32px]">{user.name.charAt(0)}</span>
+        <span className="avatar h-16 w-16 bg-house-yellow text-[26px] text-ink sm:h-20 sm:w-20 sm:text-[32px]">
+          {user.name.charAt(0)}
+        </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="truncate font-display text-[30px] font-extrabold leading-tight tracking-[-0.05em] sm:text-[40px]">{user.name}</h1>
-            <span className="chip-ink">{user.is_admin ? "관리자" : "회원"}</span>
+            <h2 className="truncate font-display text-[30px] font-extrabold leading-tight tracking-[-0.05em] sm:text-[40px]">
+              {user.name}
+            </h2>
+            <span className="chip-ink">
+              {user.is_admin ? "관리자" : "회원"}
+            </span>
           </div>
           <p className="mt-0.5 truncate text-[14px] font-bold">
             @{user.username}
-            {user.email ? ` · ${user.email}` : ""} · {user.created_at.slice(0, 10)} 가입
+            {user.email ? ` · ${user.email}` : ""} ·{" "}
+            {user.created_at.slice(0, 10)} 가입
           </p>
         </div>
       </section>
 
-        {/* 내 정보 수정 */}
-        <section className="card">
-          <h2 className="section-title">프로필</h2>
-          <p className="mt-1 text-[13px] font-medium text-slate-500">대진 편성에 쓰이는 정보예요 (성별 · NTRP).</p>
-          <Form method="post" className="mt-5 space-y-4">
-            <input type="hidden" name="intent" value="profile" />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label" htmlFor="name">이름</label>
-                <input id="name" name="name" className="input" required defaultValue={user.name} />
-              </div>
-              <div>
-                <label className="label" htmlFor="nickname">닉네임</label>
-                <input id="nickname" name="nickname" className="input" defaultValue={user.nickname ?? ""} />
-              </div>
-              <div>
-                <label className="label" htmlFor="gender">성별</label>
-                <select id="gender" name="gender" className="input" defaultValue={user.gender ?? ""}>
-                  <option value="">선택 안 함</option>
-                  <option value="male">남성</option>
-                  <option value="female">여성</option>
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="ntrp">NTRP</label>
-                <input
-                  id="ntrp"
-                  name="ntrp"
-                  type="number"
-                  step="0.5"
-                  min="1"
-                  max="7"
-                  className="input"
-                  placeholder="1.0 ~ 7.0"
-                  defaultValue={user.ntrp ?? ""}
-                />
-              </div>
+      {/* 내 정보 수정 */}
+      <section className="card">
+        <h2 className="section-title">프로필</h2>
+        <p className="mt-1 text-[13px] font-medium text-slate-500">
+          대진 편성에 쓰이는 정보예요 (성별 · NTRP).
+        </p>
+        <Form method="post" className="mt-5 space-y-4">
+          <input type="hidden" name="intent" value="profile" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="name">
+                이름
+              </label>
+              <input
+                id="name"
+                name="name"
+                className="input"
+                required
+                defaultValue={user.name}
+              />
             </div>
             <div>
-              <label className="label" htmlFor="phone">연락처</label>
-              <input id="phone" name="phone" className="input" defaultValue={user.phone ?? ""} />
+              <label className="label" htmlFor="nickname">
+                닉네임
+              </label>
+              <input
+                id="nickname"
+                name="nickname"
+                className="input"
+                defaultValue={user.nickname ?? ""}
+              />
             </div>
             <div>
-              <label className="label" htmlFor="bio">소개</label>
-              <textarea id="bio" name="bio" rows={2} className="input" defaultValue={user.bio ?? ""} />
+              <label className="label" htmlFor="gender">
+                성별
+              </label>
+              <select
+                id="gender"
+                name="gender"
+                className="input"
+                defaultValue={user.gender ?? ""}
+              >
+                <option value="">선택 안 함</option>
+                <option value="male">남성</option>
+                <option value="female">여성</option>
+              </select>
             </div>
-
-            {msg(profileMsg)}
-
-            <div className="flex justify-end">
-              <button type="submit" className="btn-primary" disabled={submittingIntent === "profile"}>
-                {submittingIntent === "profile" ? "저장 중…" : "저장"}
-              </button>
+            <div>
+              <label className="label" htmlFor="ntrp">
+                NTRP
+              </label>
+              <input
+                id="ntrp"
+                name="ntrp"
+                type="number"
+                step="0.5"
+                min="1"
+                max="7"
+                className="input"
+                placeholder="1.0 ~ 7.0"
+                defaultValue={user.ntrp ?? ""}
+              />
             </div>
-          </Form>
-        </section>
+          </div>
+          <div>
+            <label className="label" htmlFor="phone">
+              연락처
+            </label>
+            <input
+              id="phone"
+              name="phone"
+              className="input"
+              defaultValue={user.phone ?? ""}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="bio">
+              소개
+            </label>
+            <textarea
+              id="bio"
+              name="bio"
+              rows={2}
+              className="input"
+              defaultValue={user.bio ?? ""}
+            />
+          </div>
 
-        {/* 비밀번호 변경 */}
-        <section className="card">
-          <h2 className="section-title">비밀번호</h2>
-          <p className="mt-1 text-[13px] font-medium text-slate-500">4자 이상으로 바꿀 수 있어요.</p>
-          <Form method="post" className="mt-5 space-y-4">
-            <input type="hidden" name="intent" value="password" />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label" htmlFor="new_password">새 비밀번호</label>
-                <input id="new_password" name="new_password" type="password" className="input" required minLength={4} />
-              </div>
-              <div>
-                <label className="label" htmlFor="confirm_password">새 비밀번호 확인</label>
-                <input id="confirm_password" name="confirm_password" type="password" className="input" required minLength={4} />
-              </div>
+          {msg(profileMsg)}
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={submittingIntent === "profile"}
+            >
+              {submittingIntent === "profile" ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </Form>
+      </section>
+
+      {/* 비밀번호 변경 */}
+      <section className="card">
+        <h2 className="section-title">비밀번호</h2>
+        <p className="mt-1 text-[13px] font-medium text-slate-500">
+          4자 이상으로 바꿀 수 있어요.
+        </p>
+        <Form method="post" className="mt-5 space-y-4">
+          <input type="hidden" name="intent" value="password" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="new_password">
+                새 비밀번호
+              </label>
+              <input
+                id="new_password"
+                name="new_password"
+                type="password"
+                className="input"
+                required
+                minLength={4}
+              />
             </div>
-
-            {msg(passwordMsg)}
-
-            <div className="flex justify-end">
-              <button type="submit" className="btn-primary" disabled={submittingIntent === "password"}>
-                {submittingIntent === "password" ? "변경 중…" : "비밀번호 변경"}
-              </button>
+            <div>
+              <label className="label" htmlFor="confirm_password">
+                새 비밀번호 확인
+              </label>
+              <input
+                id="confirm_password"
+                name="confirm_password"
+                type="password"
+                className="input"
+                required
+                minLength={4}
+              />
             </div>
-          </Form>
-        </section>
+          </div>
+
+          {msg(passwordMsg)}
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={submittingIntent === "password"}
+            >
+              {submittingIntent === "password" ? "변경 중…" : "비밀번호 변경"}
+            </button>
+          </div>
+        </Form>
+      </section>
     </PageBody>
   );
 }

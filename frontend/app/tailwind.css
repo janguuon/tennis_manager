@@ -152,6 +152,9 @@
   .badge-gray {
     @apply badge bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300;
   }
+  .badge-green {
+    @apply badge bg-house-green/30 text-[#2F5A22] dark:bg-house-green/20 dark:text-green-200;
+  }
   /* 타일 안 배지 (다크 모드에서도 그대로) */
   .chip-ink {
     @apply badge bg-ink text-white;
@@ -260,6 +263,9 @@
   .club-nav-lav .club-nav-icon {
     @apply bg-house-lav;
   }
+  .club-nav-ball .club-nav-icon {
+    @apply bg-house-ball;
+  }
   .club-nav-neutral .club-nav-icon {
     @apply bg-slate-200 dark:bg-slate-400;
   }
@@ -277,6 +283,9 @@
   }
   .club-nav-lav.is-current {
     @apply bg-house-lav text-ink;
+  }
+  .club-nav-ball.is-current {
+    @apply bg-house-ball text-ink;
   }
   .club-nav-neutral.is-current {
     @apply bg-ink text-white dark:bg-slate-600;
@@ -798,5 +807,216 @@
 @layer components {
   .record-rows > li {
     @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 py-4 text-sm last:border-0 dark:border-slate-700;
+  }
+}
+
+/* ---- 회칙 (/app/rules) ---- */
+@layer components {
+  .rules-metrics {
+    @apply grid grid-cols-2 gap-4 lg:grid-cols-4 xl:gap-5;
+  }
+  .rules-metric {
+    @apply flex min-h-[176px] flex-col transition-transform hover:-translate-y-1;
+  }
+  .rules-metric-value {
+    @apply mt-1 block whitespace-nowrap font-display text-[30px] font-bold leading-tight tracking-[-0.05em] sm:text-[40px];
+  }
+  .rules-metric-value small {
+    @apply ml-0.5 text-sm font-semibold tracking-normal;
+  }
+  .rules-intro {
+    @apply grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] xl:gap-5;
+  }
+  .rules-legend-row {
+    @apply grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3 border-b border-slate-200 py-3 text-[13px] text-slate-600 last:border-0 dark:border-slate-700 dark:text-slate-400;
+  }
+  .rules-legend-row > :first-child {
+    @apply justify-self-start;
+  }
+  /* 목차: xl 미만은 위에 붙는 가로 칩, xl 이상은 왼쪽 세로 목록 */
+  .rules-layout {
+    @apply xl:grid xl:grid-cols-[184px_minmax(0,1fr)] xl:gap-8;
+  }
+  .rules-layout > div {
+    @apply mt-6 xl:mt-0;
+  }
+  .rules-toc {
+    @apply sticky top-0 z-10 -mx-4 flex gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 px-4 py-2.5 backdrop-blur
+      dark:border-slate-700 dark:bg-slate-950/95 sm:-mx-6 sm:px-6 md:-mx-7 md:px-7
+      xl:top-6 xl:mx-0 xl:flex-col xl:gap-0.5 xl:self-start xl:overflow-visible xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-none dark:xl:bg-transparent;
+    scrollbar-width: none;
+  }
+  .rules-toc::-webkit-scrollbar {
+    display: none;
+  }
+  .rules-toc a {
+    @apply flex h-9 shrink-0 items-center gap-2 rounded-full pl-1.5 pr-3.5 text-[12px] font-semibold text-slate-600 transition-colors
+      hover:bg-slate-200/70 dark:text-slate-400 dark:hover:bg-slate-800
+      xl:h-11 xl:rounded-xl xl:px-2.5 xl:text-[13px];
+  }
+  .rules-toc a.is-current {
+    @apply bg-ink text-white hover:bg-ink dark:bg-slate-700 dark:text-white;
+  }
+  .rules-toc-index {
+    @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-display text-[10px] font-extrabold text-ink xl:h-7 xl:w-7 xl:rounded-[8px];
+  }
+  .rules-section,
+  .rules-article {
+    @apply scroll-mt-20 outline-none focus-visible:ring-[3px] focus-visible:ring-house-yellow xl:scroll-mt-8;
+  }
+  .rules-article {
+    @apply print:break-inside-avoid;
+  }
+  .rules-chapter-head {
+    @apply mb-4 flex items-center gap-4;
+  }
+  .rules-index {
+    @apply flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] font-display text-[20px] font-extrabold text-ink;
+  }
+  .rules-chapter-title {
+    @apply mt-0.5 font-display text-[24px] font-bold leading-tight tracking-[-0.045em] sm:text-[26px];
+  }
+  .rules-clauses {
+    @apply mt-4 space-y-2.5;
+  }
+  .rules-clauses > li {
+    @apply flex gap-3 text-[14.5px] leading-[1.85] text-slate-700 dark:text-slate-300;
+  }
+  .rules-clauses > li > span {
+    @apply mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-300 font-display text-[10px] font-bold text-slate-500 dark:border-slate-600 dark:text-slate-400;
+  }
+  .rules-clauses > li > p {
+    @apply min-w-0 flex-1;
+  }
+  .rules-clauses strong {
+    @apply font-bold text-ink dark:text-white;
+  }
+  /* 아직 확정하지 않은 내용 */
+  .rules-pending {
+    @apply rounded bg-house-yellow/45 px-1 font-semibold text-ink underline decoration-[#B88A1B] decoration-dashed underline-offset-4
+      dark:bg-house-yellow/20 dark:text-house-yellow dark:decoration-house-yellow/60;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  .rules-note {
+    @apply mt-5 border-t border-dashed border-slate-300 pt-4 dark:border-slate-600;
+  }
+  .rules-note > span {
+    @apply mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#8A6418] dark:text-house-yellow;
+  }
+  .rules-note > p {
+    @apply text-[13px] leading-relaxed text-slate-500 dark:text-slate-400;
+  }
+  /* 자리 하나 = 점 하나: 검정 = 정회원 우선, 흰색 = 공통 */
+  .rules-seats {
+    @apply flex gap-1 sm:gap-1.5;
+  }
+  .rules-seats > i {
+    @apply block h-3.5 w-3.5 shrink-0 rounded-full sm:h-5 sm:w-5;
+  }
+  .rules-seats-lg {
+    @apply gap-2;
+  }
+  .rules-seats-lg > i {
+    @apply h-7 w-7 sm:h-8 sm:w-8;
+  }
+  .rules-seat-member {
+    @apply bg-ink;
+  }
+  .rules-seat-open {
+    @apply bg-white ring-2 ring-inset ring-ink;
+  }
+  .rules-dot-member {
+    @apply block h-3.5 w-3.5 shrink-0 rounded-full bg-ink dark:bg-slate-200;
+  }
+  .rules-dot-guest {
+    @apply block h-3.5 w-3.5 shrink-0 rounded-full bg-house-orange;
+  }
+  .rules-appendix-title {
+    @apply mt-2 font-display text-[24px] font-bold leading-tight tracking-[-0.045em] sm:text-[28px];
+  }
+  .rules-appendix-sub {
+    @apply mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-400;
+  }
+  .rules-flow {
+    @apply mt-5 grid gap-2 sm:grid-cols-4;
+  }
+  .rules-flow > li {
+    @apply flex items-center gap-3 rounded-2xl bg-slate-100 px-4 py-3.5 text-[13px] font-semibold leading-snug dark:bg-slate-800 sm:flex-col sm:items-start sm:gap-2;
+  }
+  .rules-flow > li > span {
+    @apply font-display text-[11px] font-extrabold text-slate-500 dark:text-slate-400;
+  }
+  .rules-flow > li.is-key {
+    @apply bg-ink text-white dark:bg-slate-700;
+  }
+  .rules-flow > li.is-key > span {
+    @apply text-house-yellow;
+  }
+  .rules-example {
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-b border-slate-200 py-4 last:border-0 dark:border-slate-700
+      sm:grid-cols-[120px_140px_minmax(0,1fr)_44px];
+  }
+  .rules-example-dots {
+    @apply col-start-1 row-start-1 flex gap-1;
+  }
+  .rules-example > strong {
+    @apply col-span-2 row-start-2 text-sm sm:col-span-1 sm:col-start-2 sm:row-start-1;
+  }
+  .rules-example > p {
+    @apply col-span-2 row-start-3 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400 sm:col-span-1 sm:col-start-3 sm:row-start-1;
+  }
+  .rules-example > b {
+    @apply col-start-2 row-start-1 text-right font-display text-lg font-bold tracking-[-0.03em] sm:col-start-4;
+  }
+  .rules-check {
+    @apply flex h-full items-center gap-3 rounded-2xl bg-white/50 px-4 py-3.5 transition-colors hover:bg-white/85;
+  }
+  .rules-check strong {
+    @apply block text-sm font-bold;
+  }
+  .rules-check strong + span {
+    @apply mt-0.5 block text-xs leading-relaxed opacity-75;
+  }
+}
+
+/* 인쇄: 메뉴·머리·꼬리를 빼고 본문만 */
+@media print {
+  .club-sidebar,
+  .club-mobile-header,
+  .club-bottom-nav,
+  .club-breadcrumb,
+  .club-footer,
+  .skip-link {
+    display: none !important;
+  }
+  .club-main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  @page {
+    margin: 14mm 12mm;
+  }
+  /* 회칙: 타일·배지 색을 화면 그대로 인쇄하고, 목차는 뺀다 */
+  .rules-metrics,
+  .rules-intro,
+  .rules-layout {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .rules-toc {
+    display: none !important;
+  }
+  .rules-metrics > *,
+  .rules-intro > *,
+  .rules-flow,
+  .rules-example {
+    break-inside: avoid;
+  }
+  .rules-chapter-head {
+    break-after: avoid;
   }
 }

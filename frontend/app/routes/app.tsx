@@ -14,6 +14,7 @@ import {
   House,
   LogOut,
   Moon,
+  ScrollText,
   ShieldCheck,
   Sun,
   Trophy,
@@ -88,6 +89,13 @@ const navItems: NavItem[] = [
     short: "회원",
     icon: Users,
     color: "lav",
+  },
+  {
+    to: "/app/rules",
+    label: "클럽 회칙",
+    short: "회칙",
+    icon: ScrollText,
+    color: "ball",
   },
 ];
 const adminItem: NavItem = {

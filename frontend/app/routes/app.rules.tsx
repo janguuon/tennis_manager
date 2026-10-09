@@ -182,7 +182,7 @@ function ChapterHead({
   );
 }
 
-/** 자리 하나 = 점 하나: 정회원 우선 자리 → 공통 자리 순 */
+/** 자리 하나 = 점 하나: 정회원 선착순 자리 → 게스트 투표로 열리는 자리 순 */
 function Seats({
   member,
   open,
@@ -341,14 +341,14 @@ export default function RulesPage() {
         </MetricTile>
         <MetricTile
           tone="tile-green"
-          eyebrow="SEATS · 4 + 2"
-          label="자리 배분 · 이번 운영안"
+          eyebrow="SEATS · FIRST COME"
+          label="자리 배분 · 선착순"
           href="#allocation"
           desc={
             <>
-              <strong>정회원 우선 4 + 공통 2</strong>
+              <strong>정회원 선착순</strong>
               <br />
-              코트 이용일 3일 전 잔여 자리 개방
+              남은 자리는 3일 전 게스트 투표
             </>
           }
         >
@@ -519,34 +519,34 @@ export default function RulesPage() {
               APPENDIX A · 운영안 해설
             </p>
             <h2 id="allocation-title" className="rules-appendix-title">
-              4 + 2, 이렇게 배정합니다.
+              선착순, 이렇게 배정합니다.
             </h2>
             <p className="rules-appendix-sub">
-              공통 2자리는 게스트 전용이 아닙니다. 정회원은 최대 6명까지 참가할
-              수 있고, 우선 자리의 잔여분을 개방하면 게스트도 2명보다 많이
-              참가할 수 있습니다.
+              정회원이 먼저 선착순으로 자리를 채우고, 코트 이용일 3일 전에 남은
+              자리만큼 게스트 참석 투표를 받습니다. 게스트 자리 수는 정해 두지
+              않으며, 전체 정원 6명은 넘지 않습니다.
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="tile-green">
-                <strong className="text-base">정회원 우선 · 4자리</strong>
+                <strong className="text-base">1단계 · 정회원 선착순</strong>
                 <span className="mt-3 block">
                   <Seats member={4} open={0} large />
                 </span>
                 <p className="mt-3 text-xs leading-relaxed">
-                  운영진도 정회원과 같은 기준으로 신청
+                  모집 공지 후 바로 신청, 6자리까지 가능
                   <br />
-                  운영진 전용 또는 별도 추가 자리 없음
+                  운영진도 같은 기준 · 별도 우선권 없음
                 </p>
               </div>
               <div className="tile-yellow">
-                <strong className="text-base">공통 신청 · 2자리</strong>
+                <strong className="text-base">2단계 · 3일 전 게스트 투표</strong>
                 <span className="mt-3 block">
                   <Seats member={0} open={2} large />
                 </span>
                 <p className="mt-3 text-xs leading-relaxed">
-                  정회원과 게스트 모두 신청 가능
+                  남은 자리만큼 게스트 참석 투표
                   <br />
-                  게스트 2명 보장 또는 상한을 뜻하지 않음
+                  이때부터는 정회원·게스트 구분 없이 투표 순서
                 </p>
               </div>
             </div>
@@ -560,7 +560,7 @@ export default function RulesPage() {
               ))}
             </ol>
             <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              배정 예시의 전제: 접수순 운영안을 채택한 경우이며, 이미 확정한
+              배정은 선착순이며, 이미 확정한
               참가자를 뒤늦은 신청자 때문에 교체하지 않습니다.
             </p>
 

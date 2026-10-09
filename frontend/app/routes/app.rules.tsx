@@ -348,7 +348,7 @@ export default function RulesPage() {
             <>
               <strong>정회원 우선 4 + 공통 2</strong>
               <br />
-              우선 신청 마감 후 잔여 자리 개방
+              코트 이용일 3일 전 잔여 자리 개방
             </>
           }
         >

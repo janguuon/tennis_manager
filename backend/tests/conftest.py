@@ -39,6 +39,14 @@ class Club:
             self.headers[n] = self._login(n)
             self.ids[n] = self.c.get("/users/me", headers=self.headers[n]).json()["id"]
 
+    def set_type(self, name: str, member_type: str) -> None:
+        """회원 구분 변경 (officer / member / guest)."""
+        self.c.put(
+            f"/admin/users/{self.ids[name]}/member-type",
+            json={"member_type": member_type},
+            headers=self.admin,
+        )
+
     def gathering(self, fee: int, date: str = FAR_DATE, **extra) -> int:
         body = {"title": "모임", "event_date": date, "fee": fee, **extra}
         return self.c.post("/gatherings", json=body, headers=self.admin).json()["id"]
@@ -64,6 +72,19 @@ class Club:
 
     def my_dues(self, name: str) -> list[dict]:
         return self.c.get("/gatherings/payments/me", headers=self.headers[name]).json()
+
+
+@pytest.fixture(autouse=True)
+def fixed_now(monkeypatch):
+    """일정 공개 시점 계산의 '지금'을 FAR_DATE(목) 주의 월요일 오전으로 고정한다.
+    → FAR_DATE 모임은 정회원·게스트 모두에게 열려 있다. 시나리오별로 바꿔 쓸 수 있다."""
+    from datetime import datetime
+
+    from app import visibility
+
+    state = {"now": datetime(2099, 1, 12, 9, 0)}
+    monkeypatch.setattr(visibility, "now_kst", lambda: state["now"])
+    return state
 
 
 @pytest.fixture

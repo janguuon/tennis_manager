@@ -207,7 +207,10 @@ def test_canceled_gathering(club):
     assert club.summary()["gatherings"] == []
 
 
-def test_monthly_totals(club):
+def test_monthly_totals(club, fixed_now):
+    from datetime import datetime
+
+    fixed_now["now"] = datetime(2099, 1, 19, 9, 0)  # 1/20 모임까지 정회원에게 열린 시점
     club.add_members("kim", "lee")
     g1 = club.gathering(20000, date="2099-01-10")
     g2 = club.gathering(9000, date="2099-01-20")

@@ -7,10 +7,12 @@ import { json, redirect } from "@remix-run/node";
 import {
   Form,
   Link,
+  isRouteErrorResponse,
   useActionData,
   useLoaderData,
   useNavigation,
   useOutletContext,
+  useRouteError,
   useSearchParams,
 } from "@remix-run/react";
 import {
@@ -33,12 +35,12 @@ import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
 import { FieldGroup, Modal } from "~/components/Modal";
-import { BackLink, PageBody, PageHeader } from "~/components/Page";
+import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { accountText, won } from "~/lib/format";
 import { shareToKakao } from "~/lib/kakao";
 import { requireToken } from "~/lib/session.server";
-import { GATHERING_STATUS_LABEL, WEEKDAYS } from "~/lib/status";
+import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
 import {
   MATCH_TYPE_LABEL,
   type AttendanceStatus,
@@ -60,11 +62,46 @@ for (let h = 6; h <= 22; h++)
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   const id = params.id;
-  const [gathering, draws] = await Promise.all([
-    api<GatheringDetail>(`/gatherings/${id}`, { token }),
-    api<Draw[]>(`/gatherings/${id}/draws`, { token }),
-  ]);
-  return json({ gathering, draws });
+  try {
+    const [gathering, draws] = await Promise.all([
+      api<GatheringDetail>(`/gatherings/${id}`, { token }),
+      api<Draw[]>(`/gatherings/${id}/draws`, { token }),
+    ]);
+    return json({ gathering, draws });
+  } catch (err) {
+    // 아직 공개 전(403)이거나 지워진(404) 모임은 안내 화면으로
+    if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
+      throw json({ message: err.message }, { status: err.status });
+    }
+    throw err;
+  }
+}
+
+/** 공개 전·없는 모임 안내 (예: 카톡으로 받은 다음 주 모임 링크를 월요일 전에 연 경우) */
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const message =
+    isRouteErrorResponse(error) && typeof error.data?.message === "string"
+      ? error.data.message
+      : "모임을 불러오지 못했어요.";
+  const locked = isRouteErrorResponse(error) && error.status === 403;
+  return (
+    <PageBody>
+      <div className="pt-5">
+        <BackLink to="/app/calendar">캘린더</BackLink>
+      </div>
+      <EmptyCard
+        icon={<Lock size={28} />}
+        action={
+          <Link to="/app/calendar" className="btn-primary btn-sm">
+            캘린더로 가기
+          </Link>
+        }
+      >
+        {locked ? message : "모임을 찾을 수 없어요. 삭제됐거나 주소가 잘못됐을 수 있어요."}
+      </EmptyCard>
+    </PageBody>
+  );
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -356,6 +393,17 @@ export default function GatheringDetailPage() {
         </p>
       ) : null}
 
+      {/* 공개 시점 안내: 임원진에게는 공개 전 상태, 정회원에게는 게스트 투표 시작 시점 */}
+      {gathering.member_open_at && gathering.guest_open_at && user.member_type !== "guest" &&
+      (!gathering.open_to_members || !gathering.open_to_guests) ? (
+        <p className="flex items-start gap-2 rounded-2xl bg-house-lav/30 px-4 py-3 text-sm font-semibold">
+          <Lock size={16} className="mt-0.5 shrink-0" />
+          {!gathering.open_to_members
+            ? `아직 임원진만 보는 일정이에요. 정회원은 ${formatOpenAt(gathering.member_open_at)}부터, 게스트는 ${formatOpenAt(gathering.guest_open_at)}부터 보고 투표할 수 있어요.`
+            : `게스트 투표는 ${formatOpenAt(gathering.guest_open_at)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.`}
+        </p>
+      ) : null}
+
       <div className="detail-top-grid">
         <section className="tile-orange min-h-[285px] sm:p-7">
           <div className="relative z-10 flex items-center justify-between gap-3">
@@ -506,6 +554,7 @@ export default function GatheringDetailPage() {
                             )}
                           </strong>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {p.user.member_type === "guest" ? "게스트 · " : ""}
                             {p.user.ntrp
                               ? `NTRP ${p.user.ntrp}`
                               : "NTRP 미입력"}

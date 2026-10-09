@@ -8,6 +8,7 @@ import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
+import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import type { User } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "회원 · 오테식 매니저" }];
@@ -45,11 +46,11 @@ export default function MembersPage() {
                   user={m}
                   className="absolute bottom-4 z-10 !h-12 !w-12 border-2 border-white/50 !bg-white/35 !text-lg"
                 />
-                {m.is_admin && (
+                {m.is_admin || m.member_type !== "member" ? (
                   <span className="chip-ink absolute right-3 top-3 z-10 !text-[10px]">
-                    관리자
+                    {m.is_admin ? "관리자" : MEMBER_TYPE_LABEL[m.member_type]}
                   </span>
-                )}
+                ) : null}
               </div>
               <div className="p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-2">

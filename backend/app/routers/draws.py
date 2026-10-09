@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import matchmaking
+from .. import matchmaking, visibility
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import (
@@ -192,8 +192,15 @@ def create_manual_draw(
 def list_draws(
     gathering_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    gathering = db.get(Gathering, gathering_id)
+    if gathering is not None and not visibility.is_open_for(current_user, gathering):
+        opens = visibility.open_at_for(current_user, gathering.event_date)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"아직 공개되지 않은 일정이에요. {visibility.format_open_at(opens)}부터 보고 투표할 수 있어요.",
+        )
     draws = db.scalars(
         select(Draw)
         .where(Draw.gathering_id == gathering_id)

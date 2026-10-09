@@ -2,6 +2,8 @@
 
 export type Gender = "male" | "female";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
+/** 회원 구분: 임원진(일정 즉시) · 정회원(그 주 월요일 0시) · 게스트(3일 전 0시) */
+export type MemberType = "officer" | "member" | "guest";
 export type MatchType =
   | "singles"
   | "mens_doubles"
@@ -24,6 +26,7 @@ export interface User {
   approval_status: ApprovalStatus;
   is_active: boolean;
   is_admin: boolean;
+  member_type: MemberType;
   created_at: string;
 }
 
@@ -34,6 +37,7 @@ export interface UserBrief {
   nickname: string | null;
   gender: Gender | null;
   ntrp: number | null;
+  member_type: MemberType;
 }
 
 export interface LoginResponse {
@@ -89,6 +93,12 @@ export interface Gathering {
   attendance: AttendanceSummary | null;
   /** 1인 참가비 (총액 ÷ 참석 인원, 100원 단위 올림). 서버가 계산. */
   per_person: number;
+  /** 정회원 공개 시각(한국 시간, 그 주 월요일 0시) */
+  member_open_at: string | null;
+  /** 게스트 공개 시각(한국 시간, 3일 전 0시) */
+  guest_open_at: string | null;
+  open_to_members: boolean;
+  open_to_guests: boolean;
 }
 
 export interface TypeRecord {

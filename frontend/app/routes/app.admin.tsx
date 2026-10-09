@@ -13,7 +13,10 @@ import { PageBody, PageHeader } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
-import type { User } from "~/lib/types";
+import { MEMBER_TYPE_LABEL, withRo } from "~/lib/status";
+import type { MemberType, User } from "~/lib/types";
+
+const MEMBER_TYPES: MemberType[] = ["officer", "member", "guest"];
 
 export const meta: MetaFunction = () => [{ title: "관리자 · 오테식 매니저" }];
 
@@ -70,11 +73,35 @@ export async function action({ request }: ActionFunctionArgs) {
           : `${res.name}님은 경기·입금 기록이 있어 기록을 남기고 탈퇴 처리했어요. 아래 '탈퇴한 회원'에서 복구할 수 있어요.`;
       return json({ ok: true, error: null as string | null, reset: false, notice });
     }
+    if (intent === "set_type") {
+      const type = String(formData.get("member_type")) as MemberType;
+      const user = await api<User>(`/admin/users/${userId}/member-type`, {
+        method: "PUT",
+        token,
+        body: { member_type: type },
+      });
+      return json({
+        ok: true,
+        error: null as string | null,
+        reset: false,
+        notice: `${user.name}님을 ${withRo(MEMBER_TYPE_LABEL[user.member_type])} 바꿨어요.`,
+      });
+    }
+    if (intent === "approve") {
+      const type = String(formData.get("member_type") || "member") as MemberType;
+      const user = await api<User>(`/admin/signups/${userId}/approve?member_type=${type}`, { method: "POST", token });
+      return json({
+        ok: true,
+        error: null as string | null,
+        reset: false,
+        notice: `${user.name}님을 ${withRo(MEMBER_TYPE_LABEL[user.member_type])} 승인했어요.`,
+      });
+    }
     if (intent === "restore_member") {
       const user = await api<User>(`/admin/users/${userId}/restore`, { method: "POST", token });
       return json({ ok: true, error: null as string | null, reset: false, notice: `${user.name}님을 복구했어요.` });
     }
-    // approve / reject
+    // reject
     await api(`/admin/signups/${userId}/${intent}`, { method: "POST", token });
     return json({ ok: true, error: null as string | null, reset: false, notice: null as string | null });
   } catch (err) {
@@ -103,7 +130,7 @@ export default function AdminPage() {
         sub={
           pending.length > 0
             ? `가입 신청 ${pending.length}건이 승인을 기다려요`
-            : "가입 승인, 회원 삭제와 계정을 관리해요"
+            : "가입 승인, 회원 구분·삭제와 계정을 관리해요"
         }
       />
 
@@ -120,6 +147,9 @@ export default function AdminPage() {
           ) : null}
         </div>
 
+        <p className="mt-1 text-[13px] font-medium text-slate-500">
+          체험으로 오는 분은 게스트로 승인하고, 임원진 투표 후 아래 회원 관리에서 정회원으로 바꿔 주세요.
+        </p>
         {pending.length === 0 ? (
           <p className="mt-3 flex items-center gap-2 text-sm font-bold">
             <UserCheck size={16} />
@@ -159,12 +189,16 @@ export default function AdminPage() {
                   </Form>
                   <Form method="post">
                     <input type="hidden" name="user_id" value={u.id} />
-                    <button
-                      name="intent"
-                      value="approve"
-                      className="btn-primary btn-sm"
-                    >
-                      승인
+                    <input type="hidden" name="member_type" value="guest" />
+                    <button name="intent" value="approve" className="btn-ghost btn-sm">
+                      게스트로 승인
+                    </button>
+                  </Form>
+                  <Form method="post">
+                    <input type="hidden" name="user_id" value={u.id} />
+                    <input type="hidden" name="member_type" value="member" />
+                    <button name="intent" value="approve" className="btn-primary btn-sm">
+                      정회원 승인
                     </button>
                   </Form>
                 </div>
@@ -180,10 +214,14 @@ export default function AdminPage() {
           <div className="min-w-0">
             <h2 className="section-title flex items-center gap-2">
               <UserMinus size={16} className="text-slate-400" />
-              회원 삭제
+              회원 관리
             </h2>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
-              경기·입금 기록이 없는 회원은 완전히 삭제돼요. 기록이 있는 회원은 다른 회원의 전적과 정산이 깨지지
+              <b className="font-bold text-ink dark:text-white">구분</b>에 따라 일정이 보이는 때가 달라요: 임원진은 등록
+              즉시, 정회원은 그 주 월요일 0시, 게스트는 모임 3일 전 0시부터 보고 투표할 수 있어요.
+            </p>
+            <p className="mt-1 text-[13px] font-medium text-slate-500">
+              <b className="font-bold text-ink dark:text-white">삭제</b>: 경기·입금 기록이 없는 회원은 완전히 삭제돼요. 기록이 있는 회원은 다른 회원의 전적과 정산이 깨지지
               않도록 기록을 남기고 탈퇴 처리돼요(로그인 불가, 회원 목록·랭킹에서 빠짐).
             </p>
           </div>
@@ -204,7 +242,7 @@ export default function AdminPage() {
 
         {deletable.length === 0 ? (
           <p className="mt-4 text-sm font-medium text-slate-500">
-            {q ? "검색한 회원이 없어요." : "삭제할 수 있는 회원이 없어요."}
+            {q ? "검색한 회원이 없어요." : "관리할 회원이 없어요."}
           </p>
         ) : (
           <ul className="record-rows mt-3">
@@ -224,6 +262,27 @@ export default function AdminPage() {
                     </p>
                   </div>
                 </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                <Form method="post">
+                  <input type="hidden" name="intent" value="set_type" />
+                  <input type="hidden" name="user_id" value={m.id} />
+                  <label className="sr-only" htmlFor={`type-${m.id}`}>
+                    {m.name} 회원 구분
+                  </label>
+                  <select
+                    id={`type-${m.id}`}
+                    name="member_type"
+                    defaultValue={m.member_type}
+                    className="input !h-8 !w-auto !rounded-full !py-0 !pl-3 !pr-8 text-[13px] font-bold"
+                    onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                  >
+                    {MEMBER_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {MEMBER_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                </Form>
                 <Form
                   method="post"
                   onSubmit={(e) => {
@@ -243,6 +302,7 @@ export default function AdminPage() {
                     삭제
                   </button>
                 </Form>
+                </div>
               </li>
             ))}
           </ul>

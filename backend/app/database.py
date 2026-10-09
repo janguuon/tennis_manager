@@ -50,6 +50,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("participants", "paid", "paid BOOLEAN NOT NULL DEFAULT 0"),
     ("participants", "paid_at", "paid_at DATETIME"),
     ("participants", "paid_amount", "paid_amount INTEGER"),
+    # 회원 구분 (기존 회원은 정회원)
+    ("users", "member_type", "member_type VARCHAR(7) NOT NULL DEFAULT 'MEMBER'"),
 ]
 
 

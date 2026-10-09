@@ -73,6 +73,14 @@ class ApprovalStatus(str, enum.Enum):
     REJECTED = "rejected"   # 거절됨
 
 
+class MemberType(str, enum.Enum):
+    """회원 구분. 일정이 보이는 시점이 다르다 (app/visibility.py)."""
+
+    OFFICER = "officer"   # 임원진: 등록 즉시 보임
+    MEMBER = "member"     # 정회원: 해당 주 월요일 0시부터
+    GUEST = "guest"       # 게스트: 모임 3일 전 0시부터 (정회원 공개 이후)
+
+
 class AttendanceStatus(str, enum.Enum):
     """모임 참석 투표 상태."""
 
@@ -117,6 +125,9 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    member_type: Mapped[MemberType] = mapped_column(
+        Enum(MemberType), default=MemberType.MEMBER, server_default=MemberType.MEMBER.name
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

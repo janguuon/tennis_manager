@@ -19,10 +19,11 @@ from ..models import (
     GatheringStatus,
     Match,
     MatchPlayer,
+    MemberType,
     Participant,
     User,
 )
-from ..schemas import MemberDeleteResult, PasswordUpdate, UserRead
+from ..schemas import MemberDeleteResult, MemberTypeUpdate, PasswordUpdate, UserRead
 from ..security import hash_password
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
@@ -37,10 +38,15 @@ def list_pending_signups(db: Session = Depends(get_db)):
 
 
 @router.post("/signups/{user_id}/approve", response_model=UserRead)
-def approve_signup(user_id: int, db: Session = Depends(get_db)):
-    """가입 신청 승인 → 로그인 가능."""
+def approve_signup(
+    user_id: int,
+    member_type: MemberType = MemberType.MEMBER,
+    db: Session = Depends(get_db),
+):
+    """가입 신청 승인 → 로그인 가능. 회원 구분(정회원/게스트/임원진)을 함께 정한다."""
     user = _get_user_or_404(db, user_id)
     user.approval_status = ApprovalStatus.APPROVED
+    user.member_type = member_type
     db.commit()
     db.refresh(user)
     return user
@@ -70,6 +76,16 @@ def set_admin(
             status_code=status.HTTP_400_BAD_REQUEST, detail="자기 자신의 관리자 권한은 회수할 수 없습니다."
         )
     user.is_admin = is_admin
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}/member-type", response_model=UserRead)
+def set_member_type(user_id: int, payload: MemberTypeUpdate, db: Session = Depends(get_db)):
+    """회원 구분 변경 (예: 체험을 마친 게스트를 정회원으로)."""
+    user = _get_user_or_404(db, user_id)
+    user.member_type = payload.member_type
     db.commit()
     db.refresh(user)
     return user

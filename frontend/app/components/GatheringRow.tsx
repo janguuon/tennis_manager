@@ -1,5 +1,5 @@
 import { Link } from "@remix-run/react";
-import { ArrowUpRight, Users } from "lucide-react";
+import { ArrowUpRight, Lock, Users } from "lucide-react";
 
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
@@ -43,6 +43,13 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           </span>
           {g.status !== "planned" ? (
             <span className={GATHERING_STATUS_BADGE[g.status]}>{GATHERING_STATUS_LABEL[g.status]}</span>
+          ) : null}
+          {/* 임원진·관리자에게만 보이는, 아직 정회원에게 공개 전인 일정 */}
+          {!g.open_to_members ? (
+            <span className="badge-gray shrink-0">
+              <Lock size={11} />
+              공개 전
+            </span>
           ) : null}
         </div>
         <p className="mt-0.5 truncate text-[13px] font-medium text-slate-500 dark:text-slate-400">{meta.join(" · ")}</p>

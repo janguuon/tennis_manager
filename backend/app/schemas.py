@@ -14,6 +14,7 @@ from .models import (
     GatheringStatus,
     Gender,
     MatchType,
+    MemberType,
     TeamSide,
 )
 
@@ -66,7 +67,14 @@ class UserRead(UserBase):
     approval_status: ApprovalStatus
     is_active: bool
     is_admin: bool
+    member_type: MemberType = MemberType.MEMBER
     created_at: datetime
+
+
+class MemberTypeUpdate(BaseModel):
+    """회원 구분 변경 (관리자)."""
+
+    member_type: MemberType
 
 
 class MemberDeleteResult(BaseModel):
@@ -100,6 +108,7 @@ class UserBrief(BaseModel):
     nickname: str | None = None
     gender: Gender | None = None
     ntrp: float | None = None
+    member_type: MemberType = MemberType.MEMBER
 
 
 # --- 경기 / 전적 ------------------------------------------------------------
@@ -283,6 +292,11 @@ class GatheringRead(GatheringBase):
     attendance: AttendanceSummary | None = None
     # 1인 참가비 = 총액 ÷ 참석 인원 (100원 단위 올림, 취소된 모임은 0). 서버에서만 계산.
     per_person: int = 0
+    # 공개 시점(한국 시간): 정회원은 그 주 월요일 0시, 게스트는 3일 전 0시. app/visibility.py
+    member_open_at: datetime | None = None
+    guest_open_at: datetime | None = None
+    open_to_members: bool = True
+    open_to_guests: bool = True
 
 
 class ParticipantRead(BaseModel):

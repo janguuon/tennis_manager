@@ -14,6 +14,7 @@ import {
 import { PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
+import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import type { User } from "~/lib/types";
 
 export const meta: MetaFunction = () => [
@@ -122,7 +123,7 @@ export default function MyPage() {
               {user.name}
             </h2>
             <span className="chip-ink">
-              {user.is_admin ? "관리자" : "회원"}
+              {user.is_admin ? "관리자" : MEMBER_TYPE_LABEL[user.member_type]}
             </span>
           </div>
           <p className="mt-0.5 truncate text-[14px] font-bold">

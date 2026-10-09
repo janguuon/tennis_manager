@@ -372,7 +372,7 @@ export default function CalendarPage() {
                           key={g.id}
                           className={`h-1.5 w-1.5 rounded-full ${
                             GATHERING_STATUS_DOT[g.status]
-                          }`}
+                          } ${g.open_to_members ? "" : "opacity-40"}`}
                         />
                       ))}
                     </div>
@@ -384,8 +384,8 @@ export default function CalendarPage() {
                           key={g.id}
                           className={`rounded-lg px-2 py-2 text-[11px] font-semibold leading-relaxed ${
                             GATHERING_STATUS_CHIP[g.status]
-                          }`}
-                          title={g.title}
+                          } ${g.open_to_members ? "" : "opacity-60 outline-dashed outline-1 outline-offset-[-3px]"}`}
+                          title={g.open_to_members ? g.title : `${g.title} (아직 정회원에게 공개 전)`}
                         >
                           {g.start_time ? (
                             <span className="mr-1 opacity-60">
@@ -394,7 +394,7 @@ export default function CalendarPage() {
                           ) : null}
                           <span className="block truncate">{g.title}</span>
                           <span className="mt-1 block truncate text-[10px] opacity-70">
-                            {g.location}
+                            {g.open_to_members ? g.location : "공개 전 · 임원진만"}
                           </span>
                         </div>
                       ))}

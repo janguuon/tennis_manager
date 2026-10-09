@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import visibility
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import AttendanceStatus, Gathering, GatheringStatus, Participant, User
@@ -71,11 +72,31 @@ def _summary(gathering: Gathering) -> AttendanceSummary:
     return s
 
 
+def _with_open_times(read: GatheringRead, gathering: Gathering) -> GatheringRead:
+    """정회원·게스트 공개 시각과 지금 열려 있는지 (임원진 화면 안내용)."""
+    now = visibility.now_kst()
+    read.member_open_at = visibility.member_open_at(gathering.event_date)
+    read.guest_open_at = visibility.guest_open_at(gathering.event_date)
+    read.open_to_members = now >= read.member_open_at
+    read.open_to_guests = now >= read.guest_open_at
+    return read
+
+
 def _to_read(gathering: Gathering) -> GatheringRead:
     read = GatheringRead.model_validate(gathering)
     read.attendance = _summary(gathering)
     read.per_person = _per_person(gathering)
-    return read
+    return _with_open_times(read, gathering)
+
+
+def _require_open(gathering: Gathering, user: User) -> None:
+    """아직 이 회원에게 공개되지 않은 일정이면 보기·투표를 막는다."""
+    if not visibility.is_open_for(user, gathering):
+        opens = visibility.open_at_for(user, gathering.event_date)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"아직 공개되지 않은 일정이에요. {visibility.format_open_at(opens)}부터 보고 투표할 수 있어요.",
+        )
 
 
 # --- 참가비 계산 -------------------------------------------------------------
@@ -330,7 +351,7 @@ def import_template(_: User = Depends(get_current_user)):
 @router.get("", response_model=list[GatheringRead])
 def list_gatherings(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     date_from: date | None = Query(None, description="캘린더 조회 시작일"),
     date_to: date | None = Query(None, description="캘린더 조회 종료일"),
 ):
@@ -344,22 +365,25 @@ def list_gatherings(
         stmt = stmt.where(Gathering.event_date <= date_to)
     stmt = stmt.order_by(Gathering.event_date, Gathering.start_time)
 
-    return [_to_read(g) for g in db.scalars(stmt).all()]
+    now = visibility.now_kst()
+    return [_to_read(g) for g in db.scalars(stmt).all() if visibility.is_open_for(current_user, g, now)]
 
 
 @router.get("/{gathering_id}", response_model=GatheringDetail)
 def get_gathering(
     gathering_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """모임 상세 (참여자 명단 포함)."""
     g = _load_gathering(db, gathering_id)
+    _require_open(g, current_user)
     detail = GatheringDetail.model_validate(g)
     detail.attendance = _summary(g)
     detail.per_person = _per_person(g)
     detail.participants = [ParticipantRead.model_validate(p) for p in g.participants]
     detail.payment = _payment_summary(g) if g.fee > 0 else None
+    _with_open_times(detail, g)
     return detail
 
 
@@ -397,9 +421,10 @@ def delete_gathering(
 def list_participants(
     gathering_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     g = _load_gathering(db, gathering_id)
+    _require_open(g, current_user)
     return [ParticipantRead.model_validate(p) for p in g.participants]
 
 
@@ -414,6 +439,7 @@ def vote_attendance(
     gathering = db.get(Gathering, gathering_id)
     if not gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
+    _require_open(gathering, current_user)
 
     participant = db.scalar(
         select(Participant).where(
@@ -474,6 +500,8 @@ def cancel_attendance(
 ):
     """투표 취소 (참여자 명단에서 제거)."""
     gathering = db.get(Gathering, gathering_id)
+    if gathering is not None:
+        _require_open(gathering, current_user)
     # 마감 제한: 취소(=사실상 불참)도 3일 전부터는 일반 회원 불가(관리자만 가능)
     if (
         gathering is not None
@@ -583,7 +611,7 @@ def my_payment_dues(
 def payment_summary(
     month: str = Query(..., description="정산할 달 (YYYY-MM)"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """한 달 모임들의 참가비 정산 집계. 참가비가 있는 모임만, 받을 돈·돌려줄 돈을 사람별로."""
     try:
@@ -606,7 +634,10 @@ def payment_summary(
     )
 
     summaries: list[GatheringPaymentSummary] = []
+    now = visibility.now_kst()
     for g in db.scalars(stmt).all():
+        if not visibility.is_open_for(current_user, g, now):
+            continue
         s = _payment_summary(g)
         # 취소된 모임은 돌려줄 돈이 있을 때만 표시
         if g.status == GatheringStatus.CANCELED and not s.refunds:

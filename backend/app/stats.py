@@ -140,6 +140,9 @@ def ranking(matches: list[Match], min_games: int = 0) -> list[dict]:
 
     rows = []
     for agg in aggs.values():
+        # 탈퇴 처리된 회원은 순위에서 뺀다 (경기 기록 자체는 남는다)
+        if agg.user is not None and not agg.user.is_active:
+            continue
         rec = agg.counter.as_dict()
         decided = rec["wins"] + rec["losses"]
         if decided < min_games:

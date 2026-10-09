@@ -80,7 +80,7 @@ def login(
     if user.approval_status == ApprovalStatus.REJECTED:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="가입이 거절된 계정입니다.")
     if not user.is_active:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="비활성화된 계정입니다.")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="탈퇴 처리된 계정입니다. 관리자에게 문의하세요.")
 
     token = create_access_token(subject=user.id)
     return Token(access_token=token, user=user)

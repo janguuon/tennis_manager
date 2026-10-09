@@ -31,7 +31,12 @@ def get_current_user(
     if user is None:
         raise credentials_exc
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="비활성화된 계정입니다.")
+        # 탈퇴 처리된 회원: 401로 돌려 프론트가 세션을 지우고 로그인 화면으로 보내게 한다
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="탈퇴 처리된 계정입니다.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 

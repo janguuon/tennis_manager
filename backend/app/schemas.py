@@ -69,6 +69,13 @@ class UserRead(UserBase):
     created_at: datetime
 
 
+class MemberDeleteResult(BaseModel):
+    """회원 삭제 결과: 완전 삭제(deleted) 또는 기록 보존 탈퇴(deactivated)."""
+
+    result: Literal["deleted", "deactivated"]
+    name: str
+
+
 # --- 인증 -------------------------------------------------------------------
 class Token(BaseModel):
     access_token: str

@@ -11,6 +11,7 @@ import {
   useFetcher,
   useLoaderData,
   useNavigation,
+  useOutletContext,
   useSearchParams,
 } from "@remix-run/react";
 import {
@@ -24,17 +25,20 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
+import { KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
+import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import { requireToken } from "~/lib/session.server";
 import {
   GATHERING_STATUS_CHIP,
   GATHERING_STATUS_DOT,
   WEEKDAYS,
 } from "~/lib/status";
-import type { Gathering } from "~/lib/types";
+import type { Gathering, Me, UserBrief } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "캘린더 · 오테식 매니저" }];
 
@@ -75,10 +79,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const month = url.searchParams.get("month") || currentMonth();
   const { from, to } = monthRange(month);
-  const gatherings = await api<Gathering[]>(
-    `/gatherings?date_from=${from}&date_to=${to}`,
-    { token }
-  );
+  const [gatherings, members] = await Promise.all([
+    api<Gathering[]>(`/gatherings?date_from=${from}&date_to=${to}`, { token }),
+    // 오테식 모임 등록 시 코트 예약자 선택용
+    api<UserBrief[]>("/users", { token }),
+  ]);
   // 보기 방식: URL(?view) 우선, 없으면 쿠키(cal_view)로 마지막 선택 기억, 기본 달력
   const urlView = url.searchParams.get("view");
   const savedList = /(?:^|;\s*)cal_view=list/.test(
@@ -92,7 +97,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : savedList
       ? "list"
       : "calendar";
-  return json({ month, gatherings, view });
+  return json({ month, gatherings, view, members });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -117,12 +122,11 @@ export async function action({ request }: ActionFunctionArgs) {
       ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
       : Number(get("court_count") || 1),
     max_participants: maxParticipants ? Number(maxParticipants) : null,
-    fee: get("fee") ? Number(get("fee")) : 0,
-    bank: get("bank") || null,
-    account_number: get("account_number") || null,
-    account_holder: get("account_holder") || null,
+    ...feeFieldsFromForm(formData),
+    court_bookings: bookingsFromForm(formData),
     description: get("description") || null,
   };
+  if (body.kind === "flash") body.court_bookings = [];
 
   try {
     await api("/gatherings", { method: "POST", token, body });
@@ -151,7 +155,11 @@ function addHours(time: string, hours: number): string {
 }
 
 export default function CalendarPage() {
-  const { month, gatherings, view } = useLoaderData<typeof loader>();
+  const { month, gatherings, view, members } = useLoaderData<typeof loader>();
+  const { user } = useOutletContext<{ user: Me }>();
+  const clubAccount = [...gatherings]
+    .reverse()
+    .find((g) => isClubKind(g.kind) && g.account_number);
   const actionData = useActionData<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
@@ -387,11 +395,12 @@ export default function CalendarPage() {
                           } ${g.open_to_members ? "" : "opacity-60 outline-dashed outline-1 outline-offset-[-3px]"}`}
                           title={g.open_to_members ? g.title : `${g.title} (아직 정회원에게 공개 전)`}
                         >
-                          {g.start_time ? (
-                            <span className="mr-1 opacity-60">
-                              {g.start_time.slice(0, 5)}
-                            </span>
-                          ) : null}
+                          <span className="mr-1 opacity-60">
+                            {g.start_time
+                              ? `${g.start_time.slice(0, 5)} · `
+                              : ""}
+                            {KIND_SHORT[g.kind]}
+                          </span>
                           <span className="block truncate">{g.title}</span>
                           <span className="mt-1 block truncate text-[10px] opacity-70">
                             {g.open_to_members ? g.location : "공개 전 · 임원진만"}
@@ -626,60 +635,31 @@ export default function CalendarPage() {
               </div>
             </FieldGroup>
 
-            <FieldGroup title="참가비">
-              <div>
-                <label className="label" htmlFor="fee">
-                  총 참가비 (원)
-                </label>
-                <input
-                  id="fee"
-                  name="fee"
-                  type="number"
-                  min="0"
-                  step="1000"
-                  className="input"
-                  placeholder="0 = 무료"
-                />
-                <p className="mt-1.5 text-xs text-slate-400">
-                  참석 인원으로 나눠 1인 금액을 계산해요 (100원 단위 올림).
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="label" htmlFor="bank">
-                    은행
-                  </label>
-                  <input
-                    id="bank"
-                    name="bank"
-                    className="input"
-                    placeholder="국민"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="label" htmlFor="account_number">
-                    계좌번호
-                  </label>
-                  <input
-                    id="account_number"
-                    name="account_number"
-                    className="input"
-                    placeholder="123-456-7890"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="account_holder">
-                  예금주
-                </label>
-                <input
-                  id="account_holder"
-                  name="account_holder"
-                  className="input"
-                  placeholder="홍길동"
-                />
-              </div>
-            </FieldGroup>
+            <GatheringFeeFields
+              idPrefix="c_"
+              canCreateClub={isStaff(user)}
+              members={members}
+              defaults={{
+                kind: "flash",
+                court_fee: 0,
+                ball_fee: 0,
+                guest_fee: 5000,
+                accounts: {
+                  // 일반 벙개는 보통 만든 사람이 받으므로 내 환급 계좌
+                  flash: {
+                    bank: user.bank,
+                    account_number: user.account_number,
+                    account_holder: user.account_holder,
+                  },
+                  // 오테식 모임은 최근 오테식 모임의 회비 통장
+                  club: clubAccount ?? {
+                    bank: null,
+                    account_number: null,
+                    account_holder: null,
+                  },
+                },
+              }}
+            />
 
             <div>
               <label className="label" htmlFor="description">
@@ -718,7 +698,9 @@ export default function CalendarPage() {
             className="space-y-4"
           >
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              한 행에 모임 하나씩 적어 올리면 한 번에 등록돼요.
+              한 행에 모임 하나씩 적어 올리면 한 번에 등록돼요. ‘종류’ 칸에는
+              오테식 정모 / 오테식 벙개 / 일반 벙개를 적어요(비우면 일반 벙개).
+              오테식 모임의 코트 예약자는 등록 후 모임 화면에서 추가해요.
             </p>
             <a
               href="/resources/gatherings-template"

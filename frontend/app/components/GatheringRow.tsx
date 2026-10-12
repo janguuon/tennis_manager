@@ -1,6 +1,7 @@
 import { Link } from "@remix-run/react";
 import { ArrowUpRight, Lock, Users } from "lucide-react";
 
+import { KIND_BADGE, KIND_LABEL, isClubKind } from "~/lib/club";
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
 import type { Gathering } from "~/lib/types";
@@ -13,7 +14,13 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
   // 좁은 화면에서 잘리므로 회원에게 중요한 금액을 코트보다 앞에 둔다
   const meta = [
     g.location ?? "장소 미정",
-    g.fee > 0 && g.per_person > 0 ? `1인 ${won(g.per_person)}` : g.fee > 0 ? `총 ${won(g.fee)}` : "",
+    isClubKind(g.kind)
+      ? "회비 지출"
+      : g.fee > 0 && g.per_person > 0
+        ? `1인 ${won(g.per_person)}`
+        : g.fee > 0
+          ? `총 ${won(g.fee)}`
+          : "",
     `코트 ${g.court_numbers ? g.court_numbers : `${g.court_count}면`}`,
   ].filter(Boolean);
 
@@ -41,6 +48,7 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           >
             {g.title}
           </span>
+          <span className={`${KIND_BADGE[g.kind]} shrink-0`}>{KIND_LABEL[g.kind]}</span>
           {g.status !== "planned" ? (
             <span className={GATHERING_STATUS_BADGE[g.status]}>{GATHERING_STATUS_LABEL[g.status]}</span>
           ) : null}

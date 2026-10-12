@@ -11,12 +11,16 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from .models import (
     ApprovalStatus,
     AttendanceStatus,
+    GatheringKind,
     GatheringStatus,
     Gender,
     MatchType,
     MemberType,
     TeamSide,
 )
+
+# 오테식 모임의 게스트 기본 참가비 (회칙 제17조)
+GUEST_FEE_DEFAULT = 5000
 
 
 # --- 회원 -------------------------------------------------------------------
@@ -48,6 +52,10 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(None, max_length=20)
     bio: str | None = None
     avatar_url: str | None = Field(None, max_length=500)
+    # 코트비 등을 돌려받을 계좌
+    bank: str | None = Field(None, max_length=50)
+    account_number: str | None = Field(None, max_length=50)
+    account_holder: str | None = Field(None, max_length=50)
 
 
 class PasswordUpdate(BaseModel):
@@ -82,6 +90,15 @@ class MemberDeleteResult(BaseModel):
 
     result: Literal["deleted", "deactivated"]
     name: str
+
+
+class UserMe(UserRead):
+    """내 프로필: 다른 회원에게는 보이지 않는 환급 계좌를 포함한다."""
+
+    bank: str | None = None
+    account_number: str | None = None
+    account_holder: str | None = None
+
 
 
 # --- 인증 -------------------------------------------------------------------
@@ -235,14 +252,62 @@ class GatheringBase(BaseModel):
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
     max_participants: int | None = Field(None, ge=1)
-    fee: int = Field(0, ge=0, description="총 참가비(원). 참석자 수로 1/n. 0이면 무료.")
+    kind: GatheringKind = Field(GatheringKind.FLASH, description="오테식 정모 / 오테식 벙개 / 일반 벙개")
+    fee: int = Field(0, ge=0, description="일반 벙개: n빵할 총액. 코트비·캔볼값을 넣으면 둘의 합.")
+    court_fee: int = Field(0, ge=0, description="일반 벙개 코트비")
+    ball_fee: int = Field(0, ge=0, description="일반 벙개 캔볼값")
+    guest_fee: int = Field(GUEST_FEE_DEFAULT, ge=0, description="오테식 모임 게스트 1인 참가비")
     bank: str | None = Field(None, max_length=50, description="입금 은행")
     account_number: str | None = Field(None, max_length=50, description="입금 계좌번호")
     account_holder: str | None = Field(None, max_length=50, description="예금주")
 
 
+class CourtBookingInput(BaseModel):
+    """코트 예약 1건 등록: 누가 어떤 코트를 얼마에 잡았는지."""
+
+    booker_id: int
+    amount: int = Field(..., gt=0)
+    court_label: str | None = Field(None, max_length=50)
+
+
+class CourtBookingUpdate(BaseModel):
+    booker_id: int | None = None
+    amount: int | None = Field(None, gt=0)
+    court_label: str | None = Field(None, max_length=50)
+
+
+class ReimbursementUpdate(BaseModel):
+    """코트비 지급 처리. reimbursed=false면 지급 기록을 지운다."""
+
+    reimbursed: bool
+
+
+class BookerAccount(BaseModel):
+    bank: str | None = None
+    account_number: str | None = None
+    account_holder: str | None = None
+
+
+class CourtBookingRead(BaseModel):
+    """코트 예약 1건. 예약자 계좌는 본인과 관리자·임원진에게만 채워진다."""
+
+    id: int
+    gathering_id: int
+    gathering_title: str
+    event_date: date
+    kind: GatheringKind
+    booker: UserBrief
+    amount: int
+    court_label: str | None = None
+    reimbursed: bool
+    reimbursed_at: datetime | None = None
+    reimbursed_by: UserBrief | None = None
+    account: BookerAccount | None = None
+
+
 class GatheringCreate(GatheringBase):
-    pass
+    # 오테식 모임만: 처음 등록할 때 함께 넣는 코트 예약 내역
+    court_bookings: list[CourtBookingInput] = []
 
 
 class GatheringImportRowError(BaseModel):
@@ -268,7 +333,11 @@ class GatheringUpdate(BaseModel):
     court_count: int | None = Field(None, ge=1)
     court_numbers: str | None = Field(None, max_length=200)
     max_participants: int | None = Field(None, ge=1)
+    kind: GatheringKind | None = None
     fee: int | None = Field(None, ge=0)
+    court_fee: int | None = Field(None, ge=0)
+    ball_fee: int | None = Field(None, ge=0)
+    guest_fee: int | None = Field(None, ge=0)
     bank: str | None = Field(None, max_length=50)
     account_number: str | None = Field(None, max_length=50)
     account_holder: str | None = Field(None, max_length=50)
@@ -291,12 +360,15 @@ class GatheringRead(GatheringBase):
     created_at: datetime
     attendance: AttendanceSummary | None = None
     # 1인 참가비 = 총액 ÷ 참석 인원 (100원 단위 올림, 취소된 모임은 0). 서버에서만 계산.
+    # 오테식 모임은 회비에서 지출하므로 0 (게스트만 guest_fee).
     per_person: int = 0
     # 공개 시점(한국 시간): 정회원은 그 주 월요일 0시, 게스트는 3일 전 0시. app/visibility.py
     member_open_at: datetime | None = None
     guest_open_at: datetime | None = None
     open_to_members: bool = True
     open_to_guests: bool = True
+    # 오테식 모임: 코트 예약 금액 합 (회비 지출)
+    court_total: int = 0
 
 
 class ParticipantRead(BaseModel):
@@ -324,12 +396,15 @@ class GatheringPaymentSummary(BaseModel):
     title: str
     event_date: date
     status: GatheringStatus
-    fee: int              # 총 참가비(모임 전체 금액)
-    per_person: int       # 1인 금액 (100원 단위 올림)
+    kind: GatheringKind = GatheringKind.FLASH
+    fee: int              # 일반 벙개 총액(모임 전체 금액)
+    per_person: int       # 일반 벙개 1인 금액 (100원 단위 올림). 오테식 모임은 0.
+    guest_fee: int = 0    # 오테식 모임 게스트 1인 참가비
     attending: int        # 참석 인원
-    paid_count: int       # 입금한 참석자 수
+    payer_count: int = 0  # 낼 돈이 있는 참석자 수 (일반 벙개: 참석자 전원, 오테식: 게스트)
+    paid_count: int       # 입금한 참석자 수 (낼 돈이 있는 사람 중)
     collected: int        # 실제 걷힌 금액 = 참석자의 입금 금액 합
-    expected: int         # 받아야 할 금액 = 1인 금액 × 참석 인원
+    expected: int         # 받아야 할 금액 = 참석자별 낼 금액의 합
     outstanding: int      # 아직 받을 금액 = dues 합
     dues: list[PaymentLine] = []     # 받을 돈: 미입금(1인 금액) + 추가 입금(차액)
     refunds: list[PaymentLine] = []  # 돌려줄 돈: 입금 후 불참 + 초과 입금(차액)
@@ -337,7 +412,8 @@ class GatheringPaymentSummary(BaseModel):
 
 class GatheringDetail(GatheringRead):
     participants: list[ParticipantRead] = []
-    payment: GatheringPaymentSummary | None = None  # 참가비가 있는 모임만
+    payment: GatheringPaymentSummary | None = None  # 받을 돈이 있는 모임만
+    court_bookings: list[CourtBookingRead] = []      # 오테식 모임의 코트 예약 내역
 
 
 class ParticipantVote(BaseModel):
@@ -362,6 +438,11 @@ class MonthlyPaymentSummary(BaseModel):
     total_outstanding: int
     total_refund: int
     gatherings: list[GatheringPaymentSummary] = []
+    # 오테식 모임 코트비 (회비 지출)
+    court_total: int = 0
+    court_reimbursed: int = 0
+    court_pending: int = 0
+    court_bookings: list[CourtBookingRead] = []
 
 
 class MyPaymentDue(BaseModel):
@@ -370,8 +451,9 @@ class MyPaymentDue(BaseModel):
     gathering_id: int
     title: str
     event_date: date
+    kind: GatheringKind = GatheringKind.FLASH
     amount: int           # 낼 금액 (미입금이면 1인 금액, 일부 입금이면 차액)
-    per_person: int
+    per_person: int       # 1인 금액 (오테식 모임 게스트는 게스트비)
     partial: bool         # 이미 일부 입금했고 차액만 남은 경우
     bank: str | None = None
     account_number: str | None = None

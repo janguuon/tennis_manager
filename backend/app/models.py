@@ -9,6 +9,7 @@
 - Gathering     : 모임 (캘린더 기반 일정/코트)
 - Participant   : 모임 참여자 + 참석/불참 투표 상태
 - Draw / DrawMatch : 모임 참여자 기반 자동/수동 대진표
+- CourtBooking  : 오테식 모임의 코트 예약 내역 (예약자가 낸 코트비를 회비에서 돌려줌)
 
 설계 핵심
 ---------
@@ -74,11 +75,14 @@ class ApprovalStatus(str, enum.Enum):
 
 
 class MemberType(str, enum.Enum):
-    """회원 구분. 일정이 보이는 시점이 다르다 (app/visibility.py)."""
+    """
+    회원 구분 (회칙 제3조). 관리자(is_admin)와 별개로 관리자가 지정한다.
+    일정이 보이는 시점(app/visibility.py)과 정산 권한·금액이 다르다.
+    """
 
-    OFFICER = "officer"   # 임원진: 등록 즉시 보임
+    OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개 생성, 코트비 지급 처리
     MEMBER = "member"     # 정회원: 해당 주 월요일 0시부터
-    GUEST = "guest"       # 게스트: 모임 3일 전 0시부터 (정회원 공개 이후)
+    GUEST = "guest"       # 게스트: 모임 3일 전 0시부터, 오테식 모임 참석 시 게스트비
 
 
 class AttendanceStatus(str, enum.Enum):
@@ -94,6 +98,17 @@ class GatheringStatus(str, enum.Enum):
     ONGOING = "ongoing"       # 진행중
     COMPLETED = "completed"   # 완료
     CANCELED = "canceled"     # 취소
+
+
+class GatheringKind(str, enum.Enum):
+    """모임 종류. 종류에 따라 정산 방식이 다르다."""
+
+    CLUB_REGULAR = "club_regular"  # 오테식 정모: 회비에서 지출 (코트비는 예약자에게 돌려줌)
+    CLUB_FLASH = "club_flash"      # 오테식 벙개: 회비에서 지출
+    FLASH = "flash"                # 일반 벙개: 코트비 + 캔볼값을 참석자끼리 n빵
+
+
+CLUB_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH)
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +144,11 @@ class User(Base):
         Enum(MemberType), default=MemberType.MEMBER, server_default=MemberType.MEMBER.name
     )
 
+    # 코트비 등을 돌려받을 계좌 (본인과 관리자·임원진에게만 공개)
+    bank: Mapped[str | None] = mapped_column(String(50))
+    account_number: Mapped[str | None] = mapped_column(String(50))
+    account_holder: Mapped[str | None] = mapped_column(String(50))
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -137,6 +157,11 @@ class User(Base):
     # 관계
     match_links: Mapped[list[MatchPlayer]] = relationship(back_populates="user")
     participations: Mapped[list[Participant]] = relationship(back_populates="user")
+
+    @property
+    def is_staff(self) -> bool:
+        """관리자 또는 임원진: 오테식 모임 생성, 코트비 지급 처리."""
+        return self.is_admin or self.member_type == MemberType.OFFICER
 
 
 # ---------------------------------------------------------------------------
@@ -222,8 +247,17 @@ class Gathering(Base):
     court_numbers: Mapped[str | None] = mapped_column(String(200))
     max_participants: Mapped[int | None] = mapped_column(Integer)
 
-    # 1인 참가비(원). 0이면 무료. 모임별 회비 정산에 사용.
+    kind: Mapped[GatheringKind] = mapped_column(
+        Enum(GatheringKind), default=GatheringKind.FLASH, server_default=GatheringKind.FLASH.name
+    )
+
+    # 일반 벙개: 참석자끼리 n빵할 총액. 코트비·캔볼값을 입력하면 둘의 합으로 맞춘다.
+    # (오테식 모임은 회비에서 지출하므로 0)
     fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    court_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ball_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # 오테식 모임: 게스트 1인 참가비 (회칙 제17조). 일반 벙개는 0.
+    guest_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # 입금 계좌 (참가자 공개) — 은행/계좌번호/예금주
     bank: Mapped[str | None] = mapped_column(String(50))
     account_number: Mapped[str | None] = mapped_column(String(50))
@@ -247,6 +281,42 @@ class Gathering(Base):
     draws: Mapped[list[Draw]] = relationship(
         back_populates="gathering", cascade="all, delete-orphan"
     )
+    court_bookings: Mapped[list[CourtBooking]] = relationship(
+        back_populates="gathering", cascade="all, delete-orphan", order_by="CourtBooking.id"
+    )
+
+    @property
+    def is_club(self) -> bool:
+        """오테식 정모·벙개: 회비에서 지출하는 모임."""
+        return self.kind in CLUB_KINDS
+
+
+class CourtBooking(Base):
+    """
+    오테식 모임의 코트 예약 1건.
+
+    코트를 잡은 회원이 코트비를 먼저 내고, 총무(관리자·임원진)가 회비에서 돌려준다.
+    한 모임에 예약자가 여러 명일 수 있어(코트마다 다른 사람) 모임과 분리했다.
+    """
+
+    __tablename__ = "court_bookings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    gathering_id: Mapped[int] = mapped_column(
+        ForeignKey("gatherings.id"), nullable=False, index=True
+    )
+    booker_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    court_label: Mapped[str | None] = mapped_column(String(50))  # 예: "3번 코트"
+
+    # 지급 처리: 시각과 처리한 사람. 미지급이면 NULL.
+    reimbursed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reimbursed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    gathering: Mapped[Gathering] = relationship(back_populates="court_bookings")
+    booker: Mapped[User] = relationship(foreign_keys=[booker_id])
+    reimburser: Mapped[User | None] = relationship(foreign_keys=[reimbursed_by])
 
 
 class Participant(Base):

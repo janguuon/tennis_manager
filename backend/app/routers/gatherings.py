@@ -1,8 +1,13 @@
 """
-모임/캘린더 라우터: 모임 CRUD, 캘린더 조회, 참석 투표.
+모임/캘린더 라우터: 모임 CRUD, 캘린더 조회, 참석 투표, 참가비 정산.
 
 코트 면 수(court_count)는 모임 단위로 등록되며, 이후 대진 자동생성에서
 한 라운드의 동시 진행 매치 수로 사용된다.
+
+정산은 모임 종류(kind)에 따라 다르다.
+- 일반 벙개: 코트비 + 캔볼값을 참석자끼리 n빵
+- 오테식 정모·벙개: 회비에서 지출. 회원은 낼 돈이 없고 게스트만 게스트비를 낸다.
+  코트비는 예약자(CourtBooking)에게 총무가 돌려준다 (routers/court_bookings.py).
 """
 import io
 from datetime import date, datetime, time, timedelta
@@ -11,15 +16,29 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import visibility
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import AttendanceStatus, Gathering, GatheringStatus, Participant, User
+from ..models import (
+    CLUB_KINDS,
+    ApprovalStatus,
+    AttendanceStatus,
+    CourtBooking,
+    Gathering,
+    GatheringKind,
+    GatheringStatus,
+    Participant,
+    MemberType,
+    User,
+)
 from ..schemas import (
+    GUEST_FEE_DEFAULT,
     AttendanceSummary,
+    BookerAccount,
+    CourtBookingRead,
     GatheringCreate,
     GatheringDetail,
     GatheringImportResult,
@@ -42,20 +61,35 @@ router = APIRouter(prefix="/gatherings", tags=["gatherings"])
 IMPORT_HEADER_MAP = {
     "날짜": "event_date",
     "제목": "title",
+    "종류": "kind",
     "시작시간": "start_time",
     "종료시간": "end_time",
     "장소": "location",
     "코트번호": "court_numbers",
     "최대인원": "max_participants",
-    "참가비": "fee",
+    "코트비": "court_fee",
+    "캔볼값": "ball_fee",
+    "게스트비": "guest_fee",
+    "참가비": "fee",  # 예전 양식(총액 한 칸) 호환
     "은행": "bank",
     "계좌번호": "account_number",
     "예금주": "account_holder",
     "설명": "description",
 }
-IMPORT_COLUMNS = list(IMPORT_HEADER_MAP.keys())
+# 양식에 넣는 열 (예전 양식의 '참가비'는 업로드만 허용)
+IMPORT_COLUMNS = [k for k in IMPORT_HEADER_MAP if k != "참가비"]
 # 필드명 → 한국어 헤더 (오류 메시지 표기용)
 FIELD_TO_HEADER = {v: k for k, v in IMPORT_HEADER_MAP.items()}
+
+# 엑셀 '종류' 칸 → 모임 종류 (띄어쓰기 무시, 비워 두면 일반 벙개)
+KIND_LABELS = {
+    "오테식정모": GatheringKind.CLUB_REGULAR,
+    "정모": GatheringKind.CLUB_REGULAR,
+    "오테식벙개": GatheringKind.CLUB_FLASH,
+    "일반벙개": GatheringKind.FLASH,
+    "벙개": GatheringKind.FLASH,
+}
+INT_FIELDS = ("fee", "court_fee", "ball_fee", "guest_fee")
 
 
 # --- 내부 헬퍼 --------------------------------------------------------------
@@ -86,6 +120,7 @@ def _to_read(gathering: Gathering) -> GatheringRead:
     read = GatheringRead.model_validate(gathering)
     read.attendance = _summary(gathering)
     read.per_person = _per_person(gathering)
+    read.court_total = sum(b.amount for b in gathering.court_bookings)
     return _with_open_times(read, gathering)
 
 
@@ -97,6 +132,31 @@ def _require_open(gathering: Gathering, user: User) -> None:
             status.HTTP_403_FORBIDDEN,
             detail=f"아직 공개되지 않은 일정이에요. {visibility.format_open_at(opens)}부터 보고 투표할 수 있어요.",
         )
+
+
+def court_booking_read(b: CourtBooking, viewer: User) -> CourtBookingRead:
+    """코트 예약 응답. 예약자 계좌는 본인과 관리자·임원진에게만 보여준다."""
+    show_account = viewer.is_staff or viewer.id == b.booker_id
+    return CourtBookingRead(
+        id=b.id,
+        gathering_id=b.gathering_id,
+        gathering_title=b.gathering.title,
+        event_date=b.gathering.event_date,
+        kind=b.gathering.kind,
+        booker=UserBrief.model_validate(b.booker),
+        amount=b.amount,
+        court_label=b.court_label,
+        reimbursed=b.reimbursed_at is not None,
+        reimbursed_at=b.reimbursed_at,
+        reimbursed_by=UserBrief.model_validate(b.reimburser) if b.reimburser else None,
+        account=BookerAccount(
+            bank=b.booker.bank,
+            account_number=b.booker.account_number,
+            account_holder=b.booker.account_holder,
+        )
+        if show_account
+        else None,
+    )
 
 
 # --- 참가비 계산 -------------------------------------------------------------
@@ -116,41 +176,68 @@ def _attendees(gathering: Gathering) -> list[Participant]:
 
 
 def _per_person(gathering: Gathering) -> int:
-    """모임의 현재 1인 금액. 취소된 모임은 받을 돈이 없으므로 0."""
-    if gathering.status == GatheringStatus.CANCELED:
+    """일반 벙개의 현재 1인 금액. 취소된 모임과 오테식 모임(회비 지출)은 0."""
+    if gathering.status == GatheringStatus.CANCELED or gathering.is_club:
         return 0
     return per_person_fee(gathering.fee, len(_attendees(gathering)))
+
+
+def _nominal_due(gathering: Gathering, p: Participant, per_person: int) -> int:
+    """참석한다면 낼 금액: 일반 벙개는 1인 금액, 오테식 모임은 게스트만 게스트비."""
+    if gathering.status == GatheringStatus.CANCELED:
+        return 0
+    if gathering.is_club:
+        return gathering.guest_fee if p.user.member_type == MemberType.GUEST else 0
+    return per_person
+
+
+def _has_payment(gathering: Gathering) -> bool:
+    """정산할 참가비가 있는지: 일반 벙개는 총액, 오테식 모임은 게스트 또는 입금 기록."""
+    if not gathering.is_club:
+        return gathering.fee > 0
+    return any(p.paid for p in gathering.participants) or (
+        gathering.guest_fee > 0
+        and any(p.user.member_type == MemberType.GUEST for p in gathering.participants)
+    )
 
 
 def _payment_breakdown(gathering: Gathering) -> dict:
     """
     모임 1건의 사람별 정산 내역.
 
-    - 참석자: 1인 금액보다 덜 냈으면 dues(받을 돈), 더 냈으면 refunds(돌려줄 돈)
+    - 참석자: 낼 금액보다 덜 냈으면 dues(받을 돈), 더 냈으면 refunds(돌려줄 돈)
     - 입금 후 불참/취소: 낸 금액 전부 refunds
-    입금 금액이 없는 옛 기록(paid_amount 없음)은 현재 1인 금액을 낸 것으로 본다.
+    입금 금액이 없는 옛 기록(paid_amount 없음)은 현재 낼 금액을 낸 것으로 본다.
     """
     per_person = _per_person(gathering)
     dues: list[tuple[Participant, int]] = []
     refunds: list[tuple[Participant, int]] = []
     collected = 0
     paid_count = 0
+    payer_count = 0
+    expected = 0
     for p in gathering.participants:
-        paid = (p.paid_amount if p.paid_amount is not None else per_person) if p.paid else 0
+        nominal = _nominal_due(gathering, p, per_person)
+        paid = (p.paid_amount if p.paid_amount is not None else nominal) if p.paid else 0
         if p.status == AttendanceStatus.ATTENDING:
             collected += paid
-            paid_count += 1 if p.paid else 0
-            if paid < per_person:
-                dues.append((p, per_person - paid))
-            elif paid > per_person:
-                refunds.append((p, paid - per_person))
+            if nominal > 0:
+                payer_count += 1
+                expected += nominal
+                paid_count += 1 if p.paid else 0
+            if paid < nominal:
+                dues.append((p, nominal - paid))
+            elif paid > nominal:
+                refunds.append((p, paid - nominal))
         elif p.paid and paid > 0:
             refunds.append((p, paid))
     return {
         "per_person": per_person,
         "attending": len(_attendees(gathering)),
+        "payer_count": payer_count,
         "paid_count": paid_count,
         "collected": collected,
+        "expected": expected,
         "dues": dues,
         "refunds": refunds,
     }
@@ -168,23 +255,33 @@ def _payment_summary(gathering: Gathering) -> GatheringPaymentSummary:
         title=gathering.title,
         event_date=gathering.event_date,
         status=gathering.status,
+        kind=gathering.kind,
         fee=gathering.fee,
         per_person=b["per_person"],
+        guest_fee=gathering.guest_fee,
         attending=b["attending"],
+        payer_count=b["payer_count"],
         paid_count=b["paid_count"],
         collected=b["collected"],
-        expected=b["per_person"] * b["attending"],
+        expected=b["expected"],
         outstanding=sum(a for _, a in b["dues"]),
         dues=_lines(b["dues"]),
         refunds=_lines(b["refunds"]),
     )
 
 
+def gathering_load_options():
+    """모임 조회 시 함께 읽을 관계: 참석자, 코트 예약(예약자·지급 처리자)."""
+    return (
+        selectinload(Gathering.participants).selectinload(Participant.user),
+        selectinload(Gathering.court_bookings).selectinload(CourtBooking.booker),
+        selectinload(Gathering.court_bookings).selectinload(CourtBooking.reimburser),
+    )
+
+
 def _load_gathering(db: Session, gathering_id: int) -> Gathering:
     g = db.scalar(
-        select(Gathering)
-        .where(Gathering.id == gathering_id)
-        .options(selectinload(Gathering.participants).selectinload(Participant.user))
+        select(Gathering).where(Gathering.id == gathering_id).options(*gathering_load_options())
     )
     if not g:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
@@ -192,8 +289,44 @@ def _load_gathering(db: Session, gathering_id: int) -> Gathering:
 
 
 def _require_organizer(gathering: Gathering, user: User) -> None:
-    if gathering.created_by != user.id and not user.is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
+    """주최자·관리자만. 오테식 모임은 클럽 일정이라 임원진도 관리할 수 있다."""
+    if gathering.created_by == user.id or user.is_admin:
+        return
+    if gathering.is_club and user.is_staff:
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
+
+
+def _require_club_creator(kind: GatheringKind, user: User) -> None:
+    if kind in CLUB_KINDS and not user.is_staff:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="오테식 정모·벙개는 관리자와 임원진만 만들 수 있습니다.",
+        )
+
+
+def require_booker(db: Session, user_id: int) -> User:
+    """코트 예약자는 승인된 활성 회원이어야 한다."""
+    user = db.get(User, user_id)
+    if not user or not user.is_active or user.approval_status != ApprovalStatus.APPROVED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="코트 예약자를 찾을 수 없습니다.")
+    return user
+
+
+def _apply_kind_rules(g: Gathering) -> None:
+    """
+    종류별 금액 정리.
+    - 일반 벙개: 코트비·캔볼값을 입력했으면 n빵 총액 = 코트비 + 캔볼값. 게스트비는 없음.
+    - 오테식 모임: 회비에서 지출하므로 n빵 금액이 없다(코트비는 예약 내역으로 관리).
+    """
+    if g.is_club:
+        g.fee = 0
+        g.court_fee = 0
+        g.ball_fee = 0
+    else:
+        g.guest_fee = 0
+        if g.court_fee or g.ball_fee:
+            g.fee = g.court_fee + g.ball_fee
 
 
 def _normalize_courts(data: dict) -> None:
@@ -222,10 +355,21 @@ def create_gathering(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """모임 생성 (캘린더에 일정 등록)."""
+    """모임 생성 (캘린더에 일정 등록). 오테식 정모·벙개는 관리자·임원진만."""
     data = payload.model_dump()
+    bookings = data.pop("court_bookings")
+    _require_club_creator(data["kind"], current_user)
+    if bookings and data["kind"] not in CLUB_KINDS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="코트 예약 내역은 오테식 정모·벙개에만 등록할 수 있습니다.",
+        )
     _normalize_courts(data)
     gathering = Gathering(**data, created_by=current_user.id)
+    _apply_kind_rules(gathering)
+    for b in bookings:
+        require_booker(db, b["booker_id"])
+        gathering.court_bookings.append(CourtBooking(**b))
     db.add(gathering)
     db.commit()
     return _to_read(_load_gathering(db, gathering.id))
@@ -248,9 +392,16 @@ def _cell_value(field: str, value) -> str | int:
         return str(value).strip()
     if field == "max_participants":
         return int(value)
-    if field == "fee":
+    if field in INT_FIELDS:
         # "5,000" 같은 콤마 표기나 5000.0 float 도 허용
         return int(float(str(value).replace(",", "").strip()))
+    if field == "kind":
+        key = str(value).replace(" ", "").strip()
+        if key in KIND_LABELS:
+            return KIND_LABELS[key].value
+        if key in {k.value for k in GatheringKind}:
+            return key
+        raise ValueError("종류: 오테식 정모 / 오테식 벙개 / 일반 벙개 중 하나로 적어 주세요.")
     if field == "account_number":
         # 엑셀이 계좌번호를 숫자로 인식(예: 1234567890.0)해도 정수 문자열로 보정
         if isinstance(value, float) and value.is_integer():
@@ -304,9 +455,13 @@ async def import_gatherings(
                     continue
                 data[field] = _cell_value(field, value)
             payload = GatheringCreate(**data)  # pydantic 검증/타입 변환 재사용
-            d = payload.model_dump()
+            if payload.kind in CLUB_KINDS and not current_user.is_staff:
+                raise ValueError("오테식 정모·벙개는 관리자와 임원진만 등록할 수 있습니다.")
+            d = payload.model_dump(exclude={"court_bookings"})
             _normalize_courts(d)
-            db.add(Gathering(**d, created_by=current_user.id))
+            gathering = Gathering(**d, created_by=current_user.id)
+            _apply_kind_rules(gathering)
+            db.add(gathering)
             created += 1
         except ValidationError as ve:
             parts = []
@@ -329,9 +484,14 @@ def import_template(_: User = Depends(get_current_user)):
     ws = wb.active
     ws.title = "모임목록"
     ws.append(IMPORT_COLUMNS)
+    # 예시: 오테식 정모(회비 지출, 게스트비) / 일반 벙개(코트비 + 캔볼값 n빵)
     ws.append([
-        "2026-07-05", "정기 모임", "09:00", "12:00", "시민 테니스장", "3, 5", 16,
-        5000, "국민", "123-456-7890", "홍길동", "비고 예시",
+        "2026-07-05", "토요 정모", "오테식 정모", "09:00", "12:00", "시민 테니스장", "3, 5", 12,
+        None, None, 5000, "국민", "123-456-7890", "총무", "코트 예약자는 모임 화면에서 등록",
+    ])
+    ws.append([
+        "2026-07-08", "평일 저녁 벙개", "일반 벙개", "19:00", "21:00", "시민 테니스장", "2", 6,
+        40000, 8000, None, "카카오", "3333-01-2345678", "홍길동", None,
     ])
     # 계좌번호 열은 텍스트 서식으로(숫자 자동 인식·0 누락 방지)
     acct_col = get_column_letter(IMPORT_COLUMNS.index("계좌번호") + 1)
@@ -356,9 +516,7 @@ def list_gatherings(
     date_to: date | None = Query(None, description="캘린더 조회 종료일"),
 ):
     """캘린더 조회: 기간으로 모임 목록을 가져온다(참석 요약 포함)."""
-    stmt = select(Gathering).options(
-        selectinload(Gathering.participants).selectinload(Participant.user)
-    )
+    stmt = select(Gathering).options(*gathering_load_options())
     if date_from is not None:
         stmt = stmt.where(Gathering.event_date >= date_from)
     if date_to is not None:
@@ -375,15 +533,13 @@ def get_gathering(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """모임 상세 (참여자 명단 포함)."""
+    """모임 상세 (참여자 명단, 정산, 코트 예약 내역 포함)."""
     g = _load_gathering(db, gathering_id)
     _require_open(g, current_user)
-    detail = GatheringDetail.model_validate(g)
-    detail.attendance = _summary(g)
-    detail.per_person = _per_person(g)
+    detail = GatheringDetail.model_validate(_to_read(g).model_dump())
     detail.participants = [ParticipantRead.model_validate(p) for p in g.participants]
-    detail.payment = _payment_summary(g) if g.fee > 0 else None
-    _with_open_times(detail, g)
+    detail.payment = _payment_summary(g) if _has_payment(g) else None
+    detail.court_bookings = [court_booking_read(b, current_user) for b in g.court_bookings]
     return detail
 
 
@@ -397,9 +553,33 @@ def update_gathering(
     g = _load_gathering(db, gathering_id)
     _require_organizer(g, current_user)
     data = payload.model_dump(exclude_unset=True)
+    # 비울 수 없는 칸은 null이면 무시
+    for key in ("kind", "fee", "court_fee", "ball_fee", "guest_fee"):
+        if key in data and data[key] is None:
+            del data[key]
+
+    new_kind = data.get("kind")
+    if new_kind is not None and new_kind != g.kind:
+        _require_club_creator(new_kind, current_user)
+        # 일반 벙개 ↔ 오테식 모임은 정산 방식이 달라 정리할 기록이 없을 때만 바꾼다
+        if (new_kind in CLUB_KINDS) != g.is_club:
+            if any(p.paid for p in g.participants):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail="입금 기록이 있는 모임은 종류를 바꿀 수 없습니다. 입금 기록을 먼저 정리해 주세요.",
+                )
+            if g.court_bookings:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail="코트 예약 내역이 있는 모임은 종류를 바꿀 수 없습니다. 예약 내역을 먼저 지워 주세요.",
+                )
+            if new_kind in CLUB_KINDS:
+                data.setdefault("guest_fee", GUEST_FEE_DEFAULT)
+
     _normalize_courts(data)
     for field_name, value in data.items():
         setattr(g, field_name, value)
+    _apply_kind_rules(g)
     db.commit()
     return _to_read(_load_gathering(db, gathering_id))
 
@@ -412,6 +592,11 @@ def delete_gathering(
 ):
     g = _load_gathering(db, gathering_id)
     _require_organizer(g, current_user)
+    if any(b.reimbursed_at for b in g.court_bookings):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="코트비를 지급한 모임은 삭제할 수 없습니다. 모임을 취소 상태로 바꿔 주세요.",
+        )
     db.delete(g)
     db.commit()
 
@@ -536,10 +721,11 @@ def set_payment(
     current_user: User = Depends(get_current_user),
 ):
     """
-    참가비 입금/미입금 처리. 주최자 또는 관리자만 가능.
+    참가비 입금/미입금 처리. 주최자 또는 관리자(오테식 모임은 임원진도)만 가능.
 
-    - paid=true : 참석자만 가능. 현재 1인 금액을 입금 금액으로 기록한다.
-                  이미 입금한 사람에게 다시 보내면 차액 정산 완료(금액을 현재 1인 금액으로 갱신).
+    - paid=true : 낼 돈이 있는 참석자만 가능. 현재 낼 금액을 입금 금액으로 기록한다.
+                  (일반 벙개는 1인 금액, 오테식 모임은 게스트비)
+                  이미 입금한 사람에게 다시 보내면 차액 정산 완료(금액을 현재 낼 금액으로 갱신).
     - paid=false: 누구든 가능(입금 취소, 환불 완료). 기록을 지운다.
     """
     gathering = _load_gathering(db, gathering_id)
@@ -552,11 +738,16 @@ def set_payment(
     if payload.paid:
         if participant.status != AttendanceStatus.ATTENDING:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="참석자만 입금 처리할 수 있습니다.")
-        per_person = _per_person(gathering)
-        if per_person <= 0:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="받을 참가비가 없는 모임입니다.")
+        due = _nominal_due(gathering, participant, _per_person(gathering))
+        if due <= 0:
+            detail = (
+                "오테식 모임은 회비에서 지출해 게스트만 참가비를 냅니다."
+                if gathering.is_club
+                else "받을 참가비가 없는 모임입니다."
+            )
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=detail)
         participant.paid = True
-        participant.paid_amount = per_person
+        participant.paid_amount = due
         participant.paid_at = datetime.now()
     else:
         participant.paid = False
@@ -580,7 +771,7 @@ def my_payment_dues(
         .where(
             Participant.user_id == current_user.id,
             Participant.status == AttendanceStatus.ATTENDING,
-            Gathering.fee > 0,
+            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS)),
             Gathering.status != GatheringStatus.CANCELED,
         )
         .options(selectinload(Gathering.participants).selectinload(Participant.user))
@@ -596,8 +787,9 @@ def my_payment_dues(
                         gathering_id=g.id,
                         title=g.title,
                         event_date=g.event_date,
+                        kind=g.kind,
                         amount=amount,
-                        per_person=b["per_person"],
+                        per_person=_nominal_due(g, p, b["per_person"]),
                         partial=p.paid,
                         bank=g.bank,
                         account_number=g.account_number,
@@ -613,7 +805,11 @@ def payment_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """한 달 모임들의 참가비 정산 집계. 참가비가 있는 모임만, 받을 돈·돌려줄 돈을 사람별로."""
+    """
+    한 달 정산 집계.
+    - 참가비: 받을 돈이 있는 모임만, 받을 돈·돌려줄 돈을 사람별로
+    - 회비 지출: 오테식 모임 코트비 (예약자별 지급 여부)
+    """
     try:
         year, mon = (int(x) for x in month.split("-"))
         first = date(year, mon, 1)
@@ -627,16 +823,21 @@ def payment_summary(
         .where(
             Gathering.event_date >= first,
             Gathering.event_date <= last,
-            Gathering.fee > 0,  # 무료 모임은 정산 대상 아님
+            # 무료 일반 벙개는 정산 대상 아님
+            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS)),
         )
-        .options(selectinload(Gathering.participants).selectinload(Participant.user))
+        .options(*gathering_load_options())
         .order_by(Gathering.event_date, Gathering.start_time)
     )
 
     summaries: list[GatheringPaymentSummary] = []
     now = visibility.now_kst()
+    bookings: list[CourtBookingRead] = []
     for g in db.scalars(stmt).all():
         if not visibility.is_open_for(current_user, g, now):
+            continue
+        bookings.extend(court_booking_read(b, current_user) for b in g.court_bookings)
+        if not _has_payment(g):
             continue
         s = _payment_summary(g)
         # 취소된 모임은 돌려줄 돈이 있을 때만 표시
@@ -644,6 +845,8 @@ def payment_summary(
             continue
         summaries.append(s)
 
+    court_total = sum(b.amount for b in bookings)
+    court_reimbursed = sum(b.amount for b in bookings if b.reimbursed)
     return MonthlyPaymentSummary(
         month=month,
         total_expected=sum(s.expected for s in summaries),
@@ -651,4 +854,8 @@ def payment_summary(
         total_outstanding=sum(s.outstanding for s in summaries),
         total_refund=sum(r.amount for s in summaries for r in s.refunds),
         gatherings=summaries,
+        court_total=court_total,
+        court_reimbursed=court_reimbursed,
+        court_pending=court_total - court_reimbursed,
+        court_bookings=bookings,
     )

@@ -73,6 +73,14 @@ class Club:
     def my_dues(self, name: str) -> list[dict]:
         return self.c.get("/gatherings/payments/me", headers=self.headers[name]).json()
 
+    def h(self, name: str | None) -> dict:
+        """이름으로 인증 헤더 (None이면 관리자)."""
+        return self.headers[name] if name else self.admin
+
+    def create(self, as_: str | None = None, **body):
+        body = {"title": "모임", "event_date": FAR_DATE, **body}
+        return self.c.post("/gatherings", json=body, headers=self.h(as_))
+
 
 @pytest.fixture(autouse=True)
 def fixed_now(monkeypatch):

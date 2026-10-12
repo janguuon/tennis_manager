@@ -23,6 +23,7 @@ import {
   Lock,
   MapPin,
   Pencil,
+  Plus,
   Scale,
   Send,
   Share2,
@@ -34,20 +35,25 @@ import { useEffect, useState } from "react";
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
+import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
+import { KIND_LABEL, isClubKind, isStaff } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
+import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao } from "~/lib/kakao";
 import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
 import {
   MATCH_TYPE_LABEL,
   type AttendanceStatus,
+  type CourtBooking,
   type Draw,
   type DrawMatch,
   type GatheringDetail,
-  type User,
+  type Me,
+  type UserBrief,
 } from "~/lib/types";
 
 export const meta: MetaFunction = () => [
@@ -63,11 +69,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   const id = params.id;
   try {
-    const [gathering, draws] = await Promise.all([
+    const [gathering, draws, members] = await Promise.all([
       api<GatheringDetail>(`/gatherings/${id}`, { token }),
       api<Draw[]>(`/gatherings/${id}/draws`, { token }),
+      // 코트 예약자 선택용
+      api<UserBrief[]>("/users", { token }),
     ]);
-    return json({ gathering, draws });
+    return json({ gathering, draws, members });
   } catch (err) {
     // 아직 공개 전(403)이거나 지워진(404) 모임은 안내 화면으로
     if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
@@ -135,6 +143,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
           body: { paid: formData.get("paid") === "true" },
         }
       );
+    } else if (intent === "add_booking") {
+      await api(`/gatherings/${id}/court-bookings`, {
+        method: "POST",
+        token,
+        body: {
+          booker_id: Number(formData.get("booker_id")),
+          amount: Number(formData.get("amount") || 0),
+          court_label: String(formData.get("court_label") || "").trim() || null,
+        },
+      });
+    } else if (intent === "reimburse") {
+      await api(`/court-bookings/${formData.get("booking_id")}/reimbursement`, {
+        method: "PUT",
+        token,
+        body: { reimbursed: formData.get("reimbursed") === "true" },
+      });
+    } else if (intent === "delete_booking") {
+      await api(`/court-bookings/${formData.get("booking_id")}`, {
+        method: "DELETE",
+        token,
+      });
     } else if (intent === "delete_draw") {
       await api(`/draws/${formData.get("draw_id")}`, {
         method: "DELETE",
@@ -170,10 +199,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
             : Number(get("court_count") || 1),
           max_participants: maxParticipants ? Number(maxParticipants) : null,
-          fee: get("fee") ? Number(get("fee")) : 0,
-          bank: get("bank") || null,
-          account_number: get("account_number") || null,
-          account_holder: get("account_holder") || null,
+          ...feeFieldsFromForm(formData),
           description: get("description") || null,
           status: get("status"),
         },
@@ -201,11 +227,15 @@ const VOTE_LABEL: Record<AttendanceStatus, string> = {
 };
 
 export default function GatheringDetailPage() {
-  const { gathering, draws } = useLoaderData<typeof loader>();
+  const { gathering, draws, members } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const { user } = useOutletContext<{ user: User }>();
-  const isOrganizer = gathering.created_by === user.id || user.is_admin;
+  const { user } = useOutletContext<{ user: Me }>();
+  const club = isClubKind(gathering.kind);
+  const staff = isStaff(user);
+  // 주최자·관리자. 오테식 모임은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
+  const isOrganizer =
+    gathering.created_by === user.id || user.is_admin || (club && staff);
   const [editing, setEditing] = useState(false);
   // 등록된 실제 코트 번호 ("3, 5" → ["3","5"]). 대진의 코트 순번을 실제 번호로 변환하는 데 사용.
   const courtLabels = gathering.court_numbers
@@ -269,6 +299,32 @@ export default function GatheringDetailPage() {
   const myAttending = me?.status === "attending";
   const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
   const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
+  // 낼 돈이 있는 참석자: 일반 벙개는 전원, 오테식 모임은 게스트(이미 입금 기록이 있는 사람 포함)
+  const payers = club
+    ? attendees.filter((p) => p.user.member_type === "guest" || p.paid)
+    : attendees;
+  const myNominal = !me
+    ? 0
+    : club
+    ? me.user.member_type === "guest"
+      ? gathering.guest_fee
+      : 0
+    : perPerson;
+  const feeBreakdown =
+    gathering.court_fee || gathering.ball_fee
+      ? `코트 ${won(gathering.court_fee)} + 볼 ${won(gathering.ball_fee)}`
+      : won(gathering.fee);
+  // 일반 벙개 ↔ 오테식 모임 전환은 정리할 기록이 없을 때만 (서버 규칙과 같음)
+  const switchBlock = gathering.participants.some((p) => p.paid)
+    ? "입금 기록이 있어요"
+    : gathering.court_bookings.length
+    ? "코트 예약이 있어요"
+    : undefined;
+  const kindLocks = switchBlock
+    ? club
+      ? { flash: switchBlock }
+      : { club_regular: switchBlock, club_flash: switchBlock }
+    : {};
   const account = accountText(gathering);
   const dateLine = `📅 ${gathering.event_date}${
     gathering.start_time ? ` ${gathering.start_time.slice(0, 5)}` : ""
@@ -277,7 +333,7 @@ export default function GatheringDetailPage() {
 
   // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
   const shareBase = [
-    `🎾 ${gathering.title}`,
+    `🎾 [${KIND_LABEL[gathering.kind]}] ${gathering.title}`,
     dateLine,
     gathering.location ? `📍 ${gathering.location}` : "",
     `🟩 코트 ${
@@ -285,7 +341,13 @@ export default function GatheringDetailPage() {
         ? `${gathering.court_numbers} (${gathering.court_count}면)`
         : `${gathering.court_count}면`
     }`,
-    gathering.fee > 0
+    club
+      ? `💸 회비 지출${
+          gathering.guest_fee > 0
+            ? ` (게스트 참가비 ${won(gathering.guest_fee)})`
+            : ""
+        }`
+      : gathering.fee > 0
       ? `💰 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})`
       : "",
     account ? `🏦 ${account}` : "",
@@ -295,9 +357,9 @@ export default function GatheringDetailPage() {
 
   // 총무용 미입금 안내 메시지
   const remindBase = [
-    `💰 ${gathering.title} 참가비 안내`,
+    `💰 ${gathering.title} ${club ? "게스트비" : "참가비"} 안내`,
     dateLine,
-    `1인 ${won(perPerson)}`,
+    club ? `게스트 1인 ${won(gathering.guest_fee)}` : `1인 ${won(perPerson)}`,
     account ? `🏦 ${account}` : "",
   ]
     .filter(Boolean)
@@ -321,7 +383,7 @@ export default function GatheringDetailPage() {
       : ""
   }`;
   const showSegments = payment
-    ? payment.attending > 0 && payment.attending <= 20
+    ? payment.payer_count > 0 && payment.payer_count <= 20
     : false;
 
   return (
@@ -406,9 +468,12 @@ export default function GatheringDetailPage() {
 
       <div className="detail-top-grid">
         <section className="tile-orange min-h-[285px] sm:p-7">
-          <div className="relative z-10 flex items-center justify-between gap-3">
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
             <Eyebrow>OUR NEXT GATHERING</Eyebrow>
-            <span className="chip-white !bg-white/25">{statusText}</span>
+            <span className="flex flex-wrap gap-1.5">
+              <span className="chip-ink">{KIND_LABEL[gathering.kind]}</span>
+              <span className="chip-white !bg-white/25">{statusText}</span>
+            </span>
           </div>
           <p className="relative z-10 mt-5 font-display text-[64px] font-bold leading-none tracking-[-0.06em] sm:text-[76px]">
             {em}.{String(ed).padStart(2, "0")}
@@ -430,9 +495,16 @@ export default function GatheringDetailPage() {
                 : `코트 ${gathering.court_count}면`}{" "}
               · 총 {gathering.court_count}면
             </p>
-            {gathering.fee > 0 && (
-              <p className="pl-6">코트비 총 {won(gathering.fee)}</p>
-            )}
+            {club ? (
+              <p className="pl-6">
+                회비 지출
+                {gathering.court_total > 0
+                  ? ` · 코트비 ${won(gathering.court_total)}`
+                  : ""}
+              </p>
+            ) : gathering.fee > 0 ? (
+              <p className="pl-6">참가비 총 {feeBreakdown}</p>
+            ) : null}
           </div>
           <BallBasket className="pointer-events-none absolute bottom-5 right-4 w-24 opacity-90 sm:right-7 sm:w-32" />
         </section>
@@ -508,7 +580,9 @@ export default function GatheringDetailPage() {
 
       <div className="detail-bottom-grid">
         <section
-          className={`card detail-attendees ${payment ? "" : "lg:col-span-2"}`}
+          className={`card detail-attendees ${
+            club || payment ? "" : "lg:col-span-2"
+          }`}
         >
           <h2 className="section-title">함께하는 식구들</h2>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -569,261 +643,290 @@ export default function GatheringDetailPage() {
           )}
         </section>
 
-        {/* 참가비 (금액은 모두 서버 계산값) */}
-        {payment ? (
-          <section className="tile-yellow detail-payments space-y-4">
-            <Eyebrow>MATCH DUES</Eyebrow>
-            <div className="detail-payment-heading">
-              <div className="min-w-0">
-                <h2 className="tile-title">참가비 정산</h2>
-                <p className="tile-sub">
-                  {gathering.status === "canceled"
-                    ? "취소된 모임이라 받을 돈이 없어요"
-                    : payment.attending > 0
-                    ? `${won(gathering.fee)} ÷ ${payment.attending}명`
-                    : "참석자가 정해지면 계산돼요"}
-                </p>
-              </div>
-              <p className="shrink-0 font-display text-[30px] font-extrabold leading-none tracking-[-0.05em] sm:text-[34px]">
-                {won(perPerson)}
-              </p>
-            </div>
-
-            <div>
-              {showSegments ? (
-                <div className="seg">
-                  {Array.from({ length: payment.attending }, (_, i) => (
-                    <i key={i} className={i < payment.paid_count ? "on" : ""} />
-                  ))}
+        {club || payment ? (
+          <div className="detail-payments space-y-4">
+            {/* 오테식 모임: 회비 지출(코트비 지급) */}
+            {club ? (
+              <CourtExpenseTile
+                total={gathering.court_total}
+                bookings={gathering.court_bookings}
+                members={members}
+                staff={staff}
+                userId={user.id}
+              />
+            ) : null}
+            {/* 참가비 (금액은 모두 서버 계산값). 오테식 모임은 게스트비 */}
+            {payment ? (
+              <section className="tile-yellow space-y-4">
+                <Eyebrow>{club ? "GUEST FEE" : "MATCH DUES"}</Eyebrow>
+                <div className="detail-payment-heading">
+                  <div className="min-w-0">
+                    <h2 className="tile-title">
+                      {club ? "게스트비 정산" : "참가비 정산"}
+                    </h2>
+                    <p className="tile-sub">
+                      {gathering.status === "canceled"
+                        ? "취소된 모임이라 받을 돈이 없어요"
+                        : club
+                        ? payment.payer_count > 0
+                          ? `게스트 ${payment.payer_count}명 · 회원은 회비로 내요`
+                          : "참석한 게스트가 없어요"
+                        : payment.attending > 0
+                        ? `${feeBreakdown} ÷ ${payment.attending}명`
+                        : "참석자가 정해지면 계산돼요"}
+                    </p>
+                  </div>
+                  <p className="shrink-0 font-display text-[30px] font-extrabold leading-none tracking-[-0.05em] sm:text-[34px]">
+                    {won(club ? gathering.guest_fee : perPerson)}
+                  </p>
                 </div>
-              ) : (
-                <div className="h-2 overflow-hidden rounded-full bg-ink/15">
-                  <div
-                    className="h-full bg-ink"
-                    style={{ width: `${collectedPct}%` }}
-                  />
-                </div>
-              )}
-              <p className="mt-2 flex justify-between gap-2 text-[13.5px] font-bold">
-                <span>
-                  입금 {payment.paid_count} / {payment.attending}명
-                </span>
-                <span>
-                  {payment.collected.toLocaleString()} / {won(payment.expected)}
-                </span>
-              </p>
-            </div>
 
-            {/* 내 참가비 (참석한 회원 본인) */}
-            {myAttending && perPerson > 0 ? (
-              <div className="rounded-2xl bg-white/70 px-4 py-3.5">
-                <p className="text-xs font-bold">내 참가비</p>
-                {myDue > 0 ? (
-                  <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-display text-[24px] font-extrabold tracking-[-0.04em]">
-                      {won(myDue)}
+                <div>
+                  {showSegments ? (
+                    <div className="seg">
+                      {Array.from({ length: payment.payer_count }, (_, i) => (
+                        <i
+                          key={i}
+                          className={i < payment.paid_count ? "on" : ""}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-2 overflow-hidden rounded-full bg-ink/15">
+                      <div
+                        className="h-full bg-ink"
+                        style={{ width: `${collectedPct}%` }}
+                      />
+                    </div>
+                  )}
+                  <p className="mt-2 flex justify-between gap-2 text-[13.5px] font-bold">
+                    <span>
+                      입금 {payment.paid_count} / {payment.payer_count}명
                     </span>
-                    <span className="text-sm font-bold">
-                      {me?.paid ? "추가 입금이 필요해요" : "입금해 주세요"}
+                    <span>
+                      {payment.collected.toLocaleString()} /{" "}
+                      {won(payment.expected)}
                     </span>
+                  </p>
+                </div>
+
+                {/* 내 참가비 (참석한 회원 본인) */}
+                {myAttending && myNominal > 0 ? (
+                  <div className="rounded-2xl bg-white/70 px-4 py-3.5">
+                    <p className="text-xs font-bold">
+                      {club ? "내 게스트비" : "내 참가비"}
+                    </p>
+                    {myDue > 0 ? (
+                      <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
+                        <span className="font-display text-[24px] font-extrabold tracking-[-0.04em]">
+                          {won(myDue)}
+                        </span>
+                        <span className="text-sm font-bold">
+                          {me?.paid ? "추가 입금이 필요해요" : "입금해 주세요"}
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 flex items-center gap-1.5 text-base font-extrabold">
+                        <Check size={18} />
+                        입금 완료
+                        <span className="text-sm font-semibold">
+                          ({won(me?.paid_amount ?? myNominal)})
+                        </span>
+                      </p>
+                    )}
+                    {myRefund > 0 ? (
+                      <p className="mt-1 text-xs font-semibold">
+                        참석 인원이 늘어 {won(myRefund)}을 더 냈어요. 총무가
+                        돌려줄 예정이에요.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* 입금 계좌 */}
+                {gathering.account_number ? (
+                  <div className="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-3">
+                    <Landmark size={18} className="shrink-0" />
+                    <div className="min-w-0 flex-1 text-sm">
+                      <p className="text-xs font-bold">
+                        {[gathering.bank, gathering.account_holder]
+                          .filter(Boolean)
+                          .join(" · ") || "입금 계좌"}
+                      </p>
+                      <p className="break-all font-extrabold tabular-nums">
+                        {gathering.account_number}
+                      </p>
+                    </div>
+                    <CopyButton
+                      text={gathering.account_number}
+                      label="계좌 복사"
+                      tone="ink"
+                    />
+                  </div>
+                ) : null}
+
+                {/* 참석자별 입금 현황 (오테식 모임은 게스트만) */}
+                {payers.length === 0 ? (
+                  <p className="text-sm font-semibold">
+                    {club ? "참석한 게스트가 없어요." : "참석자가 없어요."}
                   </p>
                 ) : (
-                  <p className="mt-0.5 flex items-center gap-1.5 text-base font-extrabold">
-                    <Check size={18} />
-                    입금 완료
-                    <span className="text-sm font-semibold">
-                      ({won(me?.paid_amount ?? perPerson)})
-                    </span>
-                  </p>
+                  <ul className="tile-rows">
+                    {payers.map((p) => {
+                      const due = dueOf.get(p.user.id) ?? 0;
+                      const refund = refundOf.get(p.user.id) ?? 0;
+                      // 입금 뒤 참석 인원이 바뀌어 1인 금액과 입금 금액이 달라진 경우
+                      const note =
+                        p.paid && due > 0
+                          ? `${won(p.paid_amount ?? 0)} 입금 · ${won(
+                              due
+                            )} 더 받아야 해요`
+                          : p.paid && refund > 0
+                          ? `${won(p.paid_amount ?? 0)} 입금 · ${won(
+                              refund
+                            )} 돌려줘야 해요`
+                          : null;
+                      const badge = p.paid ? "chip-ink" : "chip-line";
+                      return (
+                        <li key={p.user.id}>
+                          <div className="min-w-0">
+                            <span className="font-bold">{p.user.name}</span>
+                            {p.user.id === user.id ? (
+                              <span className="ml-1 text-xs font-semibold">
+                                (나)
+                              </span>
+                            ) : null}
+                            {note ? (
+                              <p className="text-xs font-semibold">{note}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {isOrganizer && note ? (
+                              <Form method="post">
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="toggle_payment"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="user_id"
+                                  value={p.user.id}
+                                />
+                                <input type="hidden" name="paid" value="true" />
+                                <button
+                                  className="chip-white cursor-pointer transition-opacity hover:opacity-80"
+                                  title="차액을 주고받았으면 누르세요. 현재 1인 금액으로 기록됩니다."
+                                >
+                                  차액 정산
+                                </button>
+                              </Form>
+                            ) : null}
+                            {isOrganizer ? (
+                              <Form method="post">
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="toggle_payment"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="user_id"
+                                  value={p.user.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="paid"
+                                  value={p.paid ? "false" : "true"}
+                                />
+                                <button
+                                  className={`${badge} cursor-pointer transition-opacity hover:opacity-80`}
+                                >
+                                  {p.paid ? "입금" : "미입금"}
+                                </button>
+                              </Form>
+                            ) : (
+                              <span className={badge}>
+                                {p.paid ? "입금" : "미입금"}
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
-                {myRefund > 0 ? (
-                  <p className="mt-1 text-xs font-semibold">
-                    참석 인원이 늘어 {won(myRefund)}을 더 냈어요. 총무가 돌려줄
-                    예정이에요.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
 
-            {/* 입금 계좌 */}
-            {gathering.account_number ? (
-              <div className="flex items-center gap-3 rounded-2xl bg-white/70 px-4 py-3">
-                <Landmark size={18} className="shrink-0" />
-                <div className="min-w-0 flex-1 text-sm">
-                  <p className="text-xs font-bold">
-                    {[gathering.bank, gathering.account_holder]
-                      .filter(Boolean)
-                      .join(" · ") || "입금 계좌"}
-                  </p>
-                  <p className="break-all font-extrabold tabular-nums">
-                    {gathering.account_number}
-                  </p>
-                </div>
-                <CopyButton
-                  text={gathering.account_number}
-                  label="계좌 복사"
-                  tone="ink"
-                />
-              </div>
-            ) : null}
-
-            {/* 참석자별 입금 현황 */}
-            {attendees.length === 0 ? (
-              <p className="text-sm font-semibold">참석자가 없어요.</p>
-            ) : (
-              <ul className="tile-rows">
-                {attendees.map((p) => {
-                  const due = dueOf.get(p.user.id) ?? 0;
-                  const refund = refundOf.get(p.user.id) ?? 0;
-                  // 입금 뒤 참석 인원이 바뀌어 1인 금액과 입금 금액이 달라진 경우
-                  const note =
-                    p.paid && due > 0
-                      ? `${won(p.paid_amount ?? 0)} 입금 · ${won(
-                          due
-                        )} 더 받아야 해요`
-                      : p.paid && refund > 0
-                      ? `${won(p.paid_amount ?? 0)} 입금 · ${won(
-                          refund
-                        )} 돌려줘야 해요`
-                      : null;
-                  const badge = p.paid ? "chip-ink" : "chip-line";
-                  return (
-                    <li key={p.user.id}>
-                      <div className="min-w-0">
-                        <span className="font-bold">{p.user.name}</span>
-                        {p.user.id === user.id ? (
-                          <span className="ml-1 text-xs font-semibold">
-                            (나)
+                {/* 돌려줄 참가비: 입금 후 불참/취소 */}
+                {refundAbsentees.length > 0 ? (
+                  <div className="rounded-2xl bg-white/70 px-4 py-3">
+                    <p className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold">
+                      <Undo2 size={13} />
+                      돌려줄 참가비 (입금 후 불참)
+                    </p>
+                    <ul className="space-y-1.5 text-sm">
+                      {refundAbsentees.map((p) => (
+                        <li
+                          key={p.user.id}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="font-semibold">
+                            {p.user.name} · {won(refundOf.get(p.user.id) ?? 0)}
                           </span>
-                        ) : null}
-                        {note ? (
-                          <p className="text-xs font-semibold">{note}</p>
-                        ) : null}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {isOrganizer && note ? (
-                          <Form method="post">
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="toggle_payment"
-                            />
-                            <input
-                              type="hidden"
-                              name="user_id"
-                              value={p.user.id}
-                            />
-                            <input type="hidden" name="paid" value="true" />
-                            <button
-                              className="chip-white cursor-pointer transition-opacity hover:opacity-80"
-                              title="차액을 주고받았으면 누르세요. 현재 1인 금액으로 기록됩니다."
-                            >
-                              차액 정산
-                            </button>
-                          </Form>
-                        ) : null}
-                        {isOrganizer ? (
-                          <Form method="post">
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="toggle_payment"
-                            />
-                            <input
-                              type="hidden"
-                              name="user_id"
-                              value={p.user.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="paid"
-                              value={p.paid ? "false" : "true"}
-                            />
-                            <button
-                              className={`${badge} cursor-pointer transition-opacity hover:opacity-80`}
-                            >
-                              {p.paid ? "입금" : "미입금"}
-                            </button>
-                          </Form>
-                        ) : (
-                          <span className={badge}>
-                            {p.paid ? "입금" : "미입금"}
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            {/* 돌려줄 참가비: 입금 후 불참/취소 */}
-            {refundAbsentees.length > 0 ? (
-              <div className="rounded-2xl bg-white/70 px-4 py-3">
-                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-extrabold">
-                  <Undo2 size={13} />
-                  돌려줄 참가비 (입금 후 불참)
-                </p>
-                <ul className="space-y-1.5 text-sm">
-                  {refundAbsentees.map((p) => (
-                    <li
-                      key={p.user.id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span className="font-semibold">
-                        {p.user.name} · {won(refundOf.get(p.user.id) ?? 0)}
-                      </span>
-                      {isOrganizer ? (
-                        <Form method="post">
-                          <input
-                            type="hidden"
-                            name="intent"
-                            value="toggle_payment"
-                          />
-                          <input
-                            type="hidden"
-                            name="user_id"
-                            value={p.user.id}
-                          />
-                          <input type="hidden" name="paid" value="false" />
-                          <button className="chip-ink cursor-pointer transition-opacity hover:opacity-80">
-                            환불 완료
-                          </button>
-                        </Form>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {/* 총무 도구 */}
-            {isOrganizer ? (
-              <div className="space-y-2">
-                {payment.dues.length > 0 ? (
-                  <button
-                    type="button"
-                    className="btn-ink h-11 w-full"
-                    onClick={() =>
-                      shareToKakao({
-                        base: remindBase,
-                        names: payment.dues.map((d) => d.user.name),
-                        namesLabel: "🙏 미입금",
-                        path,
-                      })
-                    }
-                  >
-                    <Send size={15} />
-                    미입금 안내 보내기 ({payment.dues.length}명)
-                  </button>
+                          {isOrganizer ? (
+                            <Form method="post">
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="toggle_payment"
+                              />
+                              <input
+                                type="hidden"
+                                name="user_id"
+                                value={p.user.id}
+                              />
+                              <input type="hidden" name="paid" value="false" />
+                              <button className="chip-ink cursor-pointer transition-opacity hover:opacity-80">
+                                환불 완료
+                              </button>
+                            </Form>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
-                <p className="text-xs font-semibold">
-                  상태를 누르면 입금/미입금이 바뀌어요. 입금 처리하면 그때의 1인
-                  금액이 기록돼요. 1인 금액은 100원 단위로 올림해요.
-                </p>
-              </div>
+
+                {/* 총무 도구 */}
+                {isOrganizer ? (
+                  <div className="space-y-2">
+                    {payment.dues.length > 0 ? (
+                      <button
+                        type="button"
+                        className="btn-ink h-11 w-full"
+                        onClick={() =>
+                          shareToKakao({
+                            base: remindBase,
+                            names: payment.dues.map((d) => d.user.name),
+                            namesLabel: "🙏 미입금",
+                            path,
+                          })
+                        }
+                      >
+                        <Send size={15} />
+                        미입금 안내 보내기 ({payment.dues.length}명)
+                      </button>
+                    ) : null}
+                    <p className="text-xs font-semibold">
+                      {club
+                        ? "상태를 누르면 입금/미입금이 바뀌어요. 게스트비는 회비 통장으로 받아요."
+                        : "상태를 누르면 입금/미입금이 바뀌어요. 입금 처리하면 그때의 1인 금액이 기록돼요. 1인 금액은 100원 단위로 올림해요."}
+                    </p>
+                  </div>
+                ) : null}
+              </section>
             ) : null}
-          </section>
+          </div>
         ) : null}
 
         {/* 대진 */}
@@ -1054,61 +1157,25 @@ export default function GatheringDetailPage() {
               </div>
             </FieldGroup>
 
-            <FieldGroup title="참가비">
-              <div>
-                <label className="label" htmlFor="e_fee">
-                  총 참가비 (원)
-                </label>
-                <input
-                  id="e_fee"
-                  name="fee"
-                  type="number"
-                  min="0"
-                  step="1000"
-                  className="input"
-                  placeholder="0 = 무료"
-                  defaultValue={gathering.fee ?? 0}
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="label" htmlFor="e_bank">
-                    은행
-                  </label>
-                  <input
-                    id="e_bank"
-                    name="bank"
-                    className="input"
-                    placeholder="국민"
-                    defaultValue={gathering.bank ?? ""}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="label" htmlFor="e_account">
-                    계좌번호
-                  </label>
-                  <input
-                    id="e_account"
-                    name="account_number"
-                    className="input"
-                    placeholder="123-456-7890"
-                    defaultValue={gathering.account_number ?? ""}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="e_holder">
-                  예금주
-                </label>
-                <input
-                  id="e_holder"
-                  name="account_holder"
-                  className="input"
-                  placeholder="홍길동"
-                  defaultValue={gathering.account_holder ?? ""}
-                />
-              </div>
-            </FieldGroup>
+            <GatheringFeeFields
+              idPrefix="e_"
+              canCreateClub={staff}
+              lockedKinds={kindLocks}
+              defaults={{
+                kind: gathering.kind,
+                // 예전 모임(총액만 있음)은 총액을 코트비 칸에 보여 줘서 금액이 그대로 유지되게 한다
+                court_fee:
+                  gathering.court_fee ||
+                  (gathering.ball_fee ? 0 : gathering.fee),
+                ball_fee: gathering.ball_fee,
+                guest_fee: club ? gathering.guest_fee : 5000,
+                // 지금 종류의 계좌만 채우고, 다른 종류로 바꾸면 비운다
+                accounts: {
+                  flash: club ? NO_ACCOUNT : gathering,
+                  club: club ? gathering : NO_ACCOUNT,
+                },
+              }}
+            />
 
             <div>
               <label className="label" htmlFor="e_desc">
@@ -1138,6 +1205,218 @@ export default function GatheringDetailPage() {
         </Modal>
       ) : null}
     </PageBody>
+  );
+}
+
+const NO_ACCOUNT = { bank: null, account_number: null, account_holder: null };
+
+/** "2026-10-12T10:00:00" → "10/12" */
+const shortDate = (iso: string) =>
+  `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
+
+/**
+ * 오테식 모임의 회비 지출: 코트 예약자별 코트비와 지급 여부.
+ * 관리자·임원진은 예약자를 추가하고, 계좌를 복사해 송금한 뒤 지급 완료를 누른다.
+ */
+function CourtExpenseTile({
+  total,
+  bookings,
+  members,
+  staff,
+  userId,
+}: {
+  total: number;
+  bookings: CourtBooking[];
+  members: UserBrief[];
+  staff: boolean;
+  userId: number;
+}) {
+  const navigation = useNavigation();
+  const busy =
+    navigation.state !== "idle" &&
+    navigation.formData?.get("intent") === "add_booking";
+  const pending = bookings.filter((b) => !b.reimbursed);
+  return (
+    <section className="tile-green space-y-4">
+      <Eyebrow>CLUB EXPENSE</Eyebrow>
+      <div className="detail-payment-heading">
+        <div className="min-w-0">
+          <h2 className="tile-title">회비 지출</h2>
+          <p className="tile-sub">
+            코트비는 회비에서 나가요. 회원은 따로 낼 돈이 없어요.
+          </p>
+        </div>
+        <p className="shrink-0 font-display text-[30px] font-extrabold leading-none tracking-[-0.05em] sm:text-[34px]">
+          {won(total)}
+        </p>
+      </div>
+
+      {bookings.length === 0 ? (
+        <p className="text-sm font-semibold">
+          {staff
+            ? "코트를 잡은 사람을 추가하면 회비에서 코트비를 보내 줄 수 있어요."
+            : "아직 등록된 코트 예약이 없어요."}
+        </p>
+      ) : (
+        <ul className="tile-rows">
+          {bookings.map((b) => (
+            <li key={b.id} className="!block">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="font-bold">{b.booker.name}</span>
+                  {b.booker.id === userId ? (
+                    <span className="ml-1 text-xs font-semibold">(나)</span>
+                  ) : null}
+                  {b.court_label ? (
+                    <span className="ml-1.5 text-xs font-semibold">
+                      · {b.court_label}
+                    </span>
+                  ) : null}
+                  <p className="mt-0.5 text-xs font-semibold">
+                    {b.reimbursed
+                      ? `지급 완료${
+                          b.reimbursed_by ? ` · ${b.reimbursed_by.name}` : ""
+                        }${
+                          b.reimbursed_at
+                            ? ` · ${shortDate(b.reimbursed_at)}`
+                            : ""
+                        }`
+                      : "지급 대기"}
+                  </p>
+                </div>
+                <span className="flex shrink-0 items-center gap-2">
+                  <strong className="font-display text-lg font-extrabold tracking-[-0.03em]">
+                    {won(b.amount)}
+                  </strong>
+                  <span className={b.reimbursed ? "chip-ink" : "chip-line"}>
+                    {b.reimbursed ? "지급" : "대기"}
+                  </span>
+                </span>
+              </div>
+              {staff && !b.reimbursed ? (
+                <div className="mt-2.5 space-y-2">
+                  {b.account?.account_number ? (
+                    <p className="flex items-start gap-1.5 text-xs font-semibold">
+                      <Landmark size={14} className="mt-px shrink-0" />
+                      <span className="break-all">
+                        {accountText(b.account)}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-xs font-semibold">
+                      환급 계좌 미등록 · 마이페이지에 등록해 달라고 알려 주세요
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {b.account?.account_number ? (
+                      <CopyButton
+                        text={b.account.account_number}
+                        label="계좌 복사"
+                        tone="ink"
+                      />
+                    ) : null}
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="reimburse" />
+                      <input type="hidden" name="booking_id" value={b.id} />
+                      <input type="hidden" name="reimbursed" value="true" />
+                      <button className="btn-ink btn-sm">
+                        <Check size={14} />
+                        지급 완료
+                      </button>
+                    </Form>
+                    <Form
+                      method="post"
+                      onSubmit={(e) => {
+                        if (
+                          !confirm(`${b.booker.name}님의 코트 예약을 지울까요?`)
+                        )
+                          e.preventDefault();
+                      }}
+                    >
+                      <input
+                        type="hidden"
+                        name="intent"
+                        value="delete_booking"
+                      />
+                      <input type="hidden" name="booking_id" value={b.id} />
+                      <button
+                        className="icon-btn !h-8 !w-8 !text-ink hover:!bg-ink/10"
+                        aria-label={`${b.booker.name} 코트 예약 삭제`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </Form>
+                  </div>
+                </div>
+              ) : staff && b.reimbursed ? (
+                <Form method="post" className="mt-2">
+                  <input type="hidden" name="intent" value="reimburse" />
+                  <input type="hidden" name="booking_id" value={b.id} />
+                  <input type="hidden" name="reimbursed" value="false" />
+                  <button className="chip-white cursor-pointer transition-opacity hover:opacity-80">
+                    <Undo2 size={12} />
+                    지급 취소
+                  </button>
+                </Form>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {staff ? (
+        <Form method="post" className="court-booking-form">
+          <input type="hidden" name="intent" value="add_booking" />
+          <p className="col-span-full text-xs font-extrabold">
+            코트 예약자 추가
+          </p>
+          <select
+            name="booker_id"
+            className="tile-input col-span-full sm:col-span-1"
+            aria-label="예약자"
+            required
+            defaultValue=""
+          >
+            <option value="" disabled>
+              예약자
+            </option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <input
+            name="court_label"
+            className="tile-input"
+            placeholder="코트 (예: 3번)"
+            aria-label="코트"
+          />
+          <input
+            name="amount"
+            type="number"
+            min="100"
+            step="100"
+            className="tile-input"
+            placeholder="코트비"
+            aria-label="코트비"
+            required
+          />
+          <button className="btn-ink btn-sm col-span-full" disabled={busy}>
+            <Plus size={14} />
+            {busy ? "추가 중…" : "추가"}
+          </button>
+        </Form>
+      ) : null}
+
+      {pending.length > 0 ? (
+        <p className="text-xs font-semibold">
+          지급 대기 {pending.length}건 ·{" "}
+          {won(pending.reduce((s, b) => s + b.amount, 0))}
+          {staff ? " · 계좌로 보낸 뒤 지급 완료를 눌러 주세요." : ""}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

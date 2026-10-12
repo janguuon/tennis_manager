@@ -239,6 +239,7 @@ def test_my_dues_include_account_and_clear_after_payment(club):
             "gathering_id": gid,
             "title": "모임",
             "event_date": "2099-01-15",
+            "kind": "flash",
             "amount": 10000,
             "per_person": 10000,
             "partial": False,

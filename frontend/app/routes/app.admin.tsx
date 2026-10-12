@@ -221,6 +221,10 @@ export default function AdminPage() {
               즉시, 정회원은 그 주 월요일 0시, 게스트는 모임 3일 전 0시부터 보고 투표할 수 있어요.
             </p>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
+              <b className="font-bold text-ink dark:text-white">정산</b>: 임원진은 오테식 정모·벙개를 만들고 코트비 지급을 처리해요.
+              게스트는 오테식 모임에 참석하면 게스트비를 내요.
+            </p>
+            <p className="mt-1 text-[13px] font-medium text-slate-500">
               <b className="font-bold text-ink dark:text-white">삭제</b>: 경기·입금 기록이 없는 회원은 완전히 삭제돼요. 기록이 있는 회원은 다른 회원의 전적과 정산이 깨지지
               않도록 기록을 남기고 탈퇴 처리돼요(로그인 불가, 회원 목록·랭킹에서 빠짐).
             </p>

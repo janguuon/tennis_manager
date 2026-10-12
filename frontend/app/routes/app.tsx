@@ -26,13 +26,14 @@ import {
 import { MemberAvatar } from "~/components/Club";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
+import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
-import type { User } from "~/lib/types";
+import type { Me } from "~/lib/types";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   try {
-    const user = await api<User>("/users/me", { token });
+    const user = await api<Me>("/users/me", { token });
     return json({ user });
   } catch (err) {
     // 토큰 만료/무효 → 세션을 지우고 로그인으로(다시 로그인하면 보던 페이지로 복귀).
@@ -201,7 +202,9 @@ export default function AppLayout() {
             <span className="min-w-0 flex-1">
               <strong className="block truncate text-sm">{user.name}</strong>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {user.is_admin ? "클럽 관리자" : "오늘도 반가워요"}
+                {user.is_admin
+                  ? "클럽 관리자"
+                  : `${MEMBER_TYPE_LABEL[user.member_type]} · 오늘도 반가워요`}
               </span>
             </span>
             <ArrowUpRight size={16} />

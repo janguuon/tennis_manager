@@ -52,6 +52,14 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("participants", "paid_amount", "paid_amount INTEGER"),
     # 회원 구분 (기존 회원은 정회원)
     ("users", "member_type", "member_type VARCHAR(7) NOT NULL DEFAULT 'MEMBER'"),
+    # 환급 계좌, 모임 종류·코트비·캔볼값·게스트비 (Enum은 이름으로 저장된다)
+    ("users", "bank", "bank VARCHAR(50)"),
+    ("users", "account_number", "account_number VARCHAR(50)"),
+    ("users", "account_holder", "account_holder VARCHAR(50)"),
+    ("gatherings", "kind", "kind VARCHAR(12) NOT NULL DEFAULT 'FLASH'"),
+    ("gatherings", "court_fee", "court_fee INTEGER NOT NULL DEFAULT 0"),
+    ("gatherings", "ball_fee", "ball_fee INTEGER NOT NULL DEFAULT 0"),
+    ("gatherings", "guest_fee", "guest_fee INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

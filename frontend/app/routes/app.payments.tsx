@@ -1,10 +1,24 @@
-import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  MetaFunction,
+} from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, useLoaderData, useSearchParams } from "@remix-run/react";
 import {
+  Form,
+  Link,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSearchParams,
+} from "@remix-run/react";
+import {
+  Check,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   CircleCheck,
+  Landmark,
   Undo2,
   Wallet,
 } from "lucide-react";
@@ -12,10 +26,13 @@ import {
 import { CopyButton } from "~/components/CopyButton";
 import { Eyebrow, SectionHeading } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
-import { api } from "~/lib/api.server";
-import { won } from "~/lib/format";
+import { ApiError, api } from "~/lib/api.server";
+import { KIND_BADGE, KIND_LABEL, isClubKind, isStaff } from "~/lib/club";
+import { accountText, won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import type {
+  CourtBooking,
+  Me,
   MonthlyPaymentSummary,
   MyPaymentDue,
   PaymentLine,
@@ -53,17 +70,45 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   const url = new URL(request.url);
   const month = url.searchParams.get("month") || currentMonth();
-  const [summary, myDues] = await Promise.all([
+  const [summary, myDues, myBookings, me] = await Promise.all([
     api<MonthlyPaymentSummary>(`/gatherings/payments/summary?month=${month}`, {
       token,
     }),
     api<MyPaymentDue[]>("/gatherings/payments/me", { token }),
+    api<CourtBooking[]>("/court-bookings/me", { token }),
+    api<Me>("/users/me", { token }),
   ]);
-  return json({ month, summary, myDues });
+  // 관리자·임원진: 달과 상관없이 아직 지급하지 않은 코트비 전체
+  const pendingBookings = isStaff(me)
+    ? await api<CourtBooking[]>("/court-bookings", { token })
+    : [];
+  return json({ month, summary, myDues, myBookings, pendingBookings });
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const token = await requireToken(request);
+  const formData = await request.formData();
+  try {
+    await api(`/court-bookings/${formData.get("booking_id")}/reimbursement`, {
+      method: "PUT",
+      token,
+      body: { reimbursed: formData.get("reimbursed") === "true" },
+    });
+    return json({ error: null as string | null });
+  } catch (err) {
+    const message =
+      err instanceof ApiError ? err.message : "처리에 실패했습니다.";
+    return json({ error: message }, { status: 400 });
+  }
 }
 
 export default function PaymentsPage() {
-  const { month, summary, myDues } = useLoaderData<typeof loader>();
+  const { month, summary, myDues, myBookings, pendingBookings } =
+    useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const pendingTotal = pendingBookings.reduce((s, b) => s + b.amount, 0);
+  const myBookingTotal = myBookings.reduce((s, b) => s + b.amount, 0);
   const [, setSearchParams] = useSearchParams();
   const goMonth = (m: string) => setSearchParams({ month: m });
   const [yy, mm] = month.split("-");
@@ -85,7 +130,7 @@ export default function PaymentsPage() {
       <PageHeader
         eyebrow="A LITTLE EACH, A LOT TOGETHER."
         title="깔끔하게, 나눠 내요"
-        sub="우리 모임의 참가비를 한눈에 확인하세요."
+        sub="참가비와 회비 지출(코트비)을 한눈에 확인하세요."
         actions={
           <div className="flex items-center gap-1">
             <button
@@ -117,6 +162,115 @@ export default function PaymentsPage() {
         }
       />
 
+      {actionData?.error ? (
+        <p className="alert-error flex items-center gap-2">
+          <CircleAlert size={16} className="shrink-0" />
+          {actionData.error}
+        </p>
+      ) : null}
+
+      {/* 관리자·임원진: 아직 지급하지 않은 코트비 (달과 상관없이 전체) */}
+      {pendingBookings.length > 0 ? (
+        <section className="tile-green space-y-3">
+          <Eyebrow>COURT FEE TO SEND</Eyebrow>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="tile-title">지급할 코트비</h2>
+              <p className="tile-sub">
+                코트를 잡은 사람에게 회비에서 보내 주세요 ·{" "}
+                {pendingBookings.length}건
+              </p>
+            </div>
+            <p className="font-display text-[34px] font-extrabold leading-none tracking-[-0.05em] sm:text-[44px]">
+              {won(pendingTotal)}
+            </p>
+          </div>
+          <ul className="tile-rows">
+            {pendingBookings.map((b) => {
+              const busy =
+                navigation.state !== "idle" &&
+                navigation.formData?.get("booking_id") === String(b.id);
+              return (
+                <li key={b.id} className="!block">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        to={`/app/gatherings/${b.gathering_id}?from=${b.event_date}`}
+                        className="block truncate text-xs font-bold hover:underline"
+                      >
+                        {shortDate(b.event_date)} · {b.gathering_title}
+                      </Link>
+                      <p className="mt-0.5">
+                        <span className="font-extrabold">{b.booker.name}</span>
+                        {b.court_label ? (
+                          <span className="ml-1.5 text-xs font-semibold">
+                            · {b.court_label}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                    <strong className="shrink-0 font-display text-lg font-extrabold tracking-[-0.03em]">
+                      {won(b.amount)}
+                    </strong>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {b.account?.account_number ? (
+                      <>
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold">
+                          <Landmark size={14} className="shrink-0" />
+                          <span className="break-all">
+                            {accountText(b.account)}
+                          </span>
+                        </span>
+                        <CopyButton
+                          text={b.account.account_number}
+                          label="계좌 복사"
+                          tone="ink"
+                        />
+                      </>
+                    ) : (
+                      <span className="min-w-0 flex-1 text-xs font-semibold">
+                        환급 계좌 미등록 · 마이페이지에 등록해 달라고 알려
+                        주세요
+                      </span>
+                    )}
+                    <Form method="post">
+                      <input type="hidden" name="booking_id" value={b.id} />
+                      <input type="hidden" name="reimbursed" value="true" />
+                      <button className="btn-ink btn-sm" disabled={busy}>
+                        <Check size={14} />
+                        지급 완료
+                      </button>
+                    </Form>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* 내가 코트를 잡아 돌려받을 코트비 */}
+      {myBookings.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl bg-house-green/25 px-4 py-3 text-sm font-semibold">
+          <Wallet size={16} className="shrink-0" />
+          <span>
+            총무가 보내 줄 코트비{" "}
+            <strong className="font-extrabold">{won(myBookingTotal)}</strong>
+          </span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            {myBookings
+              .map((b) => `${shortDate(b.event_date)} ${b.gathering_title}`)
+              .join(", ")}
+          </span>
+          {!myBookings[0].account?.account_number ? (
+            <Link to="/app/mypage" className="text-link ml-auto !min-h-0">
+              환급 계좌 등록하기
+            </Link>
+          ) : null}
+        </p>
+      ) : null}
+
       <div className="payment-overview">
         {/* 내가 낼 참가비 (달과 상관없이 전체) */}
         {myDues.length > 0 ? (
@@ -145,6 +299,9 @@ export default function PaymentsPage() {
                       {d.title}
                     </Link>
                     <span className="flex shrink-0 items-center gap-1.5 font-extrabold">
+                      {isClubKind(d.kind) ? (
+                        <span className="chip-white">게스트비</span>
+                      ) : null}
                       {d.partial ? (
                         <span className="chip-white">추가 입금</span>
                       ) : null}
@@ -167,7 +324,7 @@ export default function PaymentsPage() {
         <section className={`card ${myDues.length ? "" : "lg:col-span-2"}`}>
           <SectionHeading
             title={`${Number(mm)}월 정산 현황`}
-            sub={`참가비가 있는 모임 ${summary.gatherings.length}건 기준`}
+            sub={`참가비·게스트비가 있는 모임 ${summary.gatherings.length}건 기준`}
           />
           <div
             className={
@@ -212,6 +369,9 @@ export default function PaymentsPage() {
                       className="flex min-w-0 items-center gap-2 font-display text-[19px] font-extrabold tracking-[-0.03em] hover:underline"
                     >
                       <span className="truncate">{g.title}</span>
+                      <span className={KIND_BADGE[g.kind]}>
+                        {KIND_LABEL[g.kind]}
+                      </span>
                       {g.status === "canceled" ? (
                         <span className="badge-red">취소</span>
                       ) : null}
@@ -225,13 +385,16 @@ export default function PaymentsPage() {
                     </p>
                   </div>
                   <p className="mt-0.5 text-[13px] font-medium text-slate-500">
-                    {shortDate(g.event_date)} · 총 {won(g.fee)} · 1인{" "}
-                    {won(g.per_person)} · 입금 {g.paid_count}/{g.attending}명
+                    {shortDate(g.event_date)} ·{" "}
+                    {isClubKind(g.kind)
+                      ? `게스트 1인 ${won(g.guest_fee)}`
+                      : `총 ${won(g.fee)} · 1인 ${won(g.per_person)}`}{" "}
+                    · 입금 {g.paid_count}/{g.payer_count}명
                   </p>
                 </div>
-                {g.attending > 0 && g.attending <= 20 ? (
+                {g.payer_count > 0 && g.payer_count <= 20 ? (
                   <div className="seg">
-                    {Array.from({ length: g.attending }, (_, i) => (
+                    {Array.from({ length: g.payer_count }, (_, i) => (
                       <i key={i} className={i < g.paid_count ? "on" : ""} />
                     ))}
                   </div>
@@ -250,9 +413,12 @@ export default function PaymentsPage() {
                       미입금 {g.dues.length}명 · {won(g.outstanding)}
                     </span>
                     <span className="mx-1.5 text-slate-300">|</span>
-                    {lineNames(g.dues, g.per_person)}
+                    {lineNames(
+                      g.dues,
+                      isClubKind(g.kind) ? g.guest_fee : g.per_person
+                    )}
                   </p>
-                ) : g.attending > 0 ? (
+                ) : g.payer_count > 0 ? (
                   <span className="badge-ink">
                     <CircleCheck size={13} />
                     전원 입금 완료
@@ -273,8 +439,55 @@ export default function PaymentsPage() {
         </div>
       )}
 
+      {/* 이 달 오테식 모임의 회비 지출 (코트비) */}
+      {summary.court_bookings.length > 0 ? (
+        <section className="card">
+          <SectionHeading
+            title={`${Number(mm)}월 회비 지출`}
+            sub={`오테식 정모·벙개 코트비 · 지급 ${won(
+              summary.court_reimbursed
+            )} · 대기 ${won(summary.court_pending)}`}
+            action={
+              <strong className="shrink-0 font-display text-[22px] font-extrabold tracking-[-0.04em]">
+                {won(summary.court_total)}
+              </strong>
+            }
+          />
+          <ul className="mt-3">
+            {summary.court_bookings.map((b) => (
+              <li key={b.id} className="court-expense-row">
+                <span className="w-10 shrink-0 font-display text-sm font-extrabold">
+                  {shortDate(b.event_date)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <Link
+                    to={`/app/gatherings/${b.gathering_id}?from=${b.event_date}`}
+                    className="block truncate text-sm font-bold hover:underline"
+                  >
+                    {b.gathering_title}
+                  </Link>
+                  <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                    {b.booker.name}
+                    {b.court_label ? ` · ${b.court_label}` : ""}
+                  </span>
+                </span>
+                <strong className="shrink-0 text-sm">{won(b.amount)}</strong>
+                <span
+                  className={`shrink-0 ${
+                    b.reimbursed ? "badge-ink" : "badge-line"
+                  }`}
+                >
+                  {b.reimbursed ? "지급" : "대기"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <p className="text-center text-xs font-semibold text-slate-400">
-        입금·환불 처리는 각 모임 상세의 ‘참가비 정산’에서 할 수 있어요.
+        입금·환불은 각 모임의 ‘참가비 정산’, 코트비 지급은 오테식 모임의 ‘회비
+        지출’에서도 할 수 있어요.
       </p>
     </PageBody>
   );

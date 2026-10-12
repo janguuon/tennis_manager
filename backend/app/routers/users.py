@@ -8,19 +8,19 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import ApprovalStatus, User
-from ..schemas import PasswordUpdate, UserRead, UserUpdate
+from ..schemas import PasswordUpdate, UserMe, UserRead, UserUpdate
 from ..security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserRead)
+@router.get("/me", response_model=UserMe)
 def read_my_profile(current_user: User = Depends(get_current_user)):
-    """현재 로그인한 회원의 프로필."""
+    """현재 로그인한 회원의 프로필 (환급 계좌 포함)."""
     return current_user
 
 
-@router.patch("/me", response_model=UserRead)
+@router.patch("/me", response_model=UserMe)
 def update_my_profile(
     payload: UserUpdate,
     db: Session = Depends(get_db),

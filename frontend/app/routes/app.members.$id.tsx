@@ -6,6 +6,7 @@ import { Eyebrow } from "~/components/Club";
 import { BackLink, PageBody } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
+import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { requireToken } from "~/lib/session.server";
 import {
   MATCH_TYPE_LABEL,
@@ -36,6 +37,7 @@ export default function MemberDetailPage() {
   const { stats, partners, opponents } = useLoaderData<typeof loader>();
   const u = stats.user;
   const meta = [
+    MEMBER_TYPE_LABEL[u.member_type],
     u.gender ? GENDER_LABEL[u.gender] : null,
     u.ntrp ? `NTRP ${u.ntrp}` : null,
   ].filter(Boolean);

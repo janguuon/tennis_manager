@@ -47,3 +47,12 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN, detail="관리자 권한이 필요합니다."
         )
     return current_user
+
+
+def get_current_staff(current_user: User = Depends(get_current_user)) -> User:
+    """관리자 또는 임원진 전용 의존성 (코트비 지급 처리 등)."""
+    if not current_user.is_staff:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="관리자 또는 임원진만 가능합니다."
+        )
+    return current_user

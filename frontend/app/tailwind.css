@@ -155,6 +155,9 @@
   .badge-green {
     @apply badge bg-house-green/30 text-[#2F5A22] dark:bg-house-green/20 dark:text-green-200;
   }
+  .badge-lav {
+    @apply badge bg-house-lav/40 text-[#4B3480] dark:bg-house-lav/25 dark:text-purple-200;
+  }
   /* 타일 안 배지 (다크 모드에서도 그대로) */
   .chip-ink {
     @apply badge bg-ink text-white;
@@ -807,6 +810,58 @@
 @layer components {
   .record-rows > li {
     @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 py-4 text-sm last:border-0 dark:border-slate-700;
+  }
+}
+
+/* ---- 모임 종류 · 정산 ---- */
+@layer components {
+  .kind-options {
+    @apply grid grid-cols-3 gap-2;
+  }
+  .kind-option {
+    @apply relative flex min-h-[64px] cursor-pointer flex-col justify-center gap-1 rounded-2xl border-[1.5px] border-slate-200 bg-paper px-3 py-2.5 transition-colors
+      hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500;
+  }
+  .kind-option > i {
+    @apply block h-2.5 w-2.5 rounded-full;
+  }
+  .kind-option-club_regular > i {
+    @apply bg-house-green;
+  }
+  .kind-option-club_flash > i {
+    @apply bg-house-lav;
+  }
+  .kind-option-flash > i {
+    @apply bg-house-yellow;
+  }
+  .kind-option > strong {
+    @apply text-[13px] font-bold leading-tight;
+  }
+  .kind-option > small {
+    @apply flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400;
+  }
+  .kind-option.is-selected {
+    @apply border-ink bg-white dark:border-white dark:bg-slate-800;
+  }
+  .kind-option:focus-within {
+    @apply ring-[3px] ring-house-yellow;
+  }
+  .kind-option.is-locked {
+    @apply cursor-not-allowed opacity-50 hover:border-slate-200 dark:hover:border-slate-700;
+  }
+  /* 원색 타일 안 입력칸: 다크 모드에서도 밝게 */
+  .tile-input {
+    @apply w-full rounded-xl border border-ink/20 bg-white/80 px-3 py-2 text-sm text-ink outline-none
+      transition-colors placeholder:text-ink/45 focus:border-ink focus:ring-4 focus:ring-ink/10;
+  }
+  .court-booking-form {
+    @apply grid grid-cols-2 gap-2 rounded-2xl bg-white/45 p-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)];
+  }
+  .court-expense-row {
+    @apply flex items-center gap-3 border-b border-slate-200 py-3.5 last:border-0 dark:border-slate-700;
+  }
+  .booking-row {
+    @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto];
   }
 }
 

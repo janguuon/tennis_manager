@@ -15,7 +15,7 @@ import { PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
-import type { User } from "~/lib/types";
+import type { Me, User } from "~/lib/types";
 
 export const meta: MetaFunction = () => [
   { title: "마이페이지 · 오테식 매니저" },
@@ -23,7 +23,7 @@ export const meta: MetaFunction = () => [
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
-  const user = await api<User>("/users/me", { token });
+  const user = await api<Me>("/users/me", { token });
   return json({ user });
 }
 
@@ -52,6 +52,22 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
       await api<User>("/users/me", { method: "PATCH", token, body });
       return ok("내 정보를 저장했습니다.");
+    } catch (err) {
+      return fail(
+        err instanceof ApiError ? err.message : "저장에 실패했습니다."
+      );
+    }
+  }
+
+  if (intent === "account") {
+    const body = {
+      bank: get("bank")?.trim() || null,
+      account_number: get("account_number")?.trim() || null,
+      account_holder: get("account_holder")?.trim() || null,
+    };
+    try {
+      await api<User>("/users/me", { method: "PATCH", token, body });
+      return ok("환급 계좌를 저장했습니다.");
     } catch (err) {
       return fail(
         err instanceof ApiError ? err.message : "저장에 실패했습니다."
@@ -97,6 +113,7 @@ export default function MyPage() {
   const profileMsg = actionData?.intent === "profile" ? actionData : undefined;
   const passwordMsg =
     actionData?.intent === "password" ? actionData : undefined;
+  const accountMsg = actionData?.intent === "account" ? actionData : undefined;
 
   const msg = (m: typeof profileMsg) =>
     m?.ok ? (
@@ -231,6 +248,68 @@ export default function MyPage() {
               disabled={submittingIntent === "profile"}
             >
               {submittingIntent === "profile" ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </Form>
+      </section>
+
+      {/* 환급 계좌: 오테식 모임 코트비를 돌려받을 때 */}
+      <section className="card">
+        <h2 className="section-title">환급 계좌</h2>
+        <p className="mt-1 text-[13px] font-medium text-slate-500">
+          오테식 모임 코트를 잡으면 총무가 이 계좌로 코트비를 보내요. 관리자와
+          임원진에게만 보여요.
+        </p>
+        <Form method="post" className="mt-5 space-y-4">
+          <input type="hidden" name="intent" value="account" />
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="label" htmlFor="bank">
+                은행
+              </label>
+              <input
+                id="bank"
+                name="bank"
+                className="input"
+                placeholder="국민"
+                defaultValue={user.bank ?? ""}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="label" htmlFor="account_number">
+                계좌번호
+              </label>
+              <input
+                id="account_number"
+                name="account_number"
+                className="input"
+                placeholder="123-456-7890"
+                defaultValue={user.account_number ?? ""}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label" htmlFor="account_holder">
+              예금주
+            </label>
+            <input
+              id="account_holder"
+              name="account_holder"
+              className="input"
+              placeholder={user.name}
+              defaultValue={user.account_holder ?? ""}
+            />
+          </div>
+
+          {msg(accountMsg)}
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={submittingIntent === "account"}
+            >
+              {submittingIntent === "account" ? "저장 중…" : "저장"}
             </button>
           </div>
         </Form>

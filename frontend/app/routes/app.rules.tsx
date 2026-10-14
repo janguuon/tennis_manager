@@ -511,7 +511,7 @@ export default function RulesPage() {
                   <Seats member={4} open={0} large />
                 </span>
                 <p className="mt-3 text-xs leading-relaxed">
-                  월요일 0시 일정 공개 후 바로 신청, 6자리까지
+                  금요일 오전 10시 다음 주 일정 공개 후 바로 신청, 6자리까지
                   <br />
                   운영진도 같은 기준 · 별도 우선권 없음
                 </p>

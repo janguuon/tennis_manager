@@ -83,7 +83,7 @@ class MemberType(str, enum.Enum):
 
     TREASURER = "treasurer"  # 총무: 임원진 권한 + 정산(입금 확인·코트비 지급)
     OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개 생성·운영, 대진
-    MEMBER = "member"     # 정회원: 해당 주 월요일 0시부터
+    MEMBER = "member"     # 정회원: 전주 금요일 오전 10시부터 (다음 주 월~일 일정)
     GUEST = "guest"       # 게스트: 모임 3일 전 0시부터, 오테식 모임 참석 시 게스트비
 
 

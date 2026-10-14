@@ -87,7 +87,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 }
 
-/** 공개 전·없는 모임 안내 (예: 카톡으로 받은 다음 주 모임 링크를 월요일 전에 연 경우) */
+/** 공개 전·없는 모임 안내 (예: 카톡으로 받은 다음 주 모임 링크를 금요일 오전 10시 전에 연 경우) */
 export function ErrorBoundary() {
   const error = useRouteError();
   const message =

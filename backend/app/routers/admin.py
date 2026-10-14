@@ -6,7 +6,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -24,7 +24,14 @@ from ..models import (
     Participant,
     User,
 )
-from ..schemas import MemberDeleteResult, MemberTypeUpdate, PasswordUpdate, UserRead
+from ..schemas import (
+    MemberDeleteResult,
+    MemberTypeUpdate,
+    PasswordUpdate,
+    PurgePreview,
+    PurgeResult,
+    UserRead,
+)
 from ..security import hash_password
 from .gatherings import promote_waiting
 
@@ -165,6 +172,122 @@ def delete_member(
     db.delete(user)
     db.commit()
     return MemberDeleteResult(result="deleted", name=name)
+
+
+# --- 탈퇴 회원 완전 삭제 -------------------------------------------------------
+_SEATS = ("team1_player1_id", "team1_player2_id", "team2_player1_id", "team2_player2_id")
+
+
+def _seat_filter(user_id: int):
+    return or_(*(getattr(DrawMatch, c) == user_id for c in _SEATS))
+
+
+def _purge_preview(db: Session, user: User) -> PurgePreview:
+    def count(stmt) -> int:
+        return db.scalar(select(func.count()).select_from(stmt.subquery()))
+
+    return PurgePreview(
+        user_id=user.id,
+        name=user.name,
+        matches=count(select(MatchPlayer.match_id).where(MatchPlayer.user_id == user.id).distinct()),
+        participations=count(select(Participant.id).where(Participant.user_id == user.id)),
+        paid=count(select(Participant.id).where(Participant.user_id == user.id, Participant.paid.is_(True))),
+        court_bookings=count(select(CourtBooking.id).where(CourtBooking.booker_id == user.id)),
+        gatherings_created=count(select(Gathering.id).where(Gathering.created_by == user.id)),
+        draw_seats=count(select(DrawMatch.id).where(_seat_filter(user.id))),
+    )
+
+
+def _require_withdrawn(user: User, admin: User) -> None:
+    if user.id == admin.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="자기 자신은 삭제할 수 없습니다.")
+    if user.is_active:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="탈퇴 처리된 회원만 완전히 지울 수 있어요. 먼저 회원 관리에서 삭제(탈퇴 처리)해 주세요.",
+        )
+
+
+def _purge(db: Session, user: User, admin: User) -> PurgePreview:
+    """회원과 그 회원의 기록을 DB 에서 지운다. 되돌릴 수 없다.
+
+    - 그 회원이 뛴 경기는 통째로 지운다(탈퇴 후 이미 모든 전적·티어에서 빠져 있던 경기). 대진의 결과 연결도 끊는다.
+    - 참석·입금 기록, 코트비 지급 내역(그 회원이 받을 것)을 지운다.
+    - 대진표의 그 회원 자리는 빈자리로, 그 회원이 만든 모임은 지우는 관리자에게 넘긴다.
+    - 기록자·지급 처리자로 남은 이름은 비운다.
+    """
+    preview = _purge_preview(db, user)
+    uid = user.id
+    match_ids = list(db.scalars(select(MatchPlayer.match_id).where(MatchPlayer.user_id == uid).distinct()))
+    if match_ids:
+        for dm in db.scalars(select(DrawMatch).where(DrawMatch.result_match_id.in_(match_ids))):
+            dm.result_match_id = None
+        for m in db.scalars(select(Match).where(Match.id.in_(match_ids))):
+            db.delete(m)  # MatchPlayer 는 cascade 로 함께
+    for m in db.scalars(select(Match).where(Match.recorded_by == uid)):
+        m.recorded_by = None
+    for dm in db.scalars(select(DrawMatch).where(_seat_filter(uid))):
+        for c in _SEATS:
+            if getattr(dm, c) == uid:
+                setattr(dm, c, None)
+    freed: list[Gathering] = []
+    for p in db.scalars(select(Participant).where(Participant.user_id == uid)):
+        if p.status == AttendanceStatus.ATTENDING:
+            freed.append(p.gathering)
+        db.delete(p)
+    for b in db.scalars(select(CourtBooking).where(CourtBooking.booker_id == uid)):
+        db.delete(b)
+    for b in db.scalars(select(CourtBooking).where(CourtBooking.reimbursed_by == uid)):
+        b.reimbursed_by = None
+    for g in db.scalars(select(Gathering).where(Gathering.created_by == uid)):
+        g.created_by = admin.id
+    db.flush()
+    for g in freed:
+        promote_waiting(db, g)
+    db.expire(user, ["match_links", "participations"])
+    db.delete(user)
+    return preview
+
+
+def _withdrawn(db: Session) -> list[User]:
+    return list(
+        db.scalars(
+            select(User)
+            .where(User.is_active.is_(False), User.approval_status == ApprovalStatus.APPROVED)
+            .order_by(User.name)
+        )
+    )
+
+
+@router.get("/users/inactive/purge-preview", response_model=list[PurgePreview])
+def purge_preview_all(db: Session = Depends(get_db)):
+    """탈퇴한 회원마다 완전 삭제하면 함께 지워지는 것."""
+    return [_purge_preview(db, u) for u in _withdrawn(db)]
+
+
+@router.delete("/users/inactive/purge", response_model=PurgeResult)
+def purge_all_withdrawn(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """탈퇴 처리된 회원을 모두 DB 에서 완전히 지운다(되돌릴 수 없음)."""
+    purged = [_purge(db, u, current_admin) for u in _withdrawn(db) if u.id != current_admin.id]
+    db.commit()
+    return PurgeResult(purged=purged)
+
+
+@router.delete("/users/{user_id}/purge", response_model=PurgeResult)
+def purge_member(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """탈퇴 처리된 회원을 DB 에서 완전히 지운다(되돌릴 수 없음)."""
+    user = _get_user_or_404(db, user_id)
+    _require_withdrawn(user, current_admin)
+    result = _purge(db, user, current_admin)
+    db.commit()
+    return PurgeResult(purged=[result])
 
 
 @router.post("/users/{user_id}/restore", response_model=UserRead)

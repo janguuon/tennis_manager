@@ -118,6 +118,23 @@ class MemberDeleteResult(BaseModel):
     name: str
 
 
+class PurgePreview(BaseModel):
+    """탈퇴 회원을 완전히 지울 때 함께 지워지거나 바뀌는 것."""
+
+    user_id: int
+    name: str
+    matches: int  # 함께 지워지는 경기 기록(같이 뛴 회원의 그 경기 포함)
+    participations: int  # 참석·입금 기록
+    paid: int  # 그중 입금 기록
+    court_bookings: int  # 코트비 지급 내역
+    gatherings_created: int  # 만든 모임 → 지우는 관리자에게 넘어감
+    draw_seats: int  # 대진표 자리 → 빈자리
+
+
+class PurgeResult(BaseModel):
+    purged: list[PurgePreview]
+
+
 class UserMe(UserRead):
     """내 프로필: 다른 회원에게는 보이지 않는 환급 계좌를 포함한다."""
 

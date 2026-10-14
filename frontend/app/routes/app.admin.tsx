@@ -28,17 +28,41 @@ import type { MemberType, User } from "~/lib/types";
 
 const MEMBER_TYPES: MemberType[] = ["officer", "member", "guest"];
 
+/** 탈퇴 회원을 완전히 지울 때 함께 지워지는 것 (서버 PurgePreview) */
+type PurgePreview = {
+  user_id: number;
+  name: string;
+  matches: number;
+  participations: number;
+  paid: number;
+  court_bookings: number;
+  gatherings_created: number;
+  draw_seats: number;
+};
+
+function purgeSummary(p: PurgePreview) {
+  const parts = [
+    p.matches ? `경기 기록 ${p.matches}건` : "",
+    p.participations ? `참석 기록 ${p.participations}건${p.paid ? `(입금 ${p.paid})` : ""}` : "",
+    p.court_bookings ? `코트비 지급 내역 ${p.court_bookings}건` : "",
+    p.draw_seats ? `대진표 자리 ${p.draw_seats}곳(빈자리로)` : "",
+    p.gatherings_created ? `만든 모임 ${p.gatherings_created}개(관리자에게 넘어감)` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "남은 기록 없음";
+}
+
 export const meta: MetaFunction = () => [{ title: "관리자 · 오테식 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   try {
-    const [pending, members, inactive] = await Promise.all([
+    const [pending, members, inactive, purgePreview] = await Promise.all([
       api<User[]>("/admin/signups/pending", { token }),
       api<User[]>("/users", { token }),
       api<User[]>("/admin/users/inactive", { token }),
+      api<PurgePreview[]>("/admin/users/inactive/purge-preview", { token }),
     ]);
-    return json({ pending, members, inactive });
+    return json({ pending, members, inactive, purgePreview });
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) throw redirect("/app");
     throw err;
@@ -107,6 +131,19 @@ export async function action({ request }: ActionFunctionArgs) {
         notice: `${user.name}님을 ${withRo(MEMBER_TYPE_LABEL[user.member_type])} 승인했어요.`,
       });
     }
+    if (intent === "purge_member" || intent === "purge_all") {
+      const res = await api<{ purged: { name: string }[] }>(
+        intent === "purge_all" ? "/admin/users/inactive/purge" : `/admin/users/${userId}/purge`,
+        { method: "DELETE", token }
+      );
+      const names = res.purged.map((p) => p.name).join(", ");
+      return json({
+        ok: true,
+        error: null as string | null,
+        reset: false,
+        notice: res.purged.length ? `${names}님의 정보와 기록을 완전히 지웠어요.` : "지울 탈퇴 회원이 없어요.",
+      });
+    }
     if (intent === "restore_member") {
       const user = await api<User>(`/admin/users/${userId}/restore`, { method: "POST", token });
       return json({ ok: true, error: null as string | null, reset: false, notice: `${user.name}님을 복구했어요.` });
@@ -122,7 +159,8 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function AdminPage() {
-  const { pending, members, inactive } = useLoaderData<typeof loader>();
+  const { pending, members, inactive, purgePreview } = useLoaderData<typeof loader>();
+  const previewOf = new Map(purgePreview.map((p) => [p.user_id, p]));
   const actionData = useActionData<typeof action>();
   const { user: me } = useOutletContext<{ user: User }>();
   const [query, setQuery] = useState("");
@@ -341,38 +379,85 @@ export default function AdminPage() {
       {/* 탈퇴한 회원 */}
       {inactive.length > 0 ? (
         <section className="card">
-          <h2 className="section-title flex items-center gap-2">
-            <UserX size={16} className="text-slate-400" />
-            탈퇴한 회원
-            <span className="badge-gray">{inactive.length}</span>
-          </h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="section-title flex items-center gap-2">
+              <UserX size={16} className="text-slate-400" />
+              탈퇴한 회원
+              <span className="badge-gray">{inactive.length}</span>
+            </h2>
+            <Form
+              method="post"
+              onSubmit={(e) => {
+                if (
+                  !confirm(
+                    `탈퇴한 회원 ${inactive.length}명을 모두 완전히 지울까요?\n\n되돌릴 수 없어요. 회원 정보와 함께 그 회원이 뛴 경기 기록, 참석·입금 기록, 코트비 지급 내역이 지워지고, 그 회원이 만든 모임은 관리자에게 넘어가요.`
+                  )
+                )
+                  e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="purge_all" />
+              <button className="btn-danger btn-sm">
+                <Trash2 size={14} />
+                모두 완전 삭제
+              </button>
+            </Form>
+          </div>
           <p className="mt-1 text-[13px] font-medium text-slate-500">
             로그인할 수 없고 회원 목록·랭킹에서 빠져 있어요. 이 회원이 뛴 경기는 전적·랭킹·티어 계산에서 빠져 있고, 복구하면 다시 반영돼요.
-            정산 기록은 그대로 남아 있어요.
+            <b className="font-bold text-ink dark:text-white"> 완전 삭제</b>하면 회원 정보와 기록이 DB에서 지워져 되돌릴 수 없어요.
           </p>
           <ul className="record-rows mt-3">
-            {inactive.map((m) => (
-              <li key={m.id}>
-                <div className="flex min-w-0 items-center gap-3 opacity-70">
-                  <MemberAvatar user={m} className="grayscale" />
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 truncate font-bold">
-                      {m.name}
-                      <span className="text-xs font-medium text-slate-400">@{m.username}</span>
-                    </p>
-                    <p className="text-xs text-slate-500">{m.created_at.slice(0, 10)} 가입</p>
+            {inactive.map((m) => {
+              const preview = previewOf.get(m.id);
+              return (
+                <li key={m.id}>
+                  <div className="flex min-w-0 items-center gap-3 opacity-70">
+                    <MemberAvatar user={m} className="grayscale" />
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 truncate font-bold">
+                        {m.name}
+                        <span className="text-xs font-medium text-slate-400">@{m.username}</span>
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {m.created_at.slice(0, 10)} 가입
+                        {preview ? ` · ${purgeSummary(preview)}` : ""}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <Form method="post">
-                  <input type="hidden" name="intent" value="restore_member" />
-                  <input type="hidden" name="user_id" value={m.id} />
-                  <button className="btn-ghost btn-sm">
-                    <RotateCcw size={14} />
-                    복구
-                  </button>
-                </Form>
-              </li>
-            ))}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="restore_member" />
+                      <input type="hidden" name="user_id" value={m.id} />
+                      <button className="btn-ghost btn-sm">
+                        <RotateCcw size={14} />
+                        복구
+                      </button>
+                    </Form>
+                    <Form
+                      method="post"
+                      onSubmit={(e) => {
+                        if (
+                          !confirm(
+                            `${m.name}님을 완전히 지울까요?\n\n되돌릴 수 없어요. 함께 지워지는 것: ${
+                              preview ? purgeSummary(preview) : "기록"
+                            }`
+                          )
+                        )
+                          e.preventDefault();
+                      }}
+                    >
+                      <input type="hidden" name="intent" value="purge_member" />
+                      <input type="hidden" name="user_id" value={m.id} />
+                      <button className="btn-danger btn-sm">
+                        <Trash2 size={14} />
+                        완전 삭제
+                      </button>
+                    </Form>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

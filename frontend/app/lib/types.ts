@@ -114,12 +114,13 @@ export interface Gathering {
   attendance: AttendanceSummary | null;
   /** 1인 참가비 (총액 ÷ 참석 인원, 100원 단위 올림). 서버가 계산. 오테식 모임은 0. */
   per_person: number;
-  /** 정회원 공개 시각(한국 시간, 전주 금요일 오전 10시에 다음 주 월~일 일정) */
+  /** 일정 공개 시각(정회원·게스트, 한국 시간, 전주 금요일 오전 10시에 다음 주 월~일 일정) */
   member_open_at: string | null;
-  /** 게스트 공개 시각(한국 시간, 3일 전 0시) */
-  guest_open_at: string | null;
+  /** 게스트 투표 시작 시각(한국 시간, 3일 전 0시. 일정 공개보다 빠르지 않음) */
+  guest_vote_open_at: string | null;
   open_to_members: boolean;
-  open_to_guests: boolean;
+  /** 게스트가 지금 참석 투표를 할 수 있는지 */
+  guest_vote_open: boolean;
   /** 오테식 모임: 코트 예약 금액 합 (회비 지출) */
   court_total: number;
 }

@@ -114,12 +114,12 @@ def _summary(gathering: Gathering) -> AttendanceSummary:
 
 
 def _with_open_times(read: GatheringRead, gathering: Gathering) -> GatheringRead:
-    """정회원·게스트 공개 시각과 지금 열려 있는지 (임원진 화면 안내용)."""
+    """일정 공개 시각·게스트 투표 시각과 지금 열려 있는지 (안내·버튼 잠금용)."""
     now = visibility.now_kst()
     read.member_open_at = visibility.member_open_at(gathering.event_date)
-    read.guest_open_at = visibility.guest_open_at(gathering.event_date)
+    read.guest_vote_open_at = visibility.guest_vote_open_at(gathering.event_date)
     read.open_to_members = now >= read.member_open_at
-    read.open_to_guests = now >= read.guest_open_at
+    read.guest_vote_open = now >= read.guest_vote_open_at
     return read
 
 
@@ -134,10 +134,20 @@ def _to_read(gathering: Gathering) -> GatheringRead:
 def _require_open(gathering: Gathering, user: User) -> None:
     """아직 이 회원에게 공개되지 않은 일정이면 보기·투표를 막는다."""
     if not visibility.is_open_for(user, gathering):
-        opens = visibility.open_at_for(user, gathering.event_date)
+        opens = visibility.view_open_at_for(user, gathering.event_date)
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail=f"아직 공개되지 않은 일정이에요. {visibility.format_open_at(opens)}부터 보고 투표할 수 있어요.",
+        )
+
+
+def _require_vote_open(gathering: Gathering, user: User) -> None:
+    """일정은 보이지만 아직 투표 전(게스트, 모임 3일 전 0시 전)이면 투표를 막는다."""
+    if not visibility.can_vote(user, gathering):
+        opens = visibility.vote_open_at_for(user, gathering.event_date)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"게스트 투표는 {visibility.format_open_at(opens)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.",
         )
 
 
@@ -993,6 +1003,7 @@ def vote_attendance(
     if not gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
     _require_open(gathering, current_user)
+    _require_vote_open(gathering, current_user)
 
     participant = db.scalar(
         select(Participant).where(

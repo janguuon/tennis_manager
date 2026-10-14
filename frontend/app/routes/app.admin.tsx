@@ -382,7 +382,7 @@ export default function AdminPage() {
             </h2>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
               <b className="font-bold text-ink dark:text-white">구분</b>에 따라 일정이 보이는 때가 달라요: 총무·임원진은 등록
-              즉시, 정회원은 금요일 오전 10시에 다음 주(월~일) 일정을, 게스트는 모임 3일 전 0시부터 보고 투표할 수 있어요.
+              즉시, 정회원·게스트는 금요일 오전 10시에 다음 주(월~일) 일정을 봐요. 정회원은 바로, 게스트는 모임 3일 전 0시부터 투표할 수 있어요.
             </p>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
               <b className="font-bold text-ink dark:text-white">권한</b>: 임원진은 오테식 정모·벙개를 만들고 운영해요(대진·결과 입력).

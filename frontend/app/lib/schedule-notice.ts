@@ -23,7 +23,8 @@ const NOTICE_NAME: Record<GatheringKind, string> = {
 };
 
 const header = (n: number) => `🎾 새 코트 일정 ${n}건이 올라왔어요`;
-const FOOTER = "정회원 참석 투표는 전주 금요일 오전 10시부터 열려요.";
+const FOOTER =
+  "정회원 참석 투표는 전주 금요일 오전 10시부터, 게스트 투표는 모임 3일 전 0시부터 열려요.";
 
 /** "3, 5" → "3·5번". 숫자가 아닌 이름이 섞이면 그대로 둔다. */
 function courtText(raw: string | null): string {

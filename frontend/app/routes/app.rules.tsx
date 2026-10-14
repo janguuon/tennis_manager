@@ -524,7 +524,7 @@ export default function RulesPage() {
                   <Seats member={0} open={2} large />
                 </span>
                 <p className="mt-3 text-xs leading-relaxed">
-                  남은 자리만큼 게스트 참석 투표
+                  일정은 금요일부터 함께 보고, 남은 자리만큼 투표
                   <br />
                   이때부터는 정회원·게스트 구분 없이 투표 순서
                 </p>

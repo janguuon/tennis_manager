@@ -1,4 +1,4 @@
-"""일정 공개 시점: 임원진 즉시 · 정회원 전주 금요일 오전 10시(다음 주 월~일) · 게스트 3일 전 0시."""
+"""일정 공개 시점: 임원진 즉시 · 정회원·게스트 전주 금요일 오전 10시(다음 주 월~일) · 게스트 투표는 3일 전 0시."""
 from datetime import date, datetime
 
 # 2099-01-12(월) 주: 금요일 모임 / 다음 주 수요일 모임 / 다음 주 월요일 모임
@@ -39,28 +39,29 @@ def test_members_see_next_week_from_friday_10am(club, fixed_now):
     assert club.vote(wed, "amy").status_code == 200
 
 
-def test_guests_open_three_days_before(club, fixed_now):
+def test_guests_see_with_members_but_vote_three_days_before(club, fixed_now):
     club.add_members("gus")
     club.set_type("gus", "guest")
     fri = club.gathering(fee=0, date=THIS_FRI)
 
-    # 월요일: 정회원에게는 열렸지만 게스트는 3일 전(화 0시)부터
-    assert _visible(club, "gus") == set()
-    r = club.vote(fri, "gus")
-    assert r.status_code == 403 and "1월 13일(화) 0시" in r.json()["detail"]
-
-    fixed_now["now"] = datetime(2099, 1, 13, 0, 0)
+    # 월요일: 일정은 정회원과 함께 보이지만(지난 금요일 10시 공개), 투표는 3일 전(화 0시)부터
     assert _visible(club, "gus") == {THIS_FRI}
-    assert club.vote(fri, "gus").status_code == 200
+    assert club.c.get(f"/gatherings/{fri}", headers=club.headers["gus"]).status_code == 200
+    r = club.vote(fri, "gus")
+    assert r.status_code == 403 and "게스트 투표는 1월 13일(화) 0시부터" in r.json()["detail"]
 
     d = club.detail(fri)
     assert d["member_open_at"] == "2099-01-09T10:00:00"
-    assert d["guest_open_at"] == "2099-01-13T00:00:00"
-    assert d["open_to_members"] is True and d["open_to_guests"] is True
+    assert d["guest_vote_open_at"] == "2099-01-13T00:00:00"
+    assert d["open_to_members"] is True and d["guest_vote_open"] is False
+
+    fixed_now["now"] = datetime(2099, 1, 13, 0, 0)
+    assert club.vote(fri, "gus").status_code == 200
+    assert club.detail(fri)["guest_vote_open"] is True
 
 
 def test_guest_never_before_members(club, fixed_now):
-    """월요일 모임: 3일 전(금) 0시가 아니라 정회원과 같은 금요일 오전 10시에 열린다."""
+    """월요일 모임: 3일 전(금) 0시가 아니라 일정이 열리는 금요일 오전 10시에 보이고 투표도 열린다."""
     club.add_members("gus")
     club.set_type("gus", "guest")
     mon = club.gathering(fee=0, date=NEXT_MON)
@@ -68,11 +69,12 @@ def test_guest_never_before_members(club, fixed_now):
     fixed_now["now"] = datetime(2099, 1, 16, 9, 0)  # 금요일 오전 9시
     assert _visible(club, "gus") == set()
     d = club.detail(mon)
-    assert d["guest_open_at"] == d["member_open_at"] == "2099-01-16T10:00:00"
+    assert d["guest_vote_open_at"] == d["member_open_at"] == "2099-01-16T10:00:00"
     assert d["open_to_members"] is False
 
     fixed_now["now"] = datetime(2099, 1, 16, 10, 0)
     assert _visible(club, "gus") == {NEXT_MON}
+    assert club.vote(mon, "gus").status_code == 200
 
 
 def test_guest_takes_only_remaining_seats(club, fixed_now):

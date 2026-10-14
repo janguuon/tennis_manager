@@ -25,7 +25,7 @@ import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
-import { WEEKDAYS } from "~/lib/status";
+import { WEEKDAYS, formatOpenAt } from "~/lib/status";
 import type {
   AttendanceStatus,
   Gathering,
@@ -429,6 +429,8 @@ function NextGatheringTile({
       ? "waiting"
       : pending ?? myVote;
   const locked = daysLeft <= ATTENDANCE_LOCK_DAYS;
+  // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터
+  const guestVoteLocked = !me.is_admin && me.member_type === "guest" && !next.guest_vote_open;
   const href = `/app/gatherings/${next.id}?from=${next.event_date}`;
   return (
     <section className="tile-orange home-next">
@@ -515,7 +517,7 @@ function NextGatheringTile({
                 <button
                   name="status"
                   value="attending"
-                  disabled={fetcher.state !== "idle"}
+                  disabled={guestVoteLocked || fetcher.state !== "idle"}
                   aria-pressed={shownVote === "attending"}
                   className={shownVote === "attending" ? "btn-ink" : "btn-line"}
                 >
@@ -525,7 +527,7 @@ function NextGatheringTile({
                 <button
                   name="status"
                   value="absent"
-                  disabled={(locked && myVote === "attending") || fetcher.state !== "idle"}
+                  disabled={guestVoteLocked || (locked && myVote === "attending") || fetcher.state !== "idle"}
                   aria-pressed={shownVote === "absent"}
                   title={
                     locked && myVote === "attending"
@@ -546,12 +548,14 @@ function NextGatheringTile({
             {fetcher.data.error}
           </p>
         )}
-        {(!me.is_admin && (myVote === "waiting" || full || (locked && myVote === "attending"))) ||
+        {(!me.is_admin && (guestVoteLocked || myVote === "waiting" || full || (locked && myVote === "attending"))) ||
         myDue > 0 ? (
           <div className="mt-3 flex flex-wrap justify-between gap-2 text-[11px]">
             <span>
               {me.is_admin
                 ? ""
+                : guestVoteLocked && next.guest_vote_open_at
+                ? `게스트 투표는 ${formatOpenAt(next.guest_vote_open_at)}부터 열려요.`
                 : myVote === "waiting"
                 ? "자리가 나면 순서대로 자동 참석돼요."
                 : locked && myVote === "attending"

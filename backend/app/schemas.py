@@ -471,11 +471,11 @@ class GatheringRead(GatheringBase):
     # 1인 참가비 = 총액 ÷ 참석 인원 (100원 단위 올림, 취소된 모임은 0). 서버에서만 계산.
     # 오테식 모임은 회비에서 지출하므로 0 (게스트만 guest_fee).
     per_person: int = 0
-    # 공개 시점(한국 시간): 정회원은 전주 금요일 오전 10시, 게스트는 3일 전 0시. app/visibility.py
+    # 공개 시점(한국 시간): 일정은 정회원·게스트 모두 전주 금요일 오전 10시, 게스트 투표는 3일 전 0시. app/visibility.py
     member_open_at: datetime | None = None
-    guest_open_at: datetime | None = None
+    guest_vote_open_at: datetime | None = None
     open_to_members: bool = True
-    open_to_guests: bool = True
+    guest_vote_open: bool = True
     # 오테식 모임: 코트 예약 금액 합 (회비 지출)
     court_total: int = 0
 

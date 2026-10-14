@@ -326,6 +326,9 @@ export default function GatheringDetailPage() {
   const full = isFull(gathering, attendees.length);
   const myRank = waiting.findIndex((p) => p.user.id === user.id) + 1;
   const absentLocked = attendanceLocked && myAttending;
+  // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터
+  const guestVoteLocked =
+    !user.is_admin && user.member_type === "guest" && !gathering.guest_vote_open;
   const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
   const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
   // 낼 돈이 있는 참석자: 일반 벙개는 전원, 오테식 모임은 게스트(이미 입금 기록이 있는 사람 포함)
@@ -484,14 +487,15 @@ export default function GatheringDetailPage() {
         </p>
       ) : null}
 
-      {/* 공개 시점 안내: 임원진에게는 공개 전 상태, 정회원에게는 게스트 투표 시작 시점 */}
-      {gathering.member_open_at && gathering.guest_open_at && user.member_type !== "guest" &&
-      (!gathering.open_to_members || !gathering.open_to_guests) ? (
+      {/* 공개 시점 안내: 임원진에게는 공개 전 상태, 정회원에게는 게스트 투표 시작 시점
+          (게스트 본인에게는 아래 참석 카드에서 투표 시작 시점을 알려 준다) */}
+      {gathering.member_open_at && gathering.guest_vote_open_at && user.member_type !== "guest" &&
+      (!gathering.open_to_members || !gathering.guest_vote_open) ? (
         <p className="flex items-start gap-2 rounded-2xl bg-house-lav/30 px-4 py-3 text-sm font-semibold">
           <Lock size={16} className="mt-0.5 shrink-0" />
           {!gathering.open_to_members
-            ? `아직 임원진만 보는 일정이에요. 정회원은 ${formatOpenAt(gathering.member_open_at)}부터, 게스트는 ${formatOpenAt(gathering.guest_open_at)}부터 보고 투표할 수 있어요.`
-            : `게스트 투표는 ${formatOpenAt(gathering.guest_open_at)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.`}
+            ? `아직 임원진만 보는 일정이에요. 정회원·게스트에게는 ${formatOpenAt(gathering.member_open_at)}에 공개되고, 게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요.`
+            : `게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.`}
         </p>
       ) : null}
 
@@ -593,7 +597,7 @@ export default function GatheringDetailPage() {
                     <button
                       name="status"
                       value="attending"
-                      disabled={navigation.state !== "idle"}
+                      disabled={guestVoteLocked || navigation.state !== "idle"}
                       aria-pressed={myAttending}
                       className={`${
                         myAttending ? "btn-primary" : "btn-ghost"
@@ -605,7 +609,7 @@ export default function GatheringDetailPage() {
                     <button
                       name="status"
                       value="absent"
-                      disabled={absentLocked || navigation.state !== "idle"}
+                      disabled={guestVoteLocked || absentLocked || navigation.state !== "idle"}
                       title={
                         absentLocked
                           ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참으로 바꿀 수 없어요`
@@ -622,7 +626,13 @@ export default function GatheringDetailPage() {
                   </>
                 )}
               </Form>
-              {me?.status === "waiting" ? (
+              {guestVoteLocked && gathering.guest_vote_open_at ? (
+                <p className="mt-3 flex items-center gap-1.5 text-xs font-bold">
+                  <Lock size={12} className="shrink-0" />
+                  게스트 투표는 {formatOpenAt(gathering.guest_vote_open_at)}부터 열려요. 지금은
+                  일정만 볼 수 있어요.
+                </p>
+              ) : me?.status === "waiting" ? (
                 <p className="mt-3 text-xs font-bold">
                   자리가 나면 대기 순서대로 자동으로 참석이 돼요.
                 </p>

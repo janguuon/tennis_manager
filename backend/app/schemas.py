@@ -364,6 +364,38 @@ class GatheringImportRowNote(BaseModel):
     message: str
 
 
+class ClubAccountRead(BaseModel):
+    """모임 통장 (오테식 모임 게스트비 입금 계좌)."""
+
+    bank: str | None = None
+    account_number: str
+    account_holder: str | None = None
+
+
+class ClubAccountUpdate(BaseModel):
+    bank: str | None = Field(None, max_length=50)
+    account_number: str = Field(..., min_length=1, max_length=50)
+    account_holder: str | None = Field(None, max_length=50)
+    apply_upcoming: bool = Field(True, description="다가오는 오테식 모임의 계좌도 바꾼다")
+
+    @field_validator("bank", "account_number", "account_holder")
+    @classmethod
+    def _strip(cls, v: str | None) -> str | None:
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("account_number")
+    @classmethod
+    def _number(cls, v: str) -> str:
+        if not v:
+            raise PydanticCustomError("account_number", "계좌번호를 적어 주세요.")
+        return v
+
+
+class ClubAccountResult(BaseModel):
+    account: ClubAccountRead | None
+    updated: int = 0
+
+
 class GatheringImportItem(BaseModel):
     """엑셀로 새로 등록된 일정 (카톡 알림 문구용)."""
 

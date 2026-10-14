@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   BarChart3,
   KeyRound,
+  Landmark,
   RotateCcw,
   Search,
   Trash2,
@@ -19,12 +20,13 @@ import {
 import { useState } from "react";
 
 import { MemberAvatar } from "~/components/Club";
+import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
 import { MEMBER_TYPE_LABEL, withRo } from "~/lib/status";
-import type { MemberType, User } from "~/lib/types";
+import type { ClubAccount, MemberType, User } from "~/lib/types";
 
 const MEMBER_TYPES: MemberType[] = ["treasurer", "officer", "member", "guest"];
 
@@ -56,13 +58,14 @@ export const meta: MetaFunction = () => [{ title: "관리자 · 오테식 매니
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   try {
-    const [pending, members, inactive, purgePreview] = await Promise.all([
+    const [pending, members, inactive, purgePreview, clubAccount] = await Promise.all([
       api<User[]>("/admin/signups/pending", { token }),
       api<User[]>("/users", { token }),
       api<User[]>("/admin/users/inactive", { token }),
       api<PurgePreview[]>("/admin/users/inactive/purge-preview", { token }),
+      api<ClubAccount | null>("/club/account", { token }),
     ]);
-    return json({ pending, members, inactive, purgePreview });
+    return json({ pending, members, inactive, purgePreview, clubAccount });
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) throw redirect("/app");
     throw err;
@@ -76,6 +79,27 @@ export async function action({ request }: ActionFunctionArgs) {
   const userId = formData.get("user_id");
 
   try {
+    if (intent === "club_account") {
+      const res = await api<{ account: ClubAccount | null; updated: number }>("/club/account", {
+        method: "PUT",
+        token,
+        body: {
+          bank: String(formData.get("bank") ?? ""),
+          account_number: String(formData.get("account_number") ?? ""),
+          account_holder: String(formData.get("account_holder") ?? ""),
+          apply_upcoming: formData.get("apply_upcoming") === "on",
+        },
+      });
+      return json({
+        ok: true,
+        error: null as string | null,
+        reset: false,
+        notice: null as string | null,
+        accountNotice: `모임 통장을 저장했어요.${
+          res.updated ? ` 다가오는 오테식 모임 ${res.updated}개에도 넣었어요.` : ""
+        }`,
+      });
+    }
     if (intent === "reset_password") {
       const newPassword = String(formData.get("new_password") ?? "");
       if (newPassword.length < 4) {
@@ -159,9 +183,11 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function AdminPage() {
-  const { pending, members, inactive, purgePreview } = useLoaderData<typeof loader>();
+  const { pending, members, inactive, purgePreview, clubAccount } = useLoaderData<typeof loader>();
   const previewOf = new Map(purgePreview.map((p) => [p.user_id, p]));
   const actionData = useActionData<typeof action>();
+  const accountNotice =
+    actionData && "accountNotice" in actionData ? String(actionData.accountNotice ?? "") : "";
   const { user: me } = useOutletContext<{ user: User }>();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -254,6 +280,82 @@ export default function AdminPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      {/* 모임 통장 */}
+      <section className="card">
+        <div className="flex items-center gap-2">
+          <Landmark size={18} />
+          <h2 className="tile-title">모임 통장</h2>
+        </div>
+        <p className="mt-1 text-[13px] font-medium text-slate-500">
+          오테식 정모·벙개의 게스트비를 받는 계좌예요. 오테식 모임을 등록할 때 계좌를 비워 두면 자동으로 들어가고, 회원들은 모임 화면과
+          회비 정산에서 계좌를 복사해 쓸 수 있어요.
+        </p>
+        {clubAccount ? (
+          <div className="club-account mt-4">
+            <span className="min-w-0 text-[13px]">
+              <span className="block text-xs font-bold">
+                {[clubAccount.bank, clubAccount.account_holder].filter(Boolean).join(" · ") || "모임 통장"}
+              </span>
+              <span className="break-all font-extrabold tabular-nums">{clubAccount.account_number}</span>
+            </span>
+            <CopyButton text={clubAccount.account_number} label="계좌 복사" tone="ink" className="!h-7" />
+          </div>
+        ) : (
+          <p className="mt-4 rounded-2xl bg-house-yellow/30 px-4 py-3 text-[13px] font-semibold">
+            아직 모임 통장을 정하지 않았어요. 지금은 가장 최근 오테식 모임의 계좌를 써요.
+          </p>
+        )}
+        <Form method="post" className="mt-4 space-y-3">
+          <input type="hidden" name="intent" value="club_account" />
+          <div className="grid grid-cols-5 gap-3">
+            <div className="col-span-2">
+              <label className="label" htmlFor="ca_bank">
+                은행
+              </label>
+              <input
+                id="ca_bank"
+                name="bank"
+                className="input"
+                placeholder="카카오뱅크"
+                defaultValue={clubAccount?.bank ?? ""}
+              />
+            </div>
+            <div className="col-span-3">
+              <label className="label" htmlFor="ca_number">
+                계좌번호
+              </label>
+              <input
+                id="ca_number"
+                name="account_number"
+                className="input"
+                required
+                placeholder="숫자만 또는 - 포함"
+                defaultValue={clubAccount?.account_number ?? ""}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label" htmlFor="ca_holder">
+              예금주
+            </label>
+            <input
+              id="ca_holder"
+              name="account_holder"
+              className="input"
+              defaultValue={clubAccount?.account_holder ?? ""}
+            />
+          </div>
+          <label className="flex items-start gap-2 text-[13px] font-medium">
+            <input type="checkbox" name="apply_upcoming" defaultChecked className="mt-0.5 h-4 w-4 accent-ink" />
+            다가오는 오테식 모임(오늘 이후, 취소 제외)의 계좌도 이 계좌로 바꾸기
+          </label>
+          <button type="submit" className="btn-primary h-11 w-full sm:w-auto sm:px-6">
+            모임 통장 저장
+          </button>
+          {accountNotice ? <p className="alert-success">{accountNotice}</p> : null}
+        </Form>
       </section>
 
       {/* 내부 티어 */}

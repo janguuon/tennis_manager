@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import schedule_import as sheet
 from .. import visibility
+from ..club_account import default_club_account, fill_club_account
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import (
@@ -335,6 +336,12 @@ def _apply_kind_rules(g: Gathering) -> None:
             g.fee = g.court_fee + g.ball_fee
 
 
+def _fill_club_account(db: Session, g: Gathering) -> None:
+    """오테식 모임인데 입금 계좌가 비어 있으면 모임 통장으로 채운다."""
+    if g.is_club and not g.account_number:
+        fill_club_account(g, default_club_account(db))
+
+
 def _normalize_courts(data: dict) -> None:
     """court_numbers가 주어지면 정리하고 court_count를 그 개수로 맞춘다."""
     raw = data.get("court_numbers")
@@ -457,6 +464,7 @@ def create_gathering(
     _normalize_courts(data)
     gathering = Gathering(**data, created_by=current_user.id)
     _apply_kind_rules(gathering)
+    _fill_club_account(db, gathering)
     for b in bookings:
         require_booker(db, b["booker_id"])
         gathering.court_bookings.append(CourtBooking(**b))
@@ -567,6 +575,7 @@ async def import_gatherings(
                 d["max_participants"] = d["court_count"] * sheet.SEATS_PER_COURT  # 회칙 제10조
             gathering = Gathering(**d, created_by=current_user.id)
             _apply_kind_rules(gathering)
+            _fill_club_account(db, gathering)
             db.add(gathering)
             made.append(gathering)
         except ValidationError as ve:
@@ -741,13 +750,8 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             return f"'{name}' 이름의 회원이 여럿이라 코트요정을 정할 수 없어요"
         return found[0]
 
-    # 오테식 모임 입금 계좌: 가장 최근 오테식 모임의 회비 통장
-    club_account = db.scalar(
-        select(Gathering)
-        .where(Gathering.kind.in_(CLUB_KINDS), Gathering.account_number.is_not(None))
-        .order_by(Gathering.event_date.desc(), Gathering.id.desc())
-        .limit(1)
-    )
+    # 오테식 모임 입금 계좌: 모임 통장 (없으면 가장 최근 오테식 모임의 계좌)
+    club_account = default_club_account(db)
 
     made: list[Gathering] = []
     for group in sheet.group_rows(good):
@@ -817,10 +821,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         )
         if club:
             gathering.guest_fee = GUEST_FEE_DEFAULT
-            if club_account is not None:
-                gathering.bank = club_account.bank
-                gathering.account_number = club_account.account_number
-                gathering.account_holder = club_account.account_holder
+            fill_club_account(gathering, club_account)
             # 코트 한 면마다 코트요정에게 줄 코트비. 예약자명(예약에 쓴 이름)은 코트 칸에 남긴다
             for r, fairy in zip(group.rows, fairies):
                 label = f"{_court_label(r.court)} · 예약 {r.booker}"[:50]
@@ -923,6 +924,7 @@ def update_gathering(
     for field_name, value in data.items():
         setattr(g, field_name, value)
     _apply_kind_rules(g)
+    _fill_club_account(db, g)  # 오테식 모임으로 바꿨거나 계좌를 비우면 모임 통장
     if "max_participants" in data:
         promote_waiting(db, g)  # 정원을 늘리거나 없애면 대기자가 올라간다
     db.commit()

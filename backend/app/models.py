@@ -418,3 +418,15 @@ class DrawMatch(Base):
     result_match_id: Mapped[int | None] = mapped_column(ForeignKey("matches.id"))
 
     draw: Mapped[Draw] = relationship(back_populates="draw_matches")
+
+
+class ClubSetting(Base):
+    """
+    클럽 공통 설정 (키-값). 지금은 모임 통장(오테식 모임 게스트비 입금 계좌)만 쓴다.
+    계좌번호처럼 코드 저장소에 올리면 안 되는 값을 앱에서 바꿀 수 있게 DB에 둔다.
+    """
+
+    __tablename__ = "club_settings"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[str] = mapped_column(String(200), nullable=False)

@@ -15,6 +15,7 @@ from .database import Base, engine, run_lightweight_migrations
 from .routers import (
     admin,
     auth,
+    club,
     court_bookings,
     draws,
     gatherings,
@@ -64,6 +65,7 @@ app.include_router(gatherings.router)
 app.include_router(draws.router)
 app.include_router(court_bookings.router)
 app.include_router(ratings.router)
+app.include_router(club.router)
 
 
 @app.get("/")

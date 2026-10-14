@@ -194,8 +194,8 @@ export function GatheringFeeFields({
         key={club ? "club" : "flash"}
         title={club ? "게스트비 입금 계좌 (회비 통장)" : "입금 받을 계좌"}
       >
-        <div className="grid grid-cols-3 gap-3">
-          <div>
+        <div className="grid grid-cols-5 gap-3">
+          <div className="col-span-2">
             <label className="label" htmlFor={id("bank")}>
               은행
             </label>
@@ -207,7 +207,7 @@ export function GatheringFeeFields({
               defaultValue={account.bank ?? ""}
             />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-3">
             <label className="label" htmlFor={id("account_number")}>
               계좌번호
             </label>
@@ -232,6 +232,11 @@ export function GatheringFeeFields({
             defaultValue={account.account_holder ?? ""}
           />
         </div>
+        {club ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            비워 두면 클럽 관리에서 정한 모임 통장이 들어가요.
+          </p>
+        ) : null}
       </FieldGroup>
 
       {club ? (

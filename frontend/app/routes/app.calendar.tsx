@@ -48,7 +48,13 @@ import {
   GATHERING_STATUS_DOT,
   WEEKDAYS,
 } from "~/lib/status";
-import type { Gathering, GatheringKind, Me, UserBrief } from "~/lib/types";
+import type {
+  ClubAccount,
+  Gathering,
+  GatheringKind,
+  Me,
+  UserBrief,
+} from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "캘린더 · 오테식 매니저" }];
 
@@ -89,10 +95,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const month = url.searchParams.get("month") || currentMonth();
   const { from, to } = monthRange(month);
-  const [gatherings, members] = await Promise.all([
+  const [gatherings, members, savedClubAccount] = await Promise.all([
     api<Gathering[]>(`/gatherings?date_from=${from}&date_to=${to}`, { token }),
     // 오테식 모임 등록 시 코트 예약자 선택용
     api<UserBrief[]>("/users", { token }),
+    // 오테식 모임 등록 때 미리 채울 모임 통장
+    api<ClubAccount | null>("/club/account", { token }),
   ]);
   // 보기 방식: URL(?view) 우선, 없으면 쿠키(cal_view)로 마지막 선택 기억, 기본 달력
   const urlView = url.searchParams.get("view");
@@ -107,7 +115,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : savedList
       ? "list"
       : "calendar";
-  return json({ month, gatherings, view, members });
+  return json({ month, gatherings, view, members, savedClubAccount });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -166,11 +174,15 @@ function addHours(time: string, hours: number): string {
 }
 
 export default function CalendarPage() {
-  const { month, gatherings, view, members } = useLoaderData<typeof loader>();
+  const { month, gatherings, view, members, savedClubAccount } =
+    useLoaderData<typeof loader>();
   const { user } = useOutletContext<{ user: Me }>();
-  const clubAccount = [...gatherings]
-    .reverse()
-    .find((g) => isClubKind(g.kind) && g.account_number);
+  // 오테식 모임 기본 계좌: 모임 통장, 없으면 이 달의 마지막 오테식 모임 계좌
+  const clubAccount =
+    savedClubAccount ??
+    [...gatherings]
+      .reverse()
+      .find((g) => isClubKind(g.kind) && g.account_number);
   const actionData = useActionData<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();

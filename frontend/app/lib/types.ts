@@ -339,3 +339,10 @@ export const MATCH_TYPE_LABEL: Record<MatchType, string> = {
   mixed_doubles: "혼복",
   open_doubles: "잡복",
 };
+
+/** 모임 통장: 오테식 모임 게스트비를 받는 클럽 공용 계좌 (GET/PUT /club/account) */
+export type ClubAccount = {
+  bank: string | null;
+  account_number: string;
+  account_holder: string | null;
+};

@@ -77,9 +77,10 @@ def test_parse_row_cases():
 
 # --- API ----------------------------------------------------------------------
 def test_court_sheet_import_end_to_end(club):
-    _people(club, jang="장미주", kim="김다빈", seo="서승우")
-    club.c.patch("/users/me", json={"bank": "카카오", "account_number": "3333-01", "account_holder": "김다빈"},
-                 headers=club.h("kim"))
+    # 코트요정(서승우·오장원)은 회원, 예약자명(장미주·김다빈)은 예약에 쓴 이름이라 회원이 아니어도 된다
+    _people(club, seo="서승우", ohj="오장원")
+    club.c.patch("/users/me", json={"bank": "카카오", "account_number": "3333-01", "account_holder": "오장원"},
+                 headers=club.h("ohj"))
     rows = [
         # 2·3행: 같은 날짜·시간·장소·종류 → 3·5번 코트 정모 하나, 예약자 두 명
         [D, "10:00~12:00", 3, "장미주 ", "서승우", 24000, 4000, "오테식 정모", 16, "시민 테니스장", None],
@@ -90,8 +91,8 @@ def test_court_sheet_import_end_to_end(club):
         [datetime(2099, 1, 24), "14:00~16:00", None, None, None, None, None, "우천 취소", None, None, None],
         # 6행: 코트요정 빠짐 → 실패
         [datetime(2099, 1, 25), "10:00~12:00", 4, "장미주", None, 20000, None, "오테식 벙개", None, "시민 테니스장", None],
-        # 7행: 가입하지 않은 예약자 → 실패
-        [datetime(2099, 1, 26), "10:00~12:00", 4, "홍길동", "서승우", 20000, None, "오테식 벙개", None, "시민 테니스장", None],
+        # 7행: 가입하지 않은 코트요정 → 실패
+        [datetime(2099, 1, 26), "10:00~12:00", 4, "장미주", "홍길동", 20000, None, "오테식 벙개", None, "시민 테니스장", None],
         # 8행: 날짜만 미리 채워 둔 행 → 무시
         [D],
         # 9·10행: 같은 모임인데 10행에 코트비가 없음 → 둘 다 등록하지 않음
@@ -113,14 +114,16 @@ def test_court_sheet_import_end_to_end(club):
     assert (club_g["court_numbers"], club_g["court_count"], club_g["location"]) == ("3, 5", 2, "시민 테니스장")
     assert club_g["court_fairy"] == "서승우, 오장원"
     assert (club_g["max_participants"], club_g["guest_fee"], club_g["description"]) == (16, 5000, "주차 2시간")
+    # 코트비는 코트요정 앞으로 지급 대기, 예약자명은 코트 칸에
     detail = club.c.get(f"/gatherings/{club_g['id']}", headers=club.admin).json()
     assert sorted((b["booker"]["name"], b["amount"], b["court_label"]) for b in detail["court_bookings"]) == [
-        ("김다빈", 24000, "5번"), ("장미주", 24000, "3번"),
+        ("서승우", 24000, "3번 · 예약 장미주"), ("오장원", 24000, "5번 · 예약 김다빈"),
     ]
 
+    # 일반 벙개: 코트비 + 캔볼비 n빵, 첫 코트요정이 벙주
     flash = listed["일반 벙개"]
     assert (flash["kind"], flash["court_fee"], flash["ball_fee"], flash["fee"]) == ("flash", 20000, 6000, 26000)
-    assert flash["created_by"] == club.ids["kim"]
+    assert flash["created_by"] == club.ids["ohj"]
     assert (flash["bank"], flash["account_number"]) == ("카카오", "3333-01")
 
     # 같은 파일을 다시 올리면 이미 등록된 일정은 건너뛴다
@@ -134,8 +137,8 @@ def test_court_sheet_import_end_to_end(club):
 def test_member_cannot_import_club_rows_and_template(club):
     _people(club, kim="김다빈")
     rows = [
-        [D, "10:00~12:00", 3, "김다빈", "서승우", 24000, None, "오테식 정모", None, "시민 테니스장", None],
-        [D, "19:00~21:00", 2, "김다빈", "서승우", 20000, None, "일반 벙개", None, "시민 테니스장", None],
+        [D, "10:00~12:00", 3, "장미주", "김다빈", 24000, None, "오테식 정모", None, "시민 테니스장", None],
+        [D, "19:00~21:00", 2, "장미주", "김다빈", 20000, None, "일반 벙개", None, "시민 테니스장", None],
     ]
     r = _upload(club, _sheet(rows), as_="kim")
     assert r["created"] == 1 and r["errors"][0]["row"] == 2
@@ -146,9 +149,15 @@ def test_member_cannot_import_club_rows_and_template(club):
     assert wb.sheetnames[0] == "템플릿" and "회원목록" in wb.sheetnames
     ws = wb["템플릿"]
     assert [c.value for c in ws[1]] == S.TEMPLATE_HEADERS
-    formulas = [dv.formula1 for dv in ws.data_validations.dataValidation]
+    validations = ws.data_validations.dataValidation
+    formulas = [dv.formula1 for dv in validations]
     assert any("10:00~12:00" in f for f in formulas) and any("오테식 정모" in f for f in formulas)
     assert any("회원목록" in f for f in formulas)
+    # 날짜 칸은 날짜 검사(구글 시트 달력), 모든 검사는 2~101행(100행)
+    assert any(dv.type == "date" and str(dv.sqref) == "A2:A101" for dv in validations)
+    assert {str(dv.sqref).split(":")[1][1:] for dv in validations} == {"101"}
+    # 미리 채운 값이 없다
+    assert all(c.value is None for row in ws.iter_rows(min_row=2) for c in row)
     assert "김다빈" in [c.value for c in wb["회원목록"]["A"]]
     # 받은 양식 그대로 올려도(데이터 없음) 아무것도 등록되지 않는다
     assert _upload(club, content)["created"] == 0

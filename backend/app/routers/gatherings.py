@@ -522,7 +522,7 @@ def import_template(
     widths = [12, 13, 10, 11, 11, 10, 12, 22, 14, 18, 28]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
-    last = 500
+    last = sheet.TEMPLATE_ROWS + 1  # 2행부터 100행
     for r in range(2, last + 1):
         ws.cell(r, 1).number_format = "yyyy-mm-dd"
         ws.cell(r, 6).number_format = "#,##0"
@@ -535,6 +535,19 @@ def import_template(
         ws.add_data_validation(dv)
         dv.add(f"{col}2:{col}{last}")
 
+    # 날짜: 날짜만 받게 해서 구글 시트에서는 칸을 두 번 누르면 달력이 뜬다
+    dates = DataValidation(
+        type="date",
+        operator="between",
+        formula1=str(sheet.DATE_MIN_SERIAL),
+        formula2=str(sheet.DATE_MAX_SERIAL),
+        allow_blank=True,
+        showErrorMessage=True,
+        errorTitle="날짜",
+        error="날짜를 2026-10-17 처럼 적거나 달력에서 골라 주세요.",
+    )
+    ws.add_data_validation(dates)
+    dates.add(f"A2:A{last}")
     dropdown('"' + ",".join(sheet.TIME_SLOTS) + '"', "B")
     dropdown('"' + ",".join(sheet.USAGE_OPTIONS) + '"', "H")
     if names:
@@ -551,17 +564,19 @@ def import_template(
     for cell in guide[1]:
         cell.font = Font(bold=True)
     guide.append(["2026-10-17", "10:00~12:00", 3, "홍길동", "김요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
-    guide.append(["2026-10-17", "10:00~12:00", 5, "이예약", "김요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
+    guide.append(["2026-10-17", "10:00~12:00", 5, "이예약", "박요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
     guide.append(["2026-10-21", "19:00~21:00", 2, "홍길동", "박요정", 20000, 6000, "일반 벙개", 8, "구립 테니스장", "야간 조명"])
     guide.append(["2026-10-24", "14:00~16:00", 4, "이예약", "김요정", 20000, None, "우천 취소", None, "시민 테니스장", None])
     guide.append([])
     for line in (
         "· 노란 칸(날짜·시간·코트 번호·예약자명·코트요정·코트비·사용 여부·장소)을 모두 채운 행만 등록돼요.",
+        "· 날짜 칸은 날짜만 받아요. 구글 시트에서는 칸을 두 번 누르면 달력이 떠요.",
         "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
         "· 사용 여부가 오테식 정모 / 오테식 벙개 / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
         "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
-        "· 예약자명은 앱에 가입한 이름과 같아야 해요. 오테식 모임은 예약자에게 코트비를 지급할 목록이 만들어지고,",
-        "  일반 벙개는 첫 번째 예약자가 벙주가 되어 그 사람의 환급 계좌로 코트비+캔볼비를 n빵해요.",
+        "· 코트요정은 앱에 가입한 이름과 같아야 해요. 오테식 모임의 코트비는 총무가 코트요정에게 정산하므로",
+        "  '지급할 코트비'에 코트요정 앞으로 올라가요(예약자명은 '3번 · 예약 홍길동'처럼 코트 칸에 남아요).",
+        "· 일반 벙개는 참석자끼리 코트비+캔볼비를 n빵해요. 첫 번째 코트요정이 벙주가 돼요.",
         "· 오테식 모임의 캔볼비는 회비에서 나가므로 반영하지 않아요. 게스트비는 5,000원으로 들어가요.",
         "· 이 '작성 안내' 시트는 올려도 읽지 않아요. '템플릿' 시트에 적어 주세요.",
     ):
@@ -607,7 +622,8 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         else:
             good.append(parsed)
 
-    # 예약자 이름 → 회원 (승인된 활동 회원, 이름이 없으면 닉네임)
+    # 코트요정 이름 → 회원 (승인된 활동 회원, 이름이 없으면 닉네임).
+    # 코트비는 총무가 코트요정에게 정산하므로 지급 내역의 받는 사람은 코트요정이다.
     members = db.scalars(
         select(User).where(User.is_active.is_(True), User.approval_status == ApprovalStatus.APPROVED)
     ).all()
@@ -621,9 +637,9 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
     def find_member(name: str) -> User | str:
         found = by_name.get(name) or by_nick.get(name) or []
         if not found:
-            return f"예약자 '{name}'님을 회원에서 찾을 수 없어요(가입한 이름과 같게 적어 주세요)"
+            return f"코트요정 '{name}'님을 회원에서 찾을 수 없어요(가입한 이름과 같게 적어 주세요)"
         if len(found) > 1:
-            return f"'{name}' 이름의 회원이 여럿이라 예약자를 정할 수 없어요"
+            return f"'{name}' 이름의 회원이 여럿이라 코트요정을 정할 수 없어요"
         return found[0]
 
     # 오테식 모임 입금 계좌: 가장 최근 오테식 모임의 회비 통장
@@ -652,13 +668,13 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         dup = [c for c, n in Counter(group.courts).items() if n > 1]
         if dup:
             problems.append(f"같은 코트({', '.join(_court_label(c) for c in dup)})가 두 번 적혀 있어요")
-        bookers: list[User] = []
+        fairies: list[User] = []
         for r in group.rows:
-            found = find_member(r.booker)
+            found = find_member(r.fairy)
             if isinstance(found, str):
                 problems.append(f"{r.row}행 {found}" if len(group.rows) > 1 else found)
             else:
-                bookers.append(found)
+                fairies.append(found)
         if problems:
             errors.append(GatheringImportRowError(row=first.row, error=f"{group.row_text}: " + " · ".join(problems)))
             continue
@@ -705,13 +721,15 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
                 gathering.bank = club_account.bank
                 gathering.account_number = club_account.account_number
                 gathering.account_holder = club_account.account_holder
-            for r, booker in zip(group.rows, bookers):
+            # 코트 한 면마다 코트요정에게 줄 코트비. 예약자명(예약에 쓴 이름)은 코트 칸에 남긴다
+            for r, fairy in zip(group.rows, fairies):
+                label = f"{_court_label(r.court)} · 예약 {r.booker}"[:50]
                 gathering.court_bookings.append(
-                    CourtBooking(booker_id=booker.id, amount=r.court_fee, court_label=_court_label(r.court))
+                    CourtBooking(booker_id=fairy.id, amount=r.court_fee, court_label=label)
                 )
         else:
-            # 일반 벙개: 첫 번째 예약자가 벙주 — 그 사람 환급 계좌로 코트비+캔볼비를 n빵
-            host = bookers[0]
+            # 일반 벙개: 참석자끼리 코트비+캔볼비 n빵. 첫 코트요정이 벙주(환급 계좌가 있으면 그 계좌)
+            host = fairies[0]
             gathering.created_by = host.id
             gathering.court_fee = sum(r.court_fee for r in group.rows)
             gathering.ball_fee = sum(r.ball_fee for r in group.rows)

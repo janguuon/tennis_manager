@@ -230,8 +230,7 @@ export default function PaymentsPage() {
                       </>
                     ) : (
                       <span className="min-w-0 flex-1 text-xs font-semibold">
-                        환급 계좌 미등록 · 마이페이지에 등록해 달라고 알려
-                        주세요
+                        환급 계좌 미등록 · 카톡으로 정산해 주세요
                       </span>
                     )}
                     <Form method="post">

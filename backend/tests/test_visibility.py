@@ -82,7 +82,7 @@ def test_guest_takes_only_remaining_seats(club, fixed_now):
 
     fixed_now["now"] = datetime(2099, 1, 13, 0, 0)
     r = club.vote(fri, "gus")
-    assert r.status_code == 409  # 정회원이 이미 정원을 채움
+    assert r.json()["status"] == "waiting"  # 정회원이 이미 정원을 채움 → 대기
 
 
 def test_approve_as_guest_and_change_type(club):

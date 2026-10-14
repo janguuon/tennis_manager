@@ -644,7 +644,7 @@ export default function CalendarPage() {
                     type="number"
                     min="1"
                     className="input"
-                    placeholder="제한 없음"
+                    placeholder="제한 없음 (차면 대기)"
                   />
                 </div>
               </div>

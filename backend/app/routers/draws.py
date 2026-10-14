@@ -399,7 +399,7 @@ def record_draw_match_result(
         # 오테식 모임 대진은 게임 수로 레이팅을 매기므로 점수가 꼭 필요하다.
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail="점수를 게임 수로 입력해 주세요. (5:5 무승부, 타이브레이크는 7:6)",
+            detail="점수를 게임 수로 입력해 주세요. (5:5 해피게임은 5:5, 타이브레이크는 6:5)",
         )
 
     winner = payload.winner_team

@@ -36,8 +36,8 @@ def test_happy_game_draw_and_tiebreak():
     games = [g(1, [1, 2], [3, 4], 6, 0), g(2, [1, 2], [3, 4], 5, 5, day=2)]
     book = R.compute(games)
     assert book.get(1).history[-1].delta < 0
-    # 타이브레이크 7:6 은 근소한 승리
-    tb = R.compute([g(1, [1, 2], [3, 4], 7, 6)])
+    # 타이브레이크 6:5 는 근소한 승리
+    tb = R.compute([g(1, [1, 2], [3, 4], 6, 5)])
     assert 0 < tb.rating(1) - R.BASE < 5
 
 

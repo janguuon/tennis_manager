@@ -26,6 +26,7 @@ from ..models import (
 )
 from ..schemas import MemberDeleteResult, MemberTypeUpdate, PasswordUpdate, UserRead
 from ..security import hash_password
+from .gatherings import promote_waiting
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 
@@ -145,12 +146,21 @@ def delete_member(
             )
         ).all()
         for p in upcoming:
+            was_attending = p.status == AttendanceStatus.ATTENDING
             p.status = AttendanceStatus.ABSENT
+            p.waiting_since = None
+            if was_attending:
+                promote_waiting(db, p.gathering)  # 빠진 자리에 대기자를 올린다
         db.commit()
         return MemberDeleteResult(result="deactivated", name=user.name)
 
+    freed: list[Gathering] = []
     for p in db.scalars(select(Participant).where(Participant.user_id == user.id)).all():
+        if p.status == AttendanceStatus.ATTENDING:
+            freed.append(p.gathering)
         db.delete(p)
+    for g in freed:
+        promote_waiting(db, g)  # 빠진 자리에 대기자를 올린다
     name = user.name
     db.delete(user)
     db.commit()

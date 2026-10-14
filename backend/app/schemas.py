@@ -356,7 +356,8 @@ class GatheringUpdate(BaseModel):
 class AttendanceSummary(BaseModel):
     attending: int = 0
     absent: int = 0
-    maybe: int = 0
+    maybe: int = 0  # 예전 '미정' 투표
+    waiting: int = 0
     total: int = 0
 
 
@@ -386,6 +387,7 @@ class ParticipantRead(BaseModel):
     user: UserBrief
     status: AttendanceStatus
     voted_at: datetime
+    waiting_since: datetime | None = None  # 대기 순서
     paid: bool = False
     paid_at: datetime | None = None
     paid_amount: int | None = None  # 입금 처리 당시 금액
@@ -426,9 +428,9 @@ class GatheringDetail(GatheringRead):
 
 
 class ParticipantVote(BaseModel):
-    """참석/불참/미정 투표."""
+    """참석/불참 투표. 정원이 찼으면 '참석'은 대기로 들어간다. (미정은 없어졌다)"""
 
-    status: AttendanceStatus
+    status: Literal["attending", "absent"]
 
 
 class PaymentUpdate(BaseModel):

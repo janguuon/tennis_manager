@@ -62,6 +62,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "guest_fee", "guest_fee INTEGER NOT NULL DEFAULT 0"),
     # 코트요정 (엑셀 일정 등록)
     ("gatherings", "court_fairy", "court_fairy VARCHAR(200)"),
+    # 참석 대기열 순서
+    ("participants", "waiting_since", "waiting_since DATETIME"),
 ]
 
 

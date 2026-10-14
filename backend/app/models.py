@@ -91,7 +91,8 @@ class AttendanceStatus(str, enum.Enum):
 
     ATTENDING = "attending"   # 참석
     ABSENT = "absent"         # 불참
-    MAYBE = "maybe"           # 미정
+    MAYBE = "maybe"           # 미정 (더 이상 고를 수 없음 — 예전 투표 표시용)
+    WAITING = "waiting"       # 대기: 정원이 차서 기다리는 중. 자리가 나면 순서대로 참석이 된다
 
 
 class GatheringStatus(str, enum.Enum):
@@ -342,6 +343,8 @@ class Participant(Base):
     voted_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+    # 대기 순서: 대기에 들어간 시각 (참석이 되거나 빠지면 비운다)
+    waiting_since: Mapped[datetime | None] = mapped_column(DateTime)
 
     # 참가비 입금 여부 (회비 정산). paid_at은 입금 처리 시각.
     paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")

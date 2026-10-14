@@ -20,6 +20,7 @@ import {
 import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
+import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -69,12 +70,7 @@ const shortDay = (date: string) => {
   return `${m}.${d} ${wd}`;
 };
 
-const ATTENDANCE_LOCK_DAYS = 3;
-const VOTE_LABEL: Record<AttendanceStatus, string> = {
-  attending: "참석",
-  absent: "불참",
-  maybe: "미정",
-};
+
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
@@ -416,8 +412,15 @@ function NextGatheringTile({
   const { m, d, wd } = dateParts(next.event_date);
   const attendees = next.participants.filter((p) => p.status === "attending");
   const myVote = next.participants.find((p) => p.user.id === me.id)?.status;
+  const full = isFull(next, attendees.length);
+  const waiting = waitingList(next.participants);
+  const myRank = waiting.findIndex((p) => p.user.id === me.id) + 1;
+  // 누르는 즉시 보여 줄 상태 (정원이 찼으면 참석 신청은 대기)
+  const pending = fetcher.formData?.get("status") as AttendanceStatus | null;
   const shownVote =
-    (fetcher.formData?.get("status") as AttendanceStatus | null) ?? myVote;
+    pending === "attending" && full && myVote !== "attending" && myVote !== "waiting"
+      ? "waiting"
+      : pending ?? myVote;
   const locked = daysLeft <= ATTENDANCE_LOCK_DAYS;
   const href = `/app/gatherings/${next.id}?from=${next.event_date}`;
   return (
@@ -485,29 +488,49 @@ function NextGatheringTile({
             className="home-votes"
           >
             <input type="hidden" name="intent" value="vote" />
-            {(["attending", "maybe", "absent"] as AttendanceStatus[]).map(
-              (s) => {
-                const selected = shownVote === s;
-                const blocked = s !== "attending" && locked;
-                return (
-                  <button
-                    key={s}
-                    name="status"
-                    value={s}
-                    disabled={blocked || fetcher.state !== "idle"}
-                    aria-pressed={selected}
-                    title={
-                      blocked
-                        ? "모임 3일 전부터는 불참·미정으로 변경할 수 없어요"
-                        : undefined
-                    }
-                    className={selected ? "btn-ink" : "btn-line"}
-                  >
-                    {selected && <Check size={15} />}
-                    {s === "attending" ? "참석할게요" : VOTE_LABEL[s]}
-                  </button>
-                );
-              }
+            {shownVote === "waiting" ? (
+              <>
+                <span role="status" className="btn-ink pointer-events-none">
+                  <Check size={15} />
+                  대기 {myRank > 0 ? `${myRank}번째` : "중"}
+                </span>
+                <button
+                  name="status"
+                  value="absent"
+                  disabled={fetcher.state !== "idle"}
+                  className="btn-line"
+                >
+                  대기 취소
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  name="status"
+                  value="attending"
+                  disabled={fetcher.state !== "idle"}
+                  aria-pressed={shownVote === "attending"}
+                  className={shownVote === "attending" ? "btn-ink" : "btn-line"}
+                >
+                  {shownVote === "attending" && <Check size={15} />}
+                  {full && shownVote !== "attending" ? "대기 신청" : "참석할게요"}
+                </button>
+                <button
+                  name="status"
+                  value="absent"
+                  disabled={(locked && myVote === "attending") || fetcher.state !== "idle"}
+                  aria-pressed={shownVote === "absent"}
+                  title={
+                    locked && myVote === "attending"
+                      ? "모임 3일 전부터는 불참으로 변경할 수 없어요"
+                      : undefined
+                  }
+                  className={shownVote === "absent" ? "btn-ink" : "btn-line"}
+                >
+                  {shownVote === "absent" && <Check size={15} />}
+                  불참
+                </button>
+              </>
             )}
           </fetcher.Form>
         )}
@@ -516,11 +539,18 @@ function NextGatheringTile({
             {fetcher.data.error}
           </p>
         )}
-        {(locked && !me.is_admin) || myDue > 0 ? (
+        {(!me.is_admin && (myVote === "waiting" || full || (locked && myVote === "attending"))) ||
+        myDue > 0 ? (
           <div className="mt-3 flex flex-wrap justify-between gap-2 text-[11px]">
             <span>
-              {locked && !me.is_admin
-                ? "불참·미정 변경은 관리자에게 문의해 주세요."
+              {me.is_admin
+                ? ""
+                : myVote === "waiting"
+                ? "자리가 나면 순서대로 자동 참석돼요."
+                : locked && myVote === "attending"
+                ? "불참 변경은 운영진에게 문의해 주세요."
+                : full && myVote !== "attending"
+                ? `정원이 다 찼어요 · 대기 ${waiting.length}명`
                 : ""}
             </span>
             {myDue > 0 && (

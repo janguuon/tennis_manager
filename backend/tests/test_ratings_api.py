@@ -73,7 +73,7 @@ def test_club_draw_result_moves_ratings_and_needs_score(club):
     m = generate(club, gid, rounds=1).json()["matches"][0]
 
     r = record(club, m["id"], 0, 0)
-    assert r.status_code == 400 and "7:6" in r.json()["detail"]
+    assert r.status_code == 400 and "6:5" in r.json()["detail"]
     r = record(club, m["id"], 6, 2)
     assert r.status_code == 200
     assert (r.json()["team1_score"], r.json()["team2_score"]) == (6, 2)

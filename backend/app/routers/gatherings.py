@@ -103,6 +103,8 @@ def _summary(gathering: Gathering) -> AttendanceSummary:
             s.attending += 1
         elif p.status == AttendanceStatus.ABSENT:
             s.absent += 1
+        elif p.status == AttendanceStatus.WAITING:
+            s.waiting += 1
         else:
             s.maybe += 1
     s.total = len(gathering.participants)
@@ -342,13 +344,97 @@ def _normalize_courts(data: dict) -> None:
             data["court_count"] = len(labels)
 
 
-# 모임 시작 며칠 전부터 참석 변경(불참/미정)을 잠그는지
+# 모임 시작 며칠 전부터 참석 → 불참 변경을 잠그는지
 ATTENDANCE_LOCK_DAYS = 3
 
 
 def _attendance_locked(gathering: Gathering) -> bool:
     """모임 시작 ATTENDANCE_LOCK_DAYS일 전부터(당일·지난 경우 포함) 잠금."""
     return (gathering.event_date - date.today()).days <= ATTENDANCE_LOCK_DAYS
+
+
+# --- 참석 대기열 ---------------------------------------------------------------
+def _attending_count(db: Session, gathering_id: int) -> int:
+    return db.scalar(
+        select(func.count())
+        .select_from(Participant)
+        .where(
+            Participant.gathering_id == gathering_id,
+            Participant.status == AttendanceStatus.ATTENDING,
+        )
+    )
+
+
+def promote_waiting(db: Session, gathering: Gathering) -> list[Participant]:
+    """정원에 자리가 나면 대기 순서(waiting_since)대로 참석으로 올린다. 정원이 없으면 모두."""
+    db.flush()
+    waiting = db.scalars(
+        select(Participant)
+        .where(
+            Participant.gathering_id == gathering.id,
+            Participant.status == AttendanceStatus.WAITING,
+        )
+        .order_by(Participant.waiting_since, Participant.id)
+    ).all()
+    if not waiting:
+        return []
+    if gathering.max_participants is None:
+        free = len(waiting)
+    else:
+        free = max(gathering.max_participants - _attending_count(db, gathering.id), 0)
+    promoted = list(waiting[:free])
+    for p in promoted:
+        p.status = AttendanceStatus.ATTENDING
+        p.waiting_since = None
+    return promoted
+
+
+def _set_attendance(db: Session, gathering: Gathering, participant: Participant | None, user_id: int, want: str) -> Participant:
+    """참석 신청(정원이 찼으면 대기) 또는 불참. 참석자가 빠지면 대기자를 올린다."""
+    if participant is None:
+        participant = Participant(gathering_id=gathering.id, user_id=user_id, status=AttendanceStatus.ABSENT)
+        db.add(participant)
+    was = participant.status
+    if want == "attending":
+        if was in (AttendanceStatus.ATTENDING, AttendanceStatus.WAITING):
+            return participant  # 이미 참석이거나 대기 중(순서 유지)
+        promote_waiting(db, gathering)  # 먼저 온 대기자가 있으면 그 사람들이 우선
+        has_waiting = db.scalar(
+            select(func.count())
+            .select_from(Participant)
+            .where(Participant.gathering_id == gathering.id, Participant.status == AttendanceStatus.WAITING)
+        )
+        full = (
+            gathering.max_participants is not None
+            and _attending_count(db, gathering.id) >= gathering.max_participants
+        )
+        if full or has_waiting:
+            participant.status = AttendanceStatus.WAITING
+            participant.waiting_since = datetime.now()
+        else:
+            participant.status = AttendanceStatus.ATTENDING
+            participant.waiting_since = None
+    else:
+        participant.status = AttendanceStatus.ABSENT
+        participant.waiting_since = None
+        if was == AttendanceStatus.ATTENDING:
+            promote_waiting(db, gathering)
+    return participant
+
+
+def waiting_rank(db: Session, participant: Participant) -> int | None:
+    """대기 몇 번째인지 (1부터)."""
+    if participant.status != AttendanceStatus.WAITING:
+        return None
+    ahead = db.scalars(
+        select(Participant)
+        .where(
+            Participant.gathering_id == participant.gathering_id,
+            Participant.status == AttendanceStatus.WAITING,
+        )
+        .order_by(Participant.waiting_since, Participant.id)
+    ).all()
+    return next((i for i, p in enumerate(ahead, start=1) if p.id == participant.id), None)
 
 
 # --- 모임 CRUD --------------------------------------------------------------
@@ -818,6 +904,8 @@ def update_gathering(
     for field_name, value in data.items():
         setattr(g, field_name, value)
     _apply_kind_rules(g)
+    if "max_participants" in data:
+        promote_waiting(db, g)  # 정원을 늘리거나 없애면 대기자가 올라간다
     db.commit()
     return _to_read(_load_gathering(db, gathering_id))
 
@@ -858,7 +946,7 @@ def vote_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """현재 회원의 참석/불참/미정 투표 (없으면 생성, 있으면 갱신)."""
+    """참석/불참 투표. 정원이 찼으면 참석 신청은 대기(waiting)로 들어가고, 자리가 나면 순서대로 참석이 된다."""
     gathering = db.get(Gathering, gathering_id)
     if not gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
@@ -871,45 +959,46 @@ def vote_attendance(
         )
     )
 
-    # 마감 제한: 모임 3일 전부터는 일반 회원이 불참/미정으로 바꿀 수 없음(관리자만 가능)
+    # 마감 제한: 모임 3일 전부터는 참석자가 불참으로 바꿀 수 없음(관리자·운영진에게 요청). 대기 취소는 언제든.
     if (
-        payload.status in (AttendanceStatus.ABSENT, AttendanceStatus.MAYBE)
+        payload.status == "absent"
+        and participant is not None
+        and participant.status == AttendanceStatus.ATTENDING
         and not current_user.is_admin
         and _attendance_locked(gathering)
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 변경할 수 없습니다. 관리자에게 문의하세요.",
+            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참으로 변경할 수 없습니다. 운영진에게 문의하세요.",
         )
 
-    # 정원 제한: '참석'으로 바꾸려는데 이미 정원이 찼고, 본인이 아직 참석이 아니면 차단
-    if payload.status == AttendanceStatus.ATTENDING and gathering.max_participants is not None:
-        already_attending = (
-            participant is not None and participant.status == AttendanceStatus.ATTENDING
-        )
-        if not already_attending:
-            current_attending = db.scalar(
-                select(func.count())
-                .select_from(Participant)
-                .where(
-                    Participant.gathering_id == gathering_id,
-                    Participant.status == AttendanceStatus.ATTENDING,
-                )
-            )
-            if current_attending >= gathering.max_participants:
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT,
-                    detail=f"참석 정원({gathering.max_participants}명)이 가득 찼습니다.",
-                )
+    participant = _set_attendance(db, gathering, participant, current_user.id, payload.status)
+    db.commit()
+    db.refresh(participant)
+    return ParticipantRead.model_validate(participant)
 
-    if participant is None:
-        participant = Participant(
-            gathering_id=gathering_id, user_id=current_user.id, status=payload.status
-        )
-        db.add(participant)
-    else:
-        participant.status = payload.status
 
+@router.put("/{gathering_id}/participants/{user_id}/attendance", response_model=ParticipantRead)
+def set_member_attendance(
+    gathering_id: int,
+    user_id: int,
+    payload: ParticipantVote,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """운영진이 회원의 참석을 바꾼다(마감 이후 불참 요청 처리 등). 불참이 되면 대기자가 올라간다."""
+    gathering = db.get(Gathering, gathering_id)
+    if not gathering:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
+    _require_organizer(gathering, current_user)
+    participant = db.scalar(
+        select(Participant).where(Participant.gathering_id == gathering_id, Participant.user_id == user_id)
+    )
+    if participant is None and payload.status == "absent":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="참석 투표한 회원이 아닙니다.")
+    if participant is None and not db.get(User, user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="회원을 찾을 수 없습니다.")
+    participant = _set_attendance(db, gathering, participant, user_id, payload.status)
     db.commit()
     db.refresh(participant)
     return ParticipantRead.model_validate(participant)
@@ -921,30 +1010,29 @@ def cancel_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """투표 취소 (참여자 명단에서 제거)."""
+    """투표 취소 (참여자 명단에서 제거). 참석자가 빠지면 대기자가 올라간다."""
     gathering = db.get(Gathering, gathering_id)
     if gathering is not None:
         _require_open(gathering, current_user)
-    # 마감 제한: 취소(=사실상 불참)도 3일 전부터는 일반 회원 불가(관리자만 가능)
-    if (
-        gathering is not None
-        and not current_user.is_admin
-        and _attendance_locked(gathering)
-    ):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없습니다. 관리자에게 문의하세요.",
-        )
-
     participant = db.scalar(
         select(Participant).where(
             Participant.gathering_id == gathering_id,
             Participant.user_id == current_user.id,
         )
     )
-    if participant:
-        db.delete(participant)
-        db.commit()
+    if participant is None:
+        return
+    was_attending = participant.status == AttendanceStatus.ATTENDING
+    # 마감 제한: 참석 취소(=사실상 불참)는 3일 전부터 일반 회원 불가. 대기 취소는 언제든.
+    if was_attending and not current_user.is_admin and _attendance_locked(gathering):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없습니다. 운영진에게 문의하세요.",
+        )
+    db.delete(participant)
+    if was_attending:
+        promote_waiting(db, gathering)
+    db.commit()
 
 
 # --- 회비 / 참가비 정산 -----------------------------------------------------

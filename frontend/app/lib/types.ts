@@ -10,7 +10,8 @@ export type MatchType =
   | "womens_doubles"
   | "mixed_doubles"
   | "open_doubles";
-export type AttendanceStatus = "attending" | "absent" | "maybe";
+/** maybe(미정)는 예전 투표 표시용. waiting = 정원이 차서 대기 중 */
+export type AttendanceStatus = "attending" | "absent" | "waiting" | "maybe";
 export type GatheringStatus = "planned" | "ongoing" | "completed" | "canceled";
 /** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 일반 벙개 (n빵) */
 export type GatheringKind = "club_regular" | "club_flash" | "flash";
@@ -79,6 +80,7 @@ export interface AttendanceSummary {
   attending: number;
   absent: number;
   maybe: number;
+  waiting: number;
   total: number;
 }
 
@@ -169,6 +171,8 @@ export interface Participant {
   user: UserBrief;
   status: AttendanceStatus;
   voted_at: string;
+  /** 대기에 들어간 시각 (대기 순서) */
+  waiting_since: string | null;
   paid: boolean;
   paid_at: string | null;
   /** 입금 처리 당시 금액 (이전 기록은 null) */

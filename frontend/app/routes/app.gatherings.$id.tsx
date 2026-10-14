@@ -45,6 +45,7 @@ import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao } from "~/lib/kakao";
 import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
+import { ATTENDANCE_LABEL, ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
 import { DRAW_METHOD_LABEL, TIER_CLASS, expectedSplit } from "~/lib/tier";
 import {
   MATCH_TYPE_LABEL,
@@ -136,6 +137,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
           rounds: Number(formData.get("rounds")) || null,
         },
       });
+    } else if (intent === "set_attendance") {
+      await api(
+        `/gatherings/${id}/participants/${formData.get("user_id")}/attendance`,
+        { method: "PUT", token, body: { status: formData.get("status") } }
+      );
     } else if (intent === "toggle_payment") {
       await api(
         `/gatherings/${id}/participants/${formData.get("user_id")}/payment`,
@@ -223,11 +229,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 }
 
-const VOTE_LABEL: Record<AttendanceStatus, string> = {
-  attending: "참석",
-  absent: "불참",
-  maybe: "미정",
-};
 
 export default function GatheringDetailPage() {
   const { gathering, draws, members } = useLoaderData<typeof loader>();
@@ -248,15 +249,13 @@ export default function GatheringDetailPage() {
         .filter(Boolean)
     : [];
 
-  // 참석 변경 마감: 모임 3일 전부터는 일반 회원이 불참/미정으로 못 바꿈(관리자만 가능)
-  const ATTENDANCE_LOCK_DAYS = 3;
+  // 참석 변경 마감: 모임 3일 전부터는 참석자가 불참으로 못 바꿈(운영진에게 요청)
   const daysUntilEvent = Math.round(
     (new Date(gathering.event_date + "T00:00:00").getTime() -
       new Date(new Date().toDateString()).getTime()) /
       86400000
   );
   const attendanceLocked = daysUntilEvent <= ATTENDANCE_LOCK_DAYS;
-  const canSetAbsence = user.is_admin || !attendanceLocked;
 
   // 돌아갈 위치를 ?from 으로 판별:
   //  - "list:YYYY-MM" → 캘린더 리스트 모드(월 전체)
@@ -300,6 +299,11 @@ export default function GatheringDetailPage() {
   );
   const me = gathering.participants.find((p) => p.user.id === user.id);
   const myAttending = me?.status === "attending";
+  // 대기열: 정원이 차면 참석 신청은 대기, 자리가 나면 순서대로 참석
+  const waiting = waitingList(gathering.participants);
+  const full = isFull(gathering, attendees.length);
+  const myRank = waiting.findIndex((p) => p.user.id === user.id) + 1;
+  const absentLocked = attendanceLocked && myAttending;
   const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
   const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
   // 낼 돈이 있는 참석자: 일반 벙개는 전원, 오테식 모임은 게스트(이미 입금 기록이 있는 사람 포함)
@@ -523,8 +527,11 @@ export default function GatheringDetailPage() {
                 {user.is_admin ? "참석 현황" : "이번에도 함께할까요?"}
               </h2>
               <p className="tile-sub text-slate-500 dark:text-slate-400">
-                불참 {gathering.attendance?.absent ?? 0} · 미정{" "}
-                {gathering.attendance?.maybe ?? 0}
+                불참 {gathering.attendance?.absent ?? 0} · 대기{" "}
+                {gathering.attendance?.waiting ?? 0}
+                {gathering.attendance?.maybe
+                  ? ` · 미정 ${gathering.attendance.maybe}`
+                  : ""}
               </p>
             </div>
             <p className="shrink-0 whitespace-nowrap font-display text-[46px] font-semibold leading-none tracking-[-0.05em] sm:text-[60px]">
@@ -541,38 +548,72 @@ export default function GatheringDetailPage() {
             <div className="mt-auto pt-6">
               <Form method="post" className="flex gap-2">
                 <input type="hidden" name="intent" value="vote" />
-                {(["attending", "absent", "maybe"] as AttendanceStatus[]).map(
-                  (s) => {
-                    const blocked = s !== "attending" && !canSetAbsence;
-                    const selected = me?.status === s;
-                    return (
-                      <button
-                        key={s}
-                        name="status"
-                        value={s}
-                        disabled={blocked || navigation.state !== "idle"}
-                        title={
-                          blocked
-                            ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참/미정으로 바꿀 수 없어요`
-                            : undefined
-                        }
-                        aria-pressed={selected}
-                        className={`${
-                          selected ? "btn-primary" : "btn-ghost"
-                        } h-11 flex-1 px-2 text-sm disabled:cursor-not-allowed`}
-                      >
-                        {selected ? <Check size={16} /> : null}
-                        {VOTE_LABEL[s]}
-                      </button>
-                    );
-                  }
+                {me?.status === "waiting" ? (
+                  <>
+                    <span
+                      role="status"
+                      className="btn-primary pointer-events-none h-11 flex-1 px-2 text-sm"
+                    >
+                      <Check size={16} />
+                      대기 {myRank}번째
+                    </span>
+                    <button
+                      name="status"
+                      value="absent"
+                      disabled={navigation.state !== "idle"}
+                      className="btn-ghost h-11 flex-1 px-2 text-sm"
+                    >
+                      대기 취소
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      name="status"
+                      value="attending"
+                      disabled={navigation.state !== "idle"}
+                      aria-pressed={myAttending}
+                      className={`${
+                        myAttending ? "btn-primary" : "btn-ghost"
+                      } h-11 flex-1 px-2 text-sm`}
+                    >
+                      {myAttending ? <Check size={16} /> : null}
+                      {full && !myAttending ? "대기 신청" : "참석"}
+                    </button>
+                    <button
+                      name="status"
+                      value="absent"
+                      disabled={absentLocked || navigation.state !== "idle"}
+                      title={
+                        absentLocked
+                          ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참으로 바꿀 수 없어요`
+                          : undefined
+                      }
+                      aria-pressed={me?.status === "absent"}
+                      className={`${
+                        me?.status === "absent" ? "btn-primary" : "btn-ghost"
+                      } h-11 flex-1 px-2 text-sm disabled:cursor-not-allowed`}
+                    >
+                      {me?.status === "absent" ? <Check size={16} /> : null}
+                      불참
+                    </button>
+                  </>
                 )}
               </Form>
-              {attendanceLocked ? (
+              {me?.status === "waiting" ? (
+                <p className="mt-3 text-xs font-bold">
+                  자리가 나면 대기 순서대로 자동으로 참석이 돼요.
+                </p>
+              ) : full && !myAttending ? (
+                <p className="mt-3 text-xs font-bold">
+                  정원이 다 찼어요. 대기 신청하면 자리가 날 때 순서대로 참석이 돼요
+                  {waiting.length ? ` (지금 대기 ${waiting.length}명)` : ""}.
+                </p>
+              ) : absentLocked ? (
                 <p className="mt-3 flex items-center gap-1.5 text-xs font-bold">
                   <Lock size={12} className="shrink-0" />
-                  모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참·미정으로 바꿀 수
-                  없어요. 필요하면 관리자에게 문의하세요.
+                  모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참으로 바꿀 수 없어요.
+                  필요하면 운영진에게 문의하세요.
                 </p>
               ) : null}
             </div>
@@ -601,45 +642,80 @@ export default function GatheringDetailPage() {
               아직 투표한 사람이 없어요.
             </p>
           ) : (
-            (["attending", "maybe", "absent"] as AttendanceStatus[]).map(
+            (["attending", "waiting", "absent", "maybe"] as AttendanceStatus[]).map(
               (status) => {
-                const people = gathering.participants.filter(
-                  (p) => p.status === status
-                );
+                const people =
+                  status === "waiting"
+                    ? waiting
+                    : gathering.participants.filter((p) => p.status === status);
                 if (!people.length) return null;
                 return (
                   <div key={status}>
                     {status !== "attending" && (
                       <p className="mt-6 border-t border-slate-200 pt-4 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                        {VOTE_LABEL[status]} {people.length}명
+                        {ATTENDANCE_LABEL[status]} {people.length}명
+                        {status === "waiting" ? " · 자리가 나면 순서대로 참석" : ""}
                       </p>
                     )}
                     <div className="player-grid">
-                      {people.map((p) => (
-                        <Link key={p.user.id} to={`/app/members/${p.user.id}`}>
-                          <MemberAvatar
-                            user={p.user}
-                            className={
-                              status === "attending"
-                                ? "!h-11 !w-11"
-                                : "!h-9 !w-9 opacity-60"
-                            }
-                          />
-                          <strong className="max-w-full truncate text-xs">
-                            {p.user.name}
-                            {p.user.id === user.id && (
-                              <small className="ml-1 text-[10px] font-normal text-slate-500">
-                                나
-                              </small>
-                            )}
-                          </strong>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            {p.user.member_type === "guest" ? "게스트 · " : ""}
-                            {p.user.ntrp
-                              ? `NTRP ${p.user.ntrp}`
-                              : "NTRP 미입력"}
-                          </span>
-                        </Link>
+                      {people.map((p, i) => (
+                        <div
+                          key={p.user.id}
+                          className="flex min-w-0 flex-col items-center gap-1.5"
+                        >
+                          <Link to={`/app/members/${p.user.id}`}>
+                            <MemberAvatar
+                              user={p.user}
+                              className={
+                                status === "attending"
+                                  ? "!h-11 !w-11"
+                                  : status === "waiting"
+                                  ? "!h-10 !w-10"
+                                  : "!h-9 !w-9 opacity-60"
+                              }
+                            />
+                            <strong className="max-w-full truncate text-xs">
+                              {status === "waiting" ? `${i + 1}. ` : ""}
+                              {p.user.name}
+                              {p.user.id === user.id && (
+                                <small className="ml-1 text-[10px] font-normal text-slate-500">
+                                  나
+                                </small>
+                              )}
+                            </strong>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              {p.user.member_type === "guest" ? "게스트 · " : ""}
+                              {p.user.ntrp
+                                ? `NTRP ${p.user.ntrp}`
+                                : "NTRP 미입력"}
+                            </span>
+                          </Link>
+                          {isOrganizer &&
+                          (status === "attending" || status === "waiting") ? (
+                            <Form
+                              method="post"
+                              onSubmit={(e) => {
+                                if (
+                                  !confirm(
+                                    `${p.user.name}님을 불참으로 바꿀까요?${
+                                      status === "attending" && waiting.length
+                                        ? "\n대기 1번이 참석으로 올라가요."
+                                        : ""
+                                    }`
+                                  )
+                                )
+                                  e.preventDefault();
+                              }}
+                            >
+                              <input type="hidden" name="intent" value="set_attendance" />
+                              <input type="hidden" name="user_id" value={p.user.id} />
+                              <input type="hidden" name="status" value="absent" />
+                              <button className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-slate-500 underline-offset-2 hover:underline dark:text-slate-400">
+                                불참 처리
+                              </button>
+                            </Form>
+                          ) : null}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1149,7 +1225,7 @@ export default function GatheringDetailPage() {
                     type="number"
                     min="1"
                     className="input"
-                    placeholder="제한 없음"
+                    placeholder="제한 없음 (차면 대기)"
                     defaultValue={gathering.max_participants ?? ""}
                   />
                 </div>
@@ -1666,7 +1742,7 @@ function DrawMatchRow({
             </div>
             {club ? (
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                게임 수로 적어 주세요. 5:5 해피게임은 5:5, 타이브레이크는 7:6.
+                게임 수로 적어 주세요. 5:5 해피게임은 5:5, 타이브레이크는 6:5.
               </p>
             ) : null}
           </Form>

@@ -49,7 +49,8 @@ export function Modal({
         }
       }}
     >
-      <div className="mb-6 flex items-center justify-between gap-4">
+      {/* 머리(제목·닫기)는 스크롤해도 위에 붙어 있다 */}
+      <div className="club-modal-head">
         <h2 className="font-display text-2xl font-bold tracking-tight">
           {title}
         </h2>
@@ -62,7 +63,7 @@ export function Modal({
           <X size={20} />
         </button>
       </div>
-      {children}
+      <div className="club-modal-body">{children}</div>
     </dialog>,
     document.body
   );
@@ -76,7 +77,7 @@ export function FieldGroup({
 }) {
   return (
     <fieldset className="space-y-3">
-      <legend className="mb-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
+      <legend className="mb-1 text-[13px] font-bold text-ink dark:text-white">
         {title}
       </legend>
       {children}

@@ -1,8 +1,14 @@
 import { Lock, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { FieldGroup } from "~/components/Modal";
-import { KIND_HINT, KIND_LABEL, KIND_ORDER, isClubKind } from "~/lib/club";
+import {
+  KIND_DOT,
+  KIND_HINT,
+  KIND_LABEL,
+  KIND_ORDER,
+  isClubKind,
+} from "~/lib/club";
 import { won } from "~/lib/format";
 import type { GatheringKind, UserBrief } from "~/lib/types";
 
@@ -34,6 +40,7 @@ type BookingRow = {
  * - 오테식 정모·벙개: 게스트비, 게스트비 입금 계좌(회비 통장), 코트 예약자(등록할 때)
  *
  * members를 주면 코트 예약 줄을 함께 입력받는다(등록). 수정할 때는 모임 화면에서 관리한다.
+ * children: 종류 선택과 금액 칸 사이에 들어갈 칸(날짜·코트 등). 고른 종류를 받는다.
  */
 export function GatheringFeeFields({
   idPrefix,
@@ -41,6 +48,7 @@ export function GatheringFeeFields({
   canCreateClub,
   lockedKinds = {},
   members,
+  children,
 }: {
   idPrefix: string;
   defaults: FeeDefaults;
@@ -48,6 +56,7 @@ export function GatheringFeeFields({
   /** 고를 수 없는 종류와 그 이유 */
   lockedKinds?: Partial<Record<GatheringKind, string>>;
   members?: UserBrief[];
+  children?: (kind: GatheringKind) => ReactNode;
 }) {
   const [kind, setKind] = useState<GatheringKind>(defaults.kind);
   const [courtFee, setCourtFee] = useState(String(defaults.court_fee || ""));
@@ -88,7 +97,7 @@ export function GatheringFeeFields({
                   onChange={() => setKind(k)}
                   className="sr-only"
                 />
-                <i aria-hidden="true" />
+                <i aria-hidden="true" className={KIND_DOT[k]} />
                 <strong>{KIND_LABEL[k]}</strong>
                 {locked ? (
                   <small>
@@ -104,6 +113,8 @@ export function GatheringFeeFields({
           {KIND_HINT[kind]}
         </p>
       </FieldGroup>
+
+      {children?.(kind)}
 
       {club ? (
         <FieldGroup title="회비 지출 · 게스트비">

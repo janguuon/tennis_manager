@@ -21,6 +21,13 @@ export const KIND_BADGE: Record<GatheringKind, string> = {
   flash: "badge-line",
 };
 
+/** 종류 선택 버튼의 색 점 (클래스 이름을 그대로 써야 빌드에 남는다) */
+export const KIND_DOT: Record<GatheringKind, string> = {
+  club_regular: "bg-house-green",
+  club_flash: "bg-house-lav",
+  flash: "bg-house-yellow",
+};
+
 /** 종류 선택 버튼에 붙는 한 줄 설명 */
 export const KIND_HINT: Record<GatheringKind, string> = {
   club_regular: "회비에서 지출 · 게스트만 참가비",

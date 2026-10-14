@@ -117,9 +117,10 @@
   }
 
   /* ---- 입력 ---- */
+  /* 휴대폰은 16px: 그보다 작으면 iOS 가 칸을 누를 때 화면을 확대한다 */
   .input {
-    @apply w-full rounded-xl border border-slate-300 bg-paper px-4 py-2.5 text-sm text-ink outline-none
-      transition-colors placeholder:text-slate-400 hover:border-slate-400
+    @apply w-full rounded-xl border border-slate-300 bg-paper px-4 py-2.5 text-base text-ink outline-none
+      transition-colors placeholder:text-slate-400 hover:border-slate-400 sm:text-sm
       focus:border-ink focus:ring-4 focus:ring-house-yellow/40
       dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:focus:border-slate-300;
   }
@@ -649,6 +650,8 @@
   background: #f5db52;
 }
 .club-modal {
+  --modal-bg: #fffcf7;
+  --modal-pad: 28px;
   position: fixed;
   inset: 0;
   margin: auto;
@@ -656,18 +659,53 @@
   width: min(480px, calc(100% - 32px));
   border: 0;
   border-radius: 22px;
-  padding: 28px;
-  background: #fffcf7;
+  padding: 0;
+  overscroll-behavior: contain;
+  background: var(--modal-bg);
   color: #252722;
   box-shadow: 0 20px 80px #0002;
 }
 .dark .club-modal {
-  background: #2c2e28;
+  --modal-bg: #2c2e28;
   color: #f3ece3;
+}
+/* 머리는 스크롤해도 위에, 긴 폼의 저장 버튼(.modal-actions)은 아래에 붙는다 */
+.club-modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px var(--modal-pad) 14px;
+  background: var(--modal-bg);
+}
+.club-modal-body {
+  padding: 10px var(--modal-pad) var(--modal-pad);
+}
+.modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0 calc(var(--modal-pad) * -1) calc(var(--modal-pad) * -1);
+  padding: 20px var(--modal-pad) var(--modal-pad);
+  background: linear-gradient(to bottom, transparent, var(--modal-bg) 20px);
 }
 .club-modal::backdrop {
   background: #14181288;
   backdrop-filter: blur(4px);
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .club-modal {
+    animation: none !important;
+  }
 }
 @media (max-width: 1100px) and (min-width: 768px) {
   .club-sidebar {
@@ -779,12 +817,37 @@
     font-size: 9px;
     letter-spacing: 0.07em;
   }
+  /* 휴대폰: 화면 아래에서 올라오는 시트 (브라우저 기본 max-width 여백도 없앤다) */
   .club-modal {
+    --modal-pad: 20px;
     margin: auto auto 0;
-    max-height: 90dvh;
+    max-width: 100%;
+    max-height: 92dvh;
     width: 100%;
     border-radius: 24px 24px 0 0;
-    padding: 24px 20px max(24px, env(safe-area-inset-bottom));
+    animation: sheet-up 0.22s ease-out;
+  }
+  .club-modal-head {
+    padding-top: 28px;
+  }
+  .club-modal-head::before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.16;
+    transform: translateX(-50%);
+  }
+  .club-modal-body,
+  .modal-actions {
+    padding-bottom: max(var(--modal-pad), env(safe-area-inset-bottom));
+  }
+  .modal-actions {
+    margin-bottom: calc(max(var(--modal-pad), env(safe-area-inset-bottom)) * -1);
   }
   .auth-intro .club-illustration {
     top: 52px;
@@ -823,20 +886,11 @@
     @apply grid grid-cols-3 gap-2;
   }
   .kind-option {
-    @apply relative flex min-h-[64px] cursor-pointer flex-col justify-center gap-1 rounded-2xl border-[1.5px] border-slate-200 bg-paper px-3 py-2.5 transition-colors
+    @apply relative flex min-h-[64px] cursor-pointer flex-col justify-center gap-1.5 rounded-2xl border-[1.5px] border-slate-200 bg-paper px-3 py-2.5 transition-colors
       hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500;
   }
   .kind-option > i {
     @apply block h-2.5 w-2.5 rounded-full;
-  }
-  .kind-option-club_regular > i {
-    @apply bg-house-green;
-  }
-  .kind-option-club_flash > i {
-    @apply bg-house-lav;
-  }
-  .kind-option-flash > i {
-    @apply bg-house-yellow;
   }
   .kind-option > strong {
     @apply text-[13px] font-bold leading-tight;
@@ -855,7 +909,7 @@
   }
   /* 원색 타일 안 입력칸: 다크 모드에서도 밝게 */
   .tile-input {
-    @apply w-full rounded-xl border border-ink/20 bg-white/80 px-3 py-2 text-sm text-ink outline-none
+    @apply w-full rounded-xl border border-ink/20 bg-white/80 px-3 py-2 text-base text-ink outline-none sm:text-sm
       transition-colors placeholder:text-ink/45 focus:border-ink focus:ring-4 focus:ring-ink/10;
   }
   .court-booking-form {
@@ -863,6 +917,30 @@
   }
   .court-expense-row {
     @apply flex items-center gap-3 border-b border-slate-200 py-3.5 last:border-0 dark:border-slate-700;
+  }
+  /* 엑셀 등록: 단계 안내와 파일 고르기 */
+  .import-steps {
+    @apply space-y-4;
+  }
+  .import-steps > li {
+    @apply flex gap-3;
+  }
+  .import-steps > li > span {
+    @apply mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink font-display text-[11px] font-bold text-white dark:bg-white dark:text-ink;
+  }
+  .import-steps strong {
+    @apply block text-sm font-bold;
+  }
+  .import-steps p {
+    @apply mt-1 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400;
+  }
+  .file-drop {
+    @apply flex min-h-[64px] cursor-pointer items-center gap-3 rounded-2xl border-[1.5px] border-dashed border-slate-300 bg-paper px-4 py-3 text-sm font-semibold text-slate-600 transition-colors
+      hover:border-ink focus-within:ring-4 focus-within:ring-house-yellow/40
+      dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-300;
+  }
+  .file-drop.has-file {
+    @apply border-solid border-ink text-ink dark:border-white dark:text-white;
   }
   .booking-row {
     @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto];
@@ -886,11 +964,11 @@
   .rules-intro {
     @apply grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] xl:gap-5;
   }
-  .rules-legend-row {
-    @apply grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3 border-b border-slate-200 py-3 text-[13px] text-slate-600 last:border-0 dark:border-slate-700 dark:text-slate-400;
+  .rules-info-row {
+    @apply grid grid-cols-[72px_minmax(0,1fr)] items-baseline gap-3 border-b border-slate-200 py-3 text-[13px] leading-relaxed text-slate-700 last:border-0 dark:border-slate-700 dark:text-slate-300;
   }
-  .rules-legend-row > :first-child {
-    @apply justify-self-start;
+  .rules-info-row > dt {
+    @apply text-xs font-semibold text-slate-500 dark:text-slate-400;
   }
   /* 목차: xl 미만은 위에 붙는 가로 칩, xl 이상은 왼쪽 세로 목록 */
   .rules-layout {
@@ -949,22 +1027,6 @@
   }
   .rules-clauses strong {
     @apply font-bold text-ink dark:text-white;
-  }
-  /* 아직 확정하지 않은 내용 */
-  .rules-pending {
-    @apply rounded bg-house-yellow/45 px-1 font-semibold text-ink underline decoration-[#B88A1B] decoration-dashed underline-offset-4
-      dark:bg-house-yellow/20 dark:text-house-yellow dark:decoration-house-yellow/60;
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
-  }
-  .rules-note {
-    @apply mt-5 border-t border-dashed border-slate-300 pt-4 dark:border-slate-600;
-  }
-  .rules-note > span {
-    @apply mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[#8A6418] dark:text-house-yellow;
-  }
-  .rules-note > p {
-    @apply text-[13px] leading-relaxed text-slate-500 dark:text-slate-400;
   }
   /* 자리 하나 = 점 하나: 검정 = 정회원 우선, 흰색 = 공통 */
   .rules-seats {
@@ -1027,15 +1089,6 @@
   }
   .rules-example > b {
     @apply col-start-2 row-start-1 text-right font-display text-lg font-bold tracking-[-0.03em] sm:col-start-4;
-  }
-  .rules-check {
-    @apply flex h-full items-center gap-3 rounded-2xl bg-white/50 px-4 py-3.5 transition-colors hover:bg-white/85;
-  }
-  .rules-check strong {
-    @apply block text-sm font-bold;
-  }
-  .rules-check strong + span {
-    @apply mt-0.5 block text-xs leading-relaxed opacity-75;
   }
 }
 

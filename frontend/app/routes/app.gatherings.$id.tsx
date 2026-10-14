@@ -1137,163 +1137,7 @@ export default function GatheringDetailPage() {
       {/* 수정 모달 */}
       {editing ? (
         <Modal title="모임 수정" onClose={() => setEditing(false)}>
-          <Form method="post" className="space-y-6">
-            <input type="hidden" name="intent" value="update_gathering" />
-            <FieldGroup title="기본 정보">
-              <div>
-                <label className="label" htmlFor="e_title">
-                  제목
-                </label>
-                <input
-                  id="e_title"
-                  name="title"
-                  className="input"
-                  required
-                  defaultValue={gathering.title}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="e_date">
-                    날짜
-                  </label>
-                  <input
-                    id="e_date"
-                    name="event_date"
-                    type="date"
-                    className="input"
-                    required
-                    defaultValue={gathering.event_date}
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="e_status">
-                    상태
-                  </label>
-                  <select
-                    id="e_status"
-                    name="status"
-                    className="input"
-                    defaultValue={gathering.status}
-                  >
-                    {Object.entries(GATHERING_STATUS_LABEL).map(
-                      ([v, label]) => (
-                        <option key={v} value={v}>
-                          {label}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="e_start">
-                    시작
-                  </label>
-                  <select
-                    id="e_start"
-                    name="start_time"
-                    className="input"
-                    defaultValue={gathering.start_time?.slice(0, 5) ?? ""}
-                  >
-                    <option value="">선택 안 함</option>
-                    {TIME_OPTIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="e_end">
-                    종료
-                  </label>
-                  <select
-                    id="e_end"
-                    name="end_time"
-                    className="input"
-                    defaultValue={gathering.end_time?.slice(0, 5) ?? ""}
-                  >
-                    <option value="">선택 안 함</option>
-                    {TIME_OPTIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="e_location">
-                  장소
-                </label>
-                <input
-                  id="e_location"
-                  name="location"
-                  className="input"
-                  defaultValue={gathering.location ?? ""}
-                />
-              </div>
-            </FieldGroup>
-
-            <FieldGroup title="코트 · 인원">
-              <div>
-                <label className="label" htmlFor="e_courts">
-                  코트 번호
-                </label>
-                <input
-                  id="e_courts"
-                  name="court_numbers"
-                  className="input"
-                  placeholder="예: 3, 5 (쉼표로 구분)"
-                  defaultValue={gathering.court_numbers ?? ""}
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="e_fairy">
-                  코트요정 <span className="font-medium text-slate-400">(선택)</span>
-                </label>
-                <input
-                  id="e_fairy"
-                  name="court_fairy"
-                  className="input"
-                  placeholder="코트를 잡아 준 사람, 예: 서승우, 김하린"
-                  maxLength={200}
-                  defaultValue={gathering.court_fairy ?? ""}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="e_count">
-                    코트 면수
-                  </label>
-                  <input
-                    id="e_count"
-                    name="court_count"
-                    type="number"
-                    min="1"
-                    className="input"
-                    defaultValue={gathering.court_count}
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="e_max">
-                    정원
-                  </label>
-                  <input
-                    id="e_max"
-                    name="max_participants"
-                    type="number"
-                    min="1"
-                    className="input"
-                    placeholder="제한 없음 (차면 대기)"
-                    defaultValue={gathering.max_participants ?? ""}
-                  />
-                </div>
-              </div>
-            </FieldGroup>
-
+          <Form method="post" className="space-y-7">
             <GatheringFeeFields
               idPrefix="e_"
               canCreateClub={staff}
@@ -1312,7 +1156,172 @@ export default function GatheringDetailPage() {
                   club: club ? gathering : NO_ACCOUNT,
                 },
               }}
-            />
+            >
+              {(kind) => (
+                <>
+                  <FieldGroup title="언제 · 어디서">
+                    <div>
+                      <label className="label" htmlFor="e_title">
+                        제목
+                      </label>
+                      <input
+                        id="e_title"
+                        name="title"
+                        className="input"
+                        required
+                        defaultValue={gathering.title}
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="label" htmlFor="e_date">
+                          날짜
+                        </label>
+                        <input
+                          id="e_date"
+                          name="event_date"
+                          type="date"
+                          className="input"
+                          required
+                          defaultValue={gathering.event_date}
+                        />
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="e_status">
+                          상태
+                        </label>
+                        <select
+                          id="e_status"
+                          name="status"
+                          className="input"
+                          defaultValue={gathering.status}
+                        >
+                          {Object.entries(GATHERING_STATUS_LABEL).map(
+                            ([v, label]) => (
+                              <option key={v} value={v}>
+                                {label}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label" htmlFor="e_start">
+                          시작
+                        </label>
+                        <select
+                          id="e_start"
+                          name="start_time"
+                          className="input"
+                          defaultValue={gathering.start_time?.slice(0, 5) ?? ""}
+                        >
+                          <option value="">선택 안 함</option>
+                          {TIME_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="e_end">
+                          종료
+                        </label>
+                        <select
+                          id="e_end"
+                          name="end_time"
+                          className="input"
+                          defaultValue={gathering.end_time?.slice(0, 5) ?? ""}
+                        >
+                          <option value="">선택 안 함</option>
+                          {TIME_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="e_location">
+                        장소
+                      </label>
+                      <input
+                        id="e_location"
+                        name="location"
+                        className="input"
+                        defaultValue={gathering.location ?? ""}
+                      />
+                    </div>
+                  </FieldGroup>
+
+                  <FieldGroup title="코트 · 인원">
+                    <div>
+                      <label className="label" htmlFor="e_courts">
+                        코트 번호
+                      </label>
+                      <input
+                        id="e_courts"
+                        name="court_numbers"
+                        className="input"
+                        placeholder="예: 3, 5"
+                        defaultValue={gathering.court_numbers ?? ""}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label" htmlFor="e_count">
+                          코트 면수
+                        </label>
+                        <input
+                          id="e_count"
+                          name="court_count"
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          className="input"
+                          defaultValue={gathering.court_count}
+                        />
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="e_max">
+                          정원
+                        </label>
+                        <input
+                          id="e_max"
+                          name="max_participants"
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          className="input"
+                          placeholder="제한 없음"
+                          defaultValue={gathering.max_participants ?? ""}
+                        />
+                      </div>
+                    </div>
+                    <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {isClubKind(kind) ? "회칙상 코트 1면에 6명이에요. " : ""}
+                      정원이 차면 다음 신청은 대기로 받아요.
+                    </p>
+                    <div>
+                      <label className="label" htmlFor="e_fairy">
+                        코트요정 <span className="font-medium text-slate-400">(선택)</span>
+                      </label>
+                      <input
+                        id="e_fairy"
+                        name="court_fairy"
+                        className="input"
+                        placeholder="코트를 잡아 준 사람"
+                        maxLength={200}
+                        defaultValue={gathering.court_fairy ?? ""}
+                      />
+                    </div>
+                  </FieldGroup>
+                </>
+              )}
+            </GatheringFeeFields>
 
             <div>
               <label className="label" htmlFor="e_desc">
@@ -1327,17 +1336,20 @@ export default function GatheringDetailPage() {
               />
             </div>
 
-            {actionData?.error ? (
-              <p className="alert-error">{actionData.error}</p>
-            ) : null}
-
-            <button
-              type="submit"
-              className="btn-primary h-11 w-full"
-              disabled={navigation.state === "submitting"}
-            >
-              {navigation.state === "submitting" ? "저장 중…" : "저장"}
-            </button>
+            <div className="modal-actions space-y-3">
+              {actionData?.error ? (
+                <p className="alert-error">{actionData.error}</p>
+              ) : null}
+              <button
+                type="submit"
+                className="btn-primary h-12 w-full"
+                disabled={navigation.state === "submitting"}
+              >
+                {navigation.state === "submitting" ? "저장 중…" : "저장"}
+              </button>
+            </div>
+            {/* 맨 앞에 두면 space-y 간격이 첫 칸 위에 생긴다 */}
+            <input type="hidden" name="intent" value="update_gathering" />
           </Form>
         </Modal>
       ) : null}

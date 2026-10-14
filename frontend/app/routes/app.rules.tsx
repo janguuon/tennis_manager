@@ -1,5 +1,5 @@
 import type { MetaFunction } from "@remix-run/node";
-import { ArrowUpRight, PencilLine, Printer } from "lucide-react";
+import { ArrowUpRight, Printer } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -14,11 +14,9 @@ import { PageBody, PageHeader } from "~/components/Page";
 import {
   NOTICE_ITEMS,
   RULE_CHAPTERS,
-  RULE_CHECKLIST,
-  RULE_TAG_LEGEND,
-  RULES_BASIS,
+  RULES_HIGHLIGHTS,
+  RULES_HISTORY,
   RULES_META,
-  RULES_NEWS,
   RULES_SUPPLEMENT,
   SEAT_EXAMPLES,
   SEAT_FLOW,
@@ -26,17 +24,9 @@ import {
   splitRuleText,
   type RuleArticle,
   type RuleColor,
-  type RuleTagKind,
 } from "~/lib/rules";
 
 export const meta: MetaFunction = () => [{ title: "회칙 · 오테식 매니저" }];
-
-const TAG_CLASS: Record<RuleTagKind, string> = {
-  existing: "badge-green",
-  current: "badge-blue",
-  proposal: "badge-gray",
-  review: "badge-yellow",
-};
 
 const INDEX_CLASS: Record<RuleColor, string> = {
   blue: "bg-house-blue",
@@ -51,6 +41,9 @@ const INDEX_CLASS: Record<RuleColor, string> = {
 /** "회칙 복사"용 전체 본문 */
 const RULES_TEXT = rulesPlainText();
 
+/** 회칙 구성: 장·조 수 */
+const ARTICLE_COUNT = RULE_CHAPTERS.reduce((n, c) => n + c.articles.length, 0);
+
 /** 목차: 장 → 부칙 → 부록 */
 const TOC: { id: string; index: string; label: string; color: RuleColor }[] = [
   ...RULE_CHAPTERS.map((c) => ({
@@ -60,8 +53,7 @@ const TOC: { id: string; index: string; label: string; color: RuleColor }[] = [
     color: c.color,
   })),
   { id: "supplement", index: "+", label: "부칙", color: "ball" },
-  { id: "allocation", index: "A", label: "자리 배정 예시", color: "green" },
-  { id: "checklist", index: "B", label: "확정 전 체크리스트", color: "yellow" },
+  { id: "allocation", index: "A", label: "자리 배정 해설", color: "green" },
 ];
 
 /** 페이지 안 이동: 부드럽게 스크롤하고 키보드 포커스도 옮긴다. */
@@ -84,27 +76,11 @@ function RuleText({ text }: { text: string }) {
       {splitRuleText(text).map((part, i) =>
         part.kind === "strong" ? (
           <strong key={i}>{part.text}</strong>
-        ) : part.kind === "pending" ? (
-          <mark key={i} className="rules-pending">
-            {part.text}
-          </mark>
         ) : (
           part.text
         )
       )}
     </>
-  );
-}
-
-function RuleTags({ article }: { article: RuleArticle }) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {article.tags.map(([kind, label], i) => (
-        <span key={i} className={TAG_CLASS[kind]}>
-          {label}
-        </span>
-      ))}
-    </div>
   );
 }
 
@@ -115,17 +91,14 @@ function ArticleCard({ article }: { article: RuleArticle }) {
       tabIndex={-1}
       className="card rules-article"
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2.5">
-        <h3 className="min-w-0 flex-1 basis-60 text-[17px] font-bold leading-snug tracking-[-0.03em]">
-          {article.no ? (
-            <span className="mr-2 font-display text-[13px] font-extrabold text-slate-500 dark:text-slate-400">
-              제{article.no}조
-            </span>
-          ) : null}
-          {article.title}
-        </h3>
-        <RuleTags article={article} />
-      </div>
+      <h3 className="text-[17px] font-bold leading-snug tracking-[-0.03em]">
+        {article.no ? (
+          <span className="mr-2 font-display text-[13px] font-extrabold text-slate-500 dark:text-slate-400">
+            제{article.no}조
+          </span>
+        ) : null}
+        {article.title}
+      </h3>
       <ol className="rules-clauses">
         {article.clauses.map((clause, i) => (
           <li key={i}>
@@ -136,15 +109,6 @@ function ArticleCard({ article }: { article: RuleArticle }) {
           </li>
         ))}
       </ol>
-      {article.note ? (
-        <div className="rules-note">
-          <span>
-            <PencilLine size={12} />
-            검토 메모
-          </span>
-          <p>{article.note}</p>
-        </div>
-      ) : null}
     </article>
   );
 }
@@ -307,12 +271,12 @@ export default function RulesPage() {
     <PageBody>
       <PageHeader
         eyebrow="PLAY FAIR, PLAY TOGETHER."
-        title="오테식 기본 회칙"
-        sub={`6장 · 22조와 부칙으로 정리한 검토용 초안 ${RULES_META.version}이에요. 시행일은 ${RULES_META.effective}이에요.`}
+        title="오테식 회칙"
+        sub={`${RULE_CHAPTERS.length}장 ${ARTICLE_COUNT}조와 부칙으로 이루어진 오테식 정식 회칙이에요. ${RULES_META.effective}부터 시행해요.`}
         actions={
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            <span className="badge-yellow !h-8 px-3.5">
-              검토용 초안 {RULES_META.version}
+            <span className="badge-green !h-8 px-3.5">
+              정식 {RULES_META.version}
             </span>
             <CopyButton text={RULES_TEXT} label="회칙 복사" />
             <button
@@ -361,7 +325,7 @@ export default function RulesPage() {
           eyebrow="MONTHLY DUES"
           label="정회원 월 회비"
           href="#art-15"
-          desc="매월 1일 · 첫 납부 기한 별도"
+          desc="매월 1일 · 가입한 달은 면제"
         >
           <span className="rules-metric-value">
             20,000<small>원</small>
@@ -372,7 +336,7 @@ export default function RulesPage() {
           eyebrow="GUEST FEE"
           label="게스트 기본 참가비"
           href="#art-17"
-          desc="일정 1회 기준 · 시간·예외 확인"
+          desc="일정 1회 · 2~4시간 같음 · 공값 포함"
         >
           <span className="rules-metric-value">
             5,000<small>원</small>
@@ -382,13 +346,11 @@ export default function RulesPage() {
 
       <div className="rules-intro">
         <section className="tile-orange">
-          <Eyebrow>WHAT&apos;S NEW · {RULES_META.version}</Eyebrow>
-          <h2 className="tile-title mt-4">이번 버전에 반영했어요</h2>
-          <p className="tile-sub">
-            그 밖의 노란색 표시 항목은 아직 검토가 필요해요.
-          </p>
+          <Eyebrow>KEY RULES</Eyebrow>
+          <h2 className="tile-title mt-4">꼭 알아 두세요</h2>
+          <p className="tile-sub">누르면 해당 조항으로 이동해요.</p>
           <ul className="tile-rows mt-3">
-            {RULES_NEWS.map((item) => (
+            {RULES_HIGHLIGHTS.map((item) => (
               <li key={item.label} className="!p-0">
                 <a
                   href={item.href}
@@ -409,34 +371,50 @@ export default function RulesPage() {
         </section>
         <section className="card flex flex-col">
           <SectionHeading
-            title="이렇게 읽어요"
-            sub="조항마다 어디서 온 내용인지 표시했어요."
+            title="회칙 정보"
+            sub="개정은 제21조·제22조의 절차를 따라요."
           />
-          <ul className="mt-4">
-            {RULE_TAG_LEGEND.map((tag) => (
-              <li key={tag.kind} className="rules-legend-row">
-                <span className={TAG_CLASS[tag.kind]}>{tag.label}</span>
-                <span>{tag.desc}</span>
-              </li>
-            ))}
-            <li className="rules-legend-row">
-              <mark className="rules-pending">확정 필요</mark>
-              <span>아직 정하지 않은 내용이에요</span>
-            </li>
-            <li className="rules-legend-row">
-              <span className="flex h-6 items-center gap-1.5 text-[11px] font-bold text-[#8A6418] dark:text-house-yellow">
-                <PencilLine size={12} />
-                검토 메모
-              </span>
-              <span>작성 근거와 남은 쟁점이에요</span>
-            </li>
-          </ul>
+          <dl className="mt-4">
+            <div className="rules-info-row">
+              <dt>버전</dt>
+              <dd>
+                <span className="badge-green">정식 {RULES_META.version}</span>
+              </dd>
+            </div>
+            <div className="rules-info-row">
+              <dt>시행일</dt>
+              <dd>{RULES_META.effective}</dd>
+            </div>
+            <div className="rules-info-row">
+              <dt>구성</dt>
+              <dd>
+                {RULE_CHAPTERS.length}장 {ARTICLE_COUNT}조 · 부칙 · 부록
+              </dd>
+            </div>
+            <div className="rules-info-row">
+              <dt>개정 이력</dt>
+              <dd>
+                <ul className="space-y-1">
+                  {RULES_HISTORY.map((h) => (
+                    <li key={h.version}>
+                      <strong className="font-display">{h.version}</strong>{" "}
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {h.date}
+                      </span>
+                      <br />
+                      {h.text}
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          </dl>
           <a
-            href="#checklist"
+            href="#allocation"
             onClick={jumpTo}
             className="btn-secondary mt-auto w-full justify-between print:hidden"
           >
-            확정 전 체크리스트 {RULE_CHECKLIST.length}개
+            자리 배정 해설 보기
             <ArrowUpRight size={16} />
           </a>
         </section>
@@ -462,8 +440,7 @@ export default function RulesPage() {
             </a>
           ))}
           <p className="mt-6 hidden border-t border-slate-200 px-2.5 pt-4 text-[11px] leading-relaxed text-slate-500 dark:border-slate-700 dark:text-slate-400 xl:block">
-            검토 메모도 함께 읽어 주세요. 회칙을 복사하면 확정 필요 표시가 〔
-            〕로 함께 남아요.
+            회칙 복사를 누르면 전체 본문을 단체방에 그대로 붙여 넣을 수 있어요.
           </p>
         </nav>
 
@@ -516,7 +493,7 @@ export default function RulesPage() {
             className="card rules-section"
           >
             <p className="eyebrow text-slate-500 dark:text-slate-400">
-              APPENDIX A · 운영안 해설
+              APPENDIX A · 자리 배정 해설
             </p>
             <h2 id="allocation-title" className="rules-appendix-title">
               선착순, 이렇게 배정합니다.
@@ -524,7 +501,8 @@ export default function RulesPage() {
             <p className="rules-appendix-sub">
               정회원이 먼저 선착순으로 자리를 채우고, 코트 이용일 3일 전에 남은
               자리만큼 게스트 참석 투표를 받습니다. 게스트 자리 수는 정해 두지
-              않으며, 전체 정원 6명은 넘지 않습니다.
+              않으며, 전체 정원 6명은 넘지 않습니다. 정원이 차면 대기로 신청할
+              수 있고, 빈자리가 나면 대기 순서대로 자동 확정됩니다.
             </p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="tile-green">
@@ -533,13 +511,15 @@ export default function RulesPage() {
                   <Seats member={4} open={0} large />
                 </span>
                 <p className="mt-3 text-xs leading-relaxed">
-                  모집 공지 후 바로 신청, 6자리까지 가능
+                  월요일 0시 일정 공개 후 바로 신청, 6자리까지
                   <br />
                   운영진도 같은 기준 · 별도 우선권 없음
                 </p>
               </div>
               <div className="tile-yellow">
-                <strong className="text-base">2단계 · 3일 전 게스트 투표</strong>
+                <strong className="text-base">
+                  2단계 · 3일 전 게스트 투표
+                </strong>
                 <span className="mt-3 block">
                   <Seats member={0} open={2} large />
                 </span>
@@ -560,8 +540,8 @@ export default function RulesPage() {
               ))}
             </ol>
             <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              배정은 선착순이며, 이미 확정한
-              참가자를 뒤늦은 신청자 때문에 교체하지 않습니다.
+              배정은 선착순이며, 이미 확정한 참가자를 뒤늦은 신청자 때문에
+              교체하지 않습니다.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center justify-between gap-2">
@@ -607,53 +587,9 @@ export default function RulesPage() {
             </ul>
           </section>
 
-          <section
-            id="checklist"
-            tabIndex={-1}
-            aria-labelledby="checklist-title"
-            className="tile-yellow rules-section"
-          >
-            <Eyebrow>APPENDIX B · 확정 전 검토</Eyebrow>
-            <h2 id="checklist-title" className="rules-appendix-title">
-              최종 공지 전에 결정할 사항
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed">
-              아래 항목은 이번 초안에서 임의로 정하지 않았습니다. 항목을 누르면
-              관련 조항으로 이동합니다.
-            </p>
-            <ul className="mt-5 grid gap-2.5 sm:grid-cols-2">
-              {RULE_CHECKLIST.map((item) => (
-                <li key={item.title}>
-                  <a href={item.href} onClick={jumpTo} className="rules-check">
-                    <span className="min-w-0 flex-1">
-                      <strong>{item.title}</strong>
-                      <span>{item.desc}</span>
-                    </span>
-                    <ArrowUpRight size={17} className="shrink-0" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section
-            aria-labelledby="basis-title"
-            className="space-y-1.5 px-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400"
-          >
-            <h2
-              id="basis-title"
-              className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300"
-            >
-              작성 근거와 범위
-            </h2>
-            {RULES_BASIS.map((text) => (
-              <p key={text}>{text}</p>
-            ))}
-            <p className="pt-2 font-semibold">
-              검토용 초안 {RULES_META.version} · {RULES_META.updated} 정리 ·
-              시행일 {RULES_META.effective}
-            </p>
-          </section>
+          <p className="px-1 text-[11px] font-semibold leading-relaxed text-slate-500 dark:text-slate-400">
+            오테식 회칙 {RULES_META.version} · {RULES_META.effective} 시행
+          </p>
         </div>
       </div>
     </PageBody>

@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  FileSpreadsheet,
   List,
   Plus,
   Upload,
@@ -30,7 +31,7 @@ import { GatheringRow } from "~/components/GatheringRow";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
+import { KIND_LABEL, KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import { requireToken } from "~/lib/session.server";
 import {
@@ -38,7 +39,7 @@ import {
   GATHERING_STATUS_DOT,
   WEEKDAYS,
 } from "~/lib/status";
-import type { Gathering, Me, UserBrief } from "~/lib/types";
+import type { Gathering, GatheringKind, Me, UserBrief } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "캘린더 · 오테식 매니저" }];
 
@@ -166,6 +167,7 @@ export default function CalendarPage() {
   const navigation = useNavigation();
   const [showCreate, setShowCreate] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [fileName, setFileName] = useState("");
   const importFetcher = useFetcher<{
     ok: boolean;
     created?: number;
@@ -184,6 +186,11 @@ export default function CalendarPage() {
   useEffect(() => {
     if (actionData?.ok) setShowCreate(false);
   }, [actionData]);
+
+  // 엑셀 창을 열 때마다 고른 파일 초기화
+  useEffect(() => {
+    if (importing) setFileName("");
+  }, [importing]);
 
   // 모달이 열릴 때마다 시간 입력 초기화
   useEffect(() => {
@@ -504,152 +511,7 @@ export default function CalendarPage() {
       {/* 일정 등록 */}
       {showCreate ? (
         <Modal title="새 일정" onClose={() => setShowCreate(false)}>
-          <Form method="post" className="space-y-6">
-            <FieldGroup title="기본 정보">
-              <div>
-                <label className="label" htmlFor="title">
-                  제목
-                </label>
-                <input
-                  id="title"
-                  name="title"
-                  className="input"
-                  required
-                  placeholder="정기 모임"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="event_date">
-                  날짜
-                </label>
-                <input
-                  id="event_date"
-                  name="event_date"
-                  type="date"
-                  className="input"
-                  required
-                  defaultValue={todayStr}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="start_time">
-                    시작
-                  </label>
-                  <select
-                    id="start_time"
-                    name="start_time"
-                    className="input"
-                    value={startTime}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setStartTime(v);
-                      // 종료를 아직 직접 수정하지 않았으면 +2시간으로 자동 설정
-                      if (!endEdited) setEndTime(addHours(v, 2));
-                    }}
-                  >
-                    <option value="">선택 안 함</option>
-                    {TIME_OPTIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="end_time">
-                    종료
-                  </label>
-                  <select
-                    id="end_time"
-                    name="end_time"
-                    className="input"
-                    value={endTime}
-                    onChange={(e) => {
-                      setEndTime(e.target.value);
-                      setEndEdited(true);
-                    }}
-                  >
-                    <option value="">선택 안 함</option>
-                    {TIME_OPTIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="label" htmlFor="location">
-                  장소
-                </label>
-                <input
-                  id="location"
-                  name="location"
-                  className="input"
-                  placeholder="시민 테니스장"
-                />
-              </div>
-            </FieldGroup>
-
-            <FieldGroup title="코트 · 인원">
-              <div>
-                <label className="label" htmlFor="court_numbers">
-                  코트 번호
-                </label>
-                <input
-                  id="court_numbers"
-                  name="court_numbers"
-                  className="input"
-                  placeholder="예: 3, 5 (쉼표로 구분)"
-                />
-                <p className="mt-1.5 text-xs text-slate-400">
-                  입력한 코트 수만큼 동시에 경기를 진행해요.
-                </p>
-              </div>
-              <div>
-                <label className="label" htmlFor="court_fairy">
-                  코트요정 <span className="font-medium text-slate-400">(선택)</span>
-                </label>
-                <input
-                  id="court_fairy"
-                  name="court_fairy"
-                  className="input"
-                  placeholder="코트를 잡아 준 사람, 예: 서승우, 김하린"
-                  maxLength={200}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label" htmlFor="court_count">
-                    코트 면수
-                  </label>
-                  <input
-                    id="court_count"
-                    name="court_count"
-                    type="number"
-                    min="1"
-                    defaultValue={1}
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="max_participants">
-                    정원
-                  </label>
-                  <input
-                    id="max_participants"
-                    name="max_participants"
-                    type="number"
-                    min="1"
-                    className="input"
-                    placeholder="제한 없음 (차면 대기)"
-                  />
-                </div>
-              </div>
-            </FieldGroup>
-
+          <Form method="post" className="space-y-7">
             <GatheringFeeFields
               idPrefix="c_"
               canCreateClub={isStaff(user)}
@@ -674,7 +536,155 @@ export default function CalendarPage() {
                   },
                 },
               }}
-            />
+            >
+              {(kind) => (
+                <>
+                  <FieldGroup title="언제 · 어디서">
+                    <KindTitleField kind={kind} />
+                    <div>
+                      <label className="label" htmlFor="event_date">
+                        날짜
+                      </label>
+                      <input
+                        id="event_date"
+                        name="event_date"
+                        type="date"
+                        className="input"
+                        required
+                        defaultValue={todayStr}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label" htmlFor="start_time">
+                          시작
+                        </label>
+                        <select
+                          id="start_time"
+                          name="start_time"
+                          className="input"
+                          value={startTime}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setStartTime(v);
+                            // 종료를 아직 직접 수정하지 않았으면 +2시간으로 자동 설정
+                            if (!endEdited) setEndTime(addHours(v, 2));
+                          }}
+                        >
+                          <option value="">선택 안 함</option>
+                          {TIME_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="end_time">
+                          종료
+                        </label>
+                        <select
+                          id="end_time"
+                          name="end_time"
+                          className="input"
+                          value={endTime}
+                          onChange={(e) => {
+                            setEndTime(e.target.value);
+                            setEndEdited(true);
+                          }}
+                        >
+                          <option value="">선택 안 함</option>
+                          {TIME_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="location">
+                        장소
+                      </label>
+                      <input
+                        id="location"
+                        name="location"
+                        className="input"
+                        placeholder="시민 테니스장"
+                      />
+                    </div>
+                  </FieldGroup>
+
+                  <FieldGroup title="코트 · 인원">
+                    <div>
+                      <label className="label" htmlFor="court_numbers">
+                        코트 번호
+                      </label>
+                      <input
+                        id="court_numbers"
+                        name="court_numbers"
+                        className="input"
+                        placeholder="예: 3, 5"
+                      />
+                      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        쉼표로 나눠 적으면 그 수만큼 동시에 경기를 진행해요.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="label" htmlFor="court_count">
+                          코트 면수
+                        </label>
+                        <input
+                          id="court_count"
+                          name="court_count"
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          defaultValue={1}
+                          className="input"
+                        />
+                      </div>
+                      <div>
+                        <label className="label" htmlFor="max_participants">
+                          정원
+                        </label>
+                        <input
+                          id="max_participants"
+                          name="max_participants"
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          className="input"
+                          placeholder="제한 없음"
+                        />
+                      </div>
+                    </div>
+                    <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {isClubKind(kind)
+                        ? "회칙상 코트 1면에 6명이에요. "
+                        : ""}
+                      정원이 차면 다음 신청은 대기로 받아요.
+                    </p>
+                    <div>
+                      <label className="label" htmlFor="court_fairy">
+                        코트요정{" "}
+                        <span className="font-medium text-slate-400">
+                          (선택)
+                        </span>
+                      </label>
+                      <input
+                        id="court_fairy"
+                        name="court_fairy"
+                        className="input"
+                        placeholder="코트를 잡아 준 사람"
+                        maxLength={200}
+                      />
+                    </div>
+                  </FieldGroup>
+                </>
+              )}
+            </GatheringFeeFields>
 
             <div>
               <label className="label" htmlFor="description">
@@ -685,20 +695,22 @@ export default function CalendarPage() {
                 name="description"
                 rows={2}
                 className="input"
+                placeholder="주차, 준비물 등"
               />
             </div>
 
-            {actionData?.error ? (
-              <p className="alert-error">{actionData.error}</p>
-            ) : null}
-
-            <button
-              type="submit"
-              className="btn-primary h-11 w-full"
-              disabled={navigation.state === "submitting"}
-            >
-              {navigation.state === "submitting" ? "등록 중…" : "등록하기"}
-            </button>
+            <div className="modal-actions space-y-3">
+              {actionData?.error ? (
+                <p className="alert-error">{actionData.error}</p>
+              ) : null}
+              <button
+                type="submit"
+                className="btn-primary h-12 w-full"
+                disabled={navigation.state === "submitting"}
+              >
+                {navigation.state === "submitting" ? "등록 중…" : "등록하기"}
+              </button>
+            </div>
           </Form>
         </Modal>
       ) : null}
@@ -710,45 +722,77 @@ export default function CalendarPage() {
             method="post"
             action="/resources/gatherings-import"
             encType="multipart/form-data"
-            className="space-y-4"
+            className="space-y-5"
           >
-            <div className="space-y-1.5 text-sm text-slate-500 dark:text-slate-400">
-              <p>
-                코트 예약 시트를 올리면 일정이 한 번에 등록돼요. 한 행에 코트 한
-                면씩 적고, 날짜·시간·코트 번호·예약자명·코트요정·코트비·사용
-                여부·장소를 모두 채운 행만 등록돼요.
-              </p>
-              <p>
-                날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요. 사용
-                여부가 오테식 정모·오테식 벙개·일반 벙개가 아닌 행(예약대기·우천
-                취소 등)과 이미 등록된 일정은 건너뛰어요.
-              </p>
-            </div>
-            <a
-              href="/resources/gatherings-template"
-              className="btn-secondary w-full"
-              download
-            >
-              <Download size={16} />
-              양식 내려받기
-            </a>
-            <div>
-              <label className="label" htmlFor="file">
-                엑셀 파일 (.xlsx)
-              </label>
+            <ol className="import-steps">
+              <li>
+                <span>1</span>
+                <div className="min-w-0 flex-1">
+                  <strong>양식 내려받기</strong>
+                  <p>코트 예약 시트 양식에 한 행에 코트 한 면씩 적어요.</p>
+                  <a
+                    href="/resources/gatherings-template"
+                    className="btn-secondary btn-sm mt-2.5"
+                    download
+                  >
+                    <Download size={14} />
+                    양식 내려받기
+                  </a>
+                </div>
+              </li>
+              <li>
+                <span>2</span>
+                <div className="min-w-0 flex-1">
+                  <strong>필수 칸 채우기</strong>
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {IMPORT_REQUIRED.map((c) => (
+                      <li key={c} className="badge-line">
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                  <p>
+                    날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요.
+                    최대 인원을 비우면 오테식 모임은 코트 수 × 6명이에요.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span>3</span>
+                <div className="min-w-0 flex-1">
+                  <strong>파일 올리기</strong>
+                  <p>
+                    예약대기·우천 취소 같은 행과 이미 등록된 일정은
+                    건너뛰어요.
+                  </p>
+                </div>
+              </li>
+            </ol>
+
+            <label className={`file-drop ${fileName ? "has-file" : ""}`}>
               <input
-                id="file"
                 name="file"
                 type="file"
                 accept=".xlsx"
-                className="input file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-[13px] file:font-semibold file:text-slate-700 dark:file:bg-slate-800 dark:file:text-slate-200"
+                className="sr-only"
                 required
+                onChange={(e) =>
+                  setFileName(e.currentTarget.files?.[0]?.name ?? "")
+                }
               />
-            </div>
+              <FileSpreadsheet size={22} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                {fileName || "엑셀 파일 고르기 (.xlsx)"}
+              </span>
+              <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {fileName ? "바꾸기" : "선택"}
+              </span>
+            </label>
+
             <button
               type="submit"
-              className="btn-primary h-11 w-full"
-              disabled={importFetcher.state !== "idle"}
+              className="btn-primary h-12 w-full"
+              disabled={!fileName || importFetcher.state !== "idle"}
             >
               {importFetcher.state !== "idle" ? "올리는 중…" : "올리기"}
             </button>
@@ -794,5 +838,44 @@ export default function CalendarPage() {
         </Modal>
       ) : null}
     </>
+  );
+}
+
+/** 엑셀 코트 예약 시트에서 꼭 채워야 하는 칸 */
+const IMPORT_REQUIRED = [
+  "날짜",
+  "시간",
+  "코트 번호",
+  "예약자명",
+  "코트요정",
+  "코트비",
+  "사용 여부",
+  "장소",
+];
+
+/** 제목: 직접 고치기 전까지는 고른 종류 이름(오테식 정모 등)으로 채운다 */
+function KindTitleField({ kind }: { kind: GatheringKind }) {
+  const [title, setTitle] = useState(KIND_LABEL[kind]);
+  const [edited, setEdited] = useState(false);
+  useEffect(() => {
+    if (!edited) setTitle(KIND_LABEL[kind]);
+  }, [kind, edited]);
+  return (
+    <div>
+      <label className="label" htmlFor="title">
+        제목
+      </label>
+      <input
+        id="title"
+        name="title"
+        className="input"
+        required
+        value={title}
+        onChange={(e) => {
+          setTitle(e.target.value);
+          setEdited(true);
+        }}
+      />
+    </div>
   );
 }

@@ -38,8 +38,8 @@ def test_generate_rounds_and_methods(club):
     assert {m["round_number"] for m in draw["matches"]} == {1, 2, 3}
     # 예전 이름 skill 은 balanced 로 저장
     assert generate(club, gid, method="skill").json()["generation_method"] == "balanced"
-    # 기본(rounds 없음): 8명 · 2코트 → 한 라운드로 모두 뛴다
-    assert len(generate(club, gid).json()["matches"]) == 2
+    # 기본(rounds 없음): 모임 시간이 없으면 2시간 기준 4라운드
+    assert len(generate(club, gid).json()["matches"]) == 8
     # 혼복인데 성별이 없으면 안내
     r = generate(club, gid, match_type="mixed_doubles")
     assert r.status_code == 400 and "혼복" in r.json()["detail"]
@@ -174,8 +174,8 @@ def test_canceled_gathering_excluded(club):
 
 def test_second_draw_avoids_first_draw_partners(club):
     gid = setup_club(club, names=("aaa", "bbb", "ccc", "ddd"), courts=1)
-    first = generate(club, gid).json()["matches"][0]
-    second = generate(club, gid).json()["matches"][0]
+    first = generate(club, gid, rounds=1).json()["matches"][0]
+    second = generate(club, gid, rounds=1).json()["matches"][0]
     first_pairs = {frozenset(p["id"] for p in first[t]) for t in ("team1", "team2")}
     second_pairs = {frozenset(p["id"] for p in second[t]) for t in ("team1", "team2")}
     assert not first_pairs & second_pairs
@@ -191,3 +191,57 @@ def test_officer_runs_club_draws_but_sees_no_tiers(club):
     assert record(club, m["id"], 6, 3, as_="aaa").status_code == 200
     # 정회원은 남의 오테식 모임 대진을 만들 수 없다
     assert generate(club, gid, as_="bbb").status_code == 403
+
+
+def test_auto_types_and_rounds_from_gathering_time(club):
+    """기본 대진: 성별로 남복·여복·혼복을 꾸리고, 2시간 모임이면 4라운드."""
+    men = ("mm1", "mm2", "mm3", "mm4", "mm5", "mm6")
+    women = ("ww1", "ww2", "ww3", "ww4", "ww5", "ww6")
+    club.add_members(*men, *women)
+    for n in men:
+        club.c.patch("/users/me", json={"gender": "male"}, headers=club.h(n))
+    for n in women:
+        club.c.patch("/users/me", json={"gender": "female"}, headers=club.h(n))
+    gid = club.create(
+        kind="club_regular", court_count=2, start_time="19:00", end_time="21:00"
+    ).json()["id"]
+    for n in men + women:
+        club.vote(gid, n)
+
+    r = club.c.post(f"/gatherings/{gid}/draws/generate", json={}, headers=club.admin)
+    assert r.status_code == 201
+    matches = r.json()["matches"]
+    assert {m["round_number"] for m in matches} == {1, 2, 3, 4}
+    assert len(matches) == 8
+    # 남녀 6명씩이면 잡복 없이 짤 수 있다
+    assert {m["match_type"] for m in matches} <= {"mens_doubles", "womens_doubles", "mixed_doubles"}
+    # 12명이 8자리 × 4라운드(32자리)를 나눠 뛰면 1인 2~3게임
+    plays = {}
+    for m in matches:
+        for p in m["team1"] + m["team2"]:
+            plays[p["id"]] = plays.get(p["id"], 0) + 1
+    assert len(plays) == 12 and set(plays.values()) <= {2, 3}
+
+    # 3시간 모임은 6라운드, 직접 고른 라운드 수가 우선
+    club.c.patch(f"/gatherings/{gid}", json={"end_time": "22:00"}, headers=club.admin)
+    assert len(club.c.post(f"/gatherings/{gid}/draws/generate", json={}, headers=club.admin).json()["matches"]) == 12
+    r = club.c.post(f"/gatherings/{gid}/draws/generate", json={"rounds": 1}, headers=club.admin)
+    assert len(r.json()["matches"]) == 2
+
+
+def test_open_doubles_only_when_unavoidable(club):
+    club.add_members("mm1", "mm2", "mm3", "ww1")
+    for n in ("mm1", "mm2", "mm3"):
+        club.c.patch("/users/me", json={"gender": "male"}, headers=club.h(n))
+    club.c.patch("/users/me", json={"gender": "female"}, headers=club.h("ww1"))
+    gid = club.create(kind="club_regular").json()["id"]
+    for n in ("mm1", "mm2", "mm3", "ww1"):
+        club.vote(gid, n)
+    m = club.c.post(f"/gatherings/{gid}/draws/generate", json={"rounds": 1}, headers=club.admin).json()["matches"][0]
+    assert m["match_type"] == "open_doubles"
+    # 잡복 결과도 전적·티어에 반영된다
+    r = club.c.post(f"/draw-matches/{m['id']}/result", json={"team1_score": 6, "team2_score": 4}, headers=club.admin)
+    assert r.status_code == 200
+    assert club.c.get("/admin/ratings", headers=club.admin).json()["counted_matches"] == 1
+    by_type = club.c.get(f"/stats/users/{club.ids['ww1']}", headers=club.admin).json()["by_type"]
+    assert [t["match_type"] for t in by_type] == ["open_doubles"]

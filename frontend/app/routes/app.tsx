@@ -26,6 +26,7 @@ import {
 import { MemberAvatar } from "~/components/Club";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
+import { FEATURES } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
 import type { Me } from "~/lib/types";
@@ -54,7 +55,7 @@ type NavItem = {
   color: string;
   end?: boolean;
 };
-const navItems: NavItem[] = [
+const allNavItems: NavItem[] = [
   {
     to: "/app",
     label: "클럽 홈",
@@ -99,6 +100,9 @@ const navItems: NavItem[] = [
     color: "ball",
   },
 ];
+const navItems = allNavItems.filter(
+  (item) => FEATURES.ranking || item.to !== "/app/ranking"
+);
 const adminItem: NavItem = {
   to: "/app/admin",
   label: "클럽 관리",

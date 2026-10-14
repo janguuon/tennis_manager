@@ -8,7 +8,8 @@ export type MatchType =
   | "singles"
   | "mens_doubles"
   | "womens_doubles"
-  | "mixed_doubles";
+  | "mixed_doubles"
+  | "open_doubles";
 export type AttendanceStatus = "attending" | "absent" | "maybe";
 export type GatheringStatus = "planned" | "ongoing" | "completed" | "canceled";
 /** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 일반 벙개 (n빵) */
@@ -327,4 +328,5 @@ export const MATCH_TYPE_LABEL: Record<MatchType, string> = {
   mens_doubles: "남복",
   womens_doubles: "여복",
   mixed_doubles: "혼복",
+  open_doubles: "잡복",
 };

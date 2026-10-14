@@ -20,6 +20,7 @@ import {
 import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
+import { FEATURES } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import { WEEKDAYS } from "~/lib/status";
@@ -85,7 +86,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       { token }
     ),
     api<MyPaymentDue[]>("/gatherings/payments/me", { token }),
-    api<RankingEntry[]>("/stats/ranking", { token }),
+    FEATURES.ranking
+      ? api<RankingEntry[]>("/stats/ranking", { token })
+      : Promise.resolve([] as RankingEntry[]),
   ]);
   const upcoming = gatherings.filter(
     (g) => g.status === "planned" || g.status === "ongoing"
@@ -328,45 +331,47 @@ export default function HomePage() {
             <span>총 {stats.overall.total}경기</span>
           </span>
         </Link>
-        <section className="card home-ranking">
-          <SectionHeading
-            title="코트 위의 주인공들"
-            sub="우리 클럽 승률 TOP 3"
-            action={
-              <Link to="/app/ranking" className="text-link">
-                전체 랭킹 <ArrowUpRight size={15} />
-              </Link>
-            }
-          />
-          {ranking.length ? (
-            <div className="ranking-strip">
-              {ranking.slice(0, 3).map((r) => (
-                <Link key={r.user.id} to={`/app/members/${r.user.id}`}>
-                  <span className="font-display text-sm text-slate-500">
-                    {String(r.rank).padStart(2, "0")}
-                  </span>
-                  <MemberAvatar user={r.user} className="!h-9 !w-9" />
-                  <span className="min-w-0">
-                    <strong className="block truncate text-sm">
-                      {r.user.name}
-                    </strong>
-                    <small className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                      {r.record.wins}승 {r.record.losses}패
-                    </small>
-                  </span>
-                  <b className="ml-auto shrink-0 whitespace-nowrap font-display text-2xl font-semibold tracking-tight">
-                    {Math.round(r.record.win_rate * 100)}
-                    <span className="text-xs">%</span>
-                  </b>
+        {FEATURES.ranking ? (
+          <section className="card home-ranking">
+            <SectionHeading
+              title="코트 위의 주인공들"
+              sub="우리 클럽 승률 TOP 3"
+              action={
+                <Link to="/app/ranking" className="text-link">
+                  전체 랭킹 <ArrowUpRight size={15} />
                 </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
-              첫 경기 결과가 기록되면 랭킹이 생겨요.
-            </p>
-          )}
-        </section>
+              }
+            />
+            {ranking.length ? (
+              <div className="ranking-strip">
+                {ranking.slice(0, 3).map((r) => (
+                  <Link key={r.user.id} to={`/app/members/${r.user.id}`}>
+                    <span className="font-display text-sm text-slate-500">
+                      {String(r.rank).padStart(2, "0")}
+                    </span>
+                    <MemberAvatar user={r.user} className="!h-9 !w-9" />
+                    <span className="min-w-0">
+                      <strong className="block truncate text-sm">
+                        {r.user.name}
+                      </strong>
+                      <small className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                        {r.record.wins}승 {r.record.losses}패
+                      </small>
+                    </span>
+                    <b className="ml-auto shrink-0 whitespace-nowrap font-display text-2xl font-semibold tracking-tight">
+                      {Math.round(r.record.win_rate * 100)}
+                      <span className="text-xs">%</span>
+                    </b>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
+                첫 경기 결과가 기록되면 랭킹이 생겨요.
+              </p>
+            )}
+          </section>
+        ) : null}
       </div>
     </PageBody>
   );

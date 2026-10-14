@@ -1,7 +1,7 @@
 """대진 생성(순수 함수): 다양하게 / 실력 밸런스, 라운드·휴식 순환, 혼복 구성."""
 import random
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -107,3 +107,77 @@ def test_singles_and_gender_fallback():
     assert len(out) == 1
     with pytest.raises(ValueError):
         M.generate(people(3), 1, MatchType.MENS_DOUBLES)
+
+
+# --- 자동 종목: 남복·여복·혼복 우선, 어쩔 수 없을 때만 잡복 -------------------
+G = {"M": Gender.MALE, "F": Gender.FEMALE, "U": None}
+
+
+def roster(spec):
+    return [SimpleNamespace(id=i + 1, gender=G[c]) for i, c in enumerate(spec)]
+
+
+def types(out):
+    return Counter(m["match_type"] for m in out)
+
+
+def test_classify():
+    g = {1: Gender.MALE, 2: Gender.MALE, 3: Gender.FEMALE, 4: Gender.FEMALE, 5: None}
+    assert M.classify([1, 2], [1, 2], g) == MatchType.MENS_DOUBLES
+    assert M.classify([3, 4], [3, 4], g) == MatchType.WOMENS_DOUBLES
+    assert M.classify([1, 3], [2, 4], g) == MatchType.MIXED_DOUBLES
+    assert M.classify([1, 2], [3, 4], g) == MatchType.OPEN_DOUBLES  # 남남 vs 여여
+    assert M.classify([1, 3], [2, 5], g) == MatchType.OPEN_DOUBLES  # 성별 미입력
+    assert M.classify([1], [3], g) == MatchType.SINGLES
+
+
+def test_min_open_matches():
+    assert M.min_open_matches(4, 4, 0, 2) == 0
+    assert M.min_open_matches(6, 2, 0, 2) == 0  # 남복 + 혼복
+    assert M.min_open_matches(7, 1, 0, 2) == 1
+    assert M.min_open_matches(9, 3, 0, 3) == 1
+    assert M.min_open_matches(4, 3, 1, 2) == 1
+    assert M.min_open_matches(2, 0, 6, 2) == 2
+
+
+@pytest.mark.parametrize(
+    "spec,courts,rounds,max_open",
+    [
+        ("MMMMFFFF", 2, 4, 0),
+        ("MMMMMMFF", 2, 4, 0),
+        ("MMMMMFFFFF", 2, 4, 0),  # 10명이 8자리 → 매 라운드 짝수로 골라 잡복 없음
+        ("MMMMMMMMMMFFFFFF", 3, 6, 0),
+        ("MMMMMMMF", 2, 4, 4),  # 여자 1명: 그 사람이 뛰는 경기는 잡복일 수밖에
+        ("MMMMMMMMMFFF", 3, 4, 4),  # 12명 모두 뛰고 남자가 홀수 → 라운드마다 하나
+    ],
+)
+def test_auto_prefers_proper_doubles(spec, courts, rounds, max_open):
+    for seed in range(3):
+        out = M.generate(roster(spec), courts, M.AUTO, rounds=rounds, rng=random.Random(seed))
+        assert types(out)[MatchType.OPEN_DOUBLES] <= max_open
+        g = {p.id: p.gender for p in roster(spec)}
+        for m in out:
+            assert m["match_type"] == M.classify(m["team1_ids"], m["team2_ids"], g)
+
+
+def test_auto_game_counts_are_fair_and_varied():
+    people = roster("MMMMMMMMMMFFFFFFFU")  # 18명(남10·여7·미입력1), 3코트(12자리), 2시간
+    out = M.generate(people, 3, M.AUTO, rounds=M.suggested_rounds(time(19), time(21)), rng=random.Random(5))
+    c = plays(out)
+    counts = [c.get(p.id, 0) for p in people]
+    assert max(counts) - min(counts) <= 1  # 48자리 / 18명 → 2~3게임
+    assert sum(counts) == 48
+    assert max(pairs(out).values()) == 1
+    # 성별 미입력 회원은 잡복으로만 들어간다
+    for m in out:
+        if 18 in m["team1_ids"] + m["team2_ids"]:
+            assert m["match_type"] == MatchType.OPEN_DOUBLES
+
+
+def test_suggested_rounds():
+    assert M.suggested_rounds(time(19), time(21)) == 4  # 2시간 = 6게임 4판
+    assert M.suggested_rounds(time(9), time(12)) == 6
+    assert M.suggested_rounds(time(9), time(10, 50)) == 3
+    assert M.suggested_rounds(time(23), time(1)) == 4  # 자정 넘김
+    assert M.suggested_rounds(time(6), time(23)) == M.MAX_ROUNDS
+    assert M.suggested_rounds(None, None) == M.DEFAULT_ROUNDS

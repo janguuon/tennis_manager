@@ -51,12 +51,13 @@ class Gender(str, enum.Enum):
 
 
 class MatchType(str, enum.Enum):
-    """경기 유형: 단식 / 남복 / 여복 / 혼복."""
+    """경기 유형: 단식 / 남복 / 여복 / 혼복 / 잡복."""
 
     SINGLES = "singles"            # 단식
     MENS_DOUBLES = "mens_doubles"  # 남자복식
     WOMENS_DOUBLES = "womens_doubles"  # 여자복식
-    MIXED_DOUBLES = "mixed_doubles"    # 혼합복식
+    MIXED_DOUBLES = "mixed_doubles"    # 혼합복식 (팀마다 남1·여1)
+    OPEN_DOUBLES = "open_doubles"      # 잡복: 위에 맞지 않는 성별 구성 (자동 대진에서 어쩔 수 없을 때만)
 
 
 class TeamSide(int, enum.Enum):

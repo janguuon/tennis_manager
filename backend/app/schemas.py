@@ -462,10 +462,11 @@ class MyPaymentDue(BaseModel):
 
 # --- 대진표 (Draw) ----------------------------------------------------------
 class DrawGenerateRequest(BaseModel):
-    match_type: MatchType
+    # auto = 참석자 성별로 남복·여복·혼복을 꾸리고 어쩔 수 없을 때만 잡복
+    match_type: MatchType | Literal["auto"] = "auto"
     # random = 다양하게, balanced = 실력 밸런스 (skill 은 예전 이름 → balanced 로 저장)
     method: Literal["random", "balanced", "skill"] = "random"
-    # 라운드 수. 없으면 모두가 한 경기 이상 뛰도록 정한다.
+    # 라운드 수. 없으면 모임 시간으로 정한다(30분에 한 판, 시간이 없으면 4라운드).
     rounds: int | None = Field(None, ge=1, le=12)
     name: str | None = Field(None, max_length=100)
 

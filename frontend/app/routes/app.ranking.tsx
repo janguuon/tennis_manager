@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
 import { ArrowUpRight, Trophy } from "lucide-react";
 
@@ -7,6 +7,7 @@ import { MemberAvatar, SectionHeading } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
+import { FEATURES } from "~/lib/features";
 import { requireToken } from "~/lib/session.server";
 import type { RankingEntry } from "~/lib/types";
 
@@ -14,6 +15,8 @@ export const meta: MetaFunction = () => [{ title: "랭킹 · 오테식 매니저
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
+  // 랭킹은 아직 쓰지 않아 숨겨 둔다 (lib/features.ts)
+  if (!FEATURES.ranking) throw redirect("/app");
   const ranking = await api<RankingEntry[]>("/stats/ranking", { token });
   return json({ ranking });
 }

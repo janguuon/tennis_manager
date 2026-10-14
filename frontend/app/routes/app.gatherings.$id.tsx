@@ -946,48 +946,7 @@ export default function GatheringDetailPage() {
 
           {/* 대진 만들기 (주최자/관리자) */}
           {isOrganizer ? (
-            <Form method="post" className="space-y-2 sm:max-w-md">
-              <input type="hidden" name="intent" value="generate" />
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  name="match_type"
-                  aria-label="종목"
-                  className="input"
-                  defaultValue="mens_doubles"
-                >
-                  {Object.entries(MATCH_TYPE_LABEL).map(([v, label]) => (
-                    <option key={v} value={v}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  name="rounds"
-                  aria-label="라운드 수"
-                  className="input"
-                  defaultValue=""
-                >
-                  <option value="">모두 한 경기씩</option>
-                  {[2, 3, 4, 5, 6, 8].map((n) => (
-                    <option key={n} value={n}>
-                      {n}라운드
-                    </option>
-                  ))}
-                </select>
-                <button name="method" value="random" className="btn-ghost">
-                  <Shuffle size={16} />
-                  다양하게
-                </button>
-                <button name="method" value="balanced" className="btn-primary">
-                  <Scale size={16} />
-                  실력 밸런스
-                </button>
-              </div>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                다양하게는 덜 만난 사람끼리, 실력 밸런스는 오테식 모임 경기 기록으로 코트마다 접전이 되게 짜요. 코트보다 사람이
-                많으면 덜 뛴 사람부터 들어가요.
-              </p>
-            </Form>
+            <DrawGenerator gathering={gathering} attendees={attendees} />
           ) : null}
 
           {/* 대진표 */}
@@ -1440,6 +1399,146 @@ function CourtExpenseTile({
         </p>
       ) : null}
     </section>
+  );
+}
+
+// 6게임 한 판을 30분으로 본다 (서버 matchmaking.MINUTES_PER_GAME 과 같게). 2시간이면 4라운드.
+const MINUTES_PER_GAME = 30;
+const DEFAULT_ROUNDS = 4;
+
+function suggestedRounds(start: string | null, end: string | null) {
+  if (!start || !end) return DEFAULT_ROUNDS;
+  const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  let minutes = toMin(end) - toMin(start);
+  if (minutes <= 0) minutes += 24 * 60;
+  return Math.max(1, Math.min(12, Math.floor(minutes / MINUTES_PER_GAME)));
+}
+
+function durationText(minutes: number) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return [h ? `${h}시간` : "", m ? `${m}분` : ""].filter(Boolean).join(" ");
+}
+
+const GENERATE_TYPES: { value: string; label: string }[] = [
+  { value: "auto", label: "자동 구성" },
+  { value: "mens_doubles", label: "남복만" },
+  { value: "womens_doubles", label: "여복만" },
+  { value: "mixed_doubles", label: "혼복만" },
+  { value: "singles", label: "단식" },
+];
+
+function DrawGenerator({
+  gathering,
+  attendees,
+}: {
+  gathering: GatheringDetail;
+  attendees: GatheringDetail["participants"];
+}) {
+  const suggested = suggestedRounds(gathering.start_time, gathering.end_time);
+  const [matchType, setMatchType] = useState("auto");
+  const [rounds, setRounds] = useState(suggested);
+  const navigation = useNavigation();
+  const busy =
+    navigation.state !== "idle" && navigation.formData?.get("intent") === "generate";
+
+  // 라운드마다 코트에 들어가는 인원과 1인 게임 수 (서버와 같은 규칙으로 미리 보여 준다)
+  const men = attendees.filter((p) => p.user.gender === "male").length;
+  const women = attendees.filter((p) => p.user.gender === "female").length;
+  const courts = Math.max(gathering.court_count, 1);
+  const range = (seats: number, people: number) => {
+    const low = people ? Math.floor(seats / people) : 0;
+    const high = people ? Math.ceil(seats / people) : 0;
+    return low === high ? `${low}` : `${low}~${high}`;
+  };
+  let matchesPerRound: number;
+  let estimate: string;
+  if (matchType === "mixed_doubles") {
+    matchesPerRound = Math.min(courts, Math.floor(men / 2), Math.floor(women / 2));
+    const seats = matchesPerRound * 2 * rounds;
+    estimate = `남 ${men}명 ${range(seats, men)}게임 · 여 ${women}명 ${range(seats, women)}게임`;
+  } else {
+    const unit = matchType === "singles" ? 2 : 4;
+    let pool = attendees.length;
+    let who = "참석";
+    if (matchType === "mens_doubles" && men >= 4) [pool, who] = [men, "남자"];
+    if (matchType === "womens_doubles" && women >= 4) [pool, who] = [women, "여자"];
+    matchesPerRound = Math.min(courts, Math.floor(pool / unit));
+    estimate = `${who} ${pool}명 · 1인 ${range(matchesPerRound * unit * rounds, pool)}게임`;
+  }
+  const noGender = attendees.filter((p) => !p.user.gender);
+
+  return (
+    <Form method="post" className="space-y-2.5 sm:max-w-lg">
+      <input type="hidden" name="intent" value="generate" />
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          name="match_type"
+          aria-label="종목"
+          className="input"
+          value={matchType}
+          onChange={(e) => setMatchType(e.target.value)}
+        >
+          {GENERATE_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select
+          name="rounds"
+          aria-label="라운드 수"
+          className="input"
+          value={rounds}
+          onChange={(e) => setRounds(Number(e.target.value))}
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              {n}라운드
+            </option>
+          ))}
+        </select>
+        <button
+          name="method"
+          value="random"
+          className="btn-primary"
+          disabled={busy || matchesPerRound === 0}
+        >
+          <Shuffle size={16} />
+          다양하게
+        </button>
+        <button
+          name="method"
+          value="balanced"
+          className="btn-ghost"
+          disabled={busy || matchesPerRound === 0}
+        >
+          <Scale size={16} />
+          실력 밸런스
+        </button>
+      </div>
+      <p className="text-[13px] font-bold">
+        {matchesPerRound === 0
+          ? "참석 인원이 부족해 이 종목으로는 대진을 짤 수 없어요."
+          : `코트 ${matchesPerRound}면 × ${rounds}라운드(${durationText(
+              rounds * MINUTES_PER_GAME
+            )}) → ${estimate}`}
+      </p>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        6게임 한 판 30분 기준으로{" "}
+        {gathering.start_time && gathering.end_time
+          ? `모임 시간(${gathering.start_time.slice(0, 5)}~${gathering.end_time.slice(0, 5)})에 맞췄어요.`
+          : "2시간(4라운드)으로 잡았어요."}{" "}
+        게임 수는 최대한 같게, 연달아 쉬는 사람 없이 돌아가요. 자동은 남복·여복·혼복을 먼저 꾸리고 어쩔 수 없을 때만 잡복을
+        넣어요. 다양하게는 덜 만난 사람끼리, 실력 밸런스는 접전이 되게 짜요.
+      </p>
+      {matchType === "auto" && noGender.length > 0 ? (
+        <p className="text-xs font-semibold text-[#B42318] dark:text-red-300">
+          성별 미입력 {noGender.length}명({noGender.map((p) => p.user.name).join(", ")})은 잡복으로만 들어가요. 마이페이지에서 성별을
+          입력해 달라고 알려 주세요.
+        </p>
+      ) : null}
+    </Form>
   );
 }
 

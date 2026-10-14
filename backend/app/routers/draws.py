@@ -172,7 +172,10 @@ def generate_draw(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """참석(ATTENDING) 인원으로 코트 수 기준 자동 대진을 생성한다."""
+    """참석(ATTENDING) 인원으로 코트 수 기준 자동 대진을 생성한다.
+
+    기본은 남복·여복·혼복 자동 구성(어쩔 수 없을 때만 잡복), 라운드 수는 모임 시간 기준.
+    """
     gathering = _require_organizer(db, gathering_id, current_user)
 
     attendees = db.scalars(
@@ -215,7 +218,8 @@ def generate_draw(
             gathering.court_count,
             payload.match_type,
             method,
-            rounds=payload.rounds,
+            rounds=payload.rounds
+            or matchmaking.suggested_rounds(gathering.start_time, gathering.end_time),
             context=context,
         )
     except ValueError as e:
@@ -229,7 +233,7 @@ def generate_draw(
             DrawMatch(
                 court_number=g["court_number"],
                 round_number=g["round_number"],
-                match_type=payload.match_type,
+                match_type=g["match_type"],
                 team1_player1_id=g["team1_ids"][0] if len(g["team1_ids"]) > 0 else None,
                 team1_player2_id=g["team1_ids"][1] if len(g["team1_ids"]) > 1 else None,
                 team2_player1_id=g["team2_ids"][0] if len(g["team2_ids"]) > 0 else None,

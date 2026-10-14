@@ -257,6 +257,8 @@ export interface DrawMatch {
   team2_score: number | null;
   /** 관리자에게만 온다: 두 팀 레이팅과 팀1 기대 득점률(친 경기는 경기 직전 값) */
   balance: DrawBalance | null;
+  /** 자리별 회원 id [팀1 1번, 팀1 2번, 팀2 1번, 팀2 2번] (빈자리 null) */
+  slot_ids: (number | null)[];
 }
 
 export type Tier = "A" | "B" | "C" | "D" | "E";

@@ -172,6 +172,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
         method: "DELETE",
         token,
       });
+    } else if (intent === "swap_slot") {
+      await api(`/draw-matches/${formData.get("draw_match_id")}/slot`, {
+        method: "POST",
+        token,
+        body: {
+          slot: formData.get("slot"),
+          user_id: Number(formData.get("user_id")),
+        },
+      });
+    } else if (intent === "delete_draw_match") {
+      await api(`/draw-matches/${formData.get("draw_match_id")}`, {
+        method: "DELETE",
+        token,
+      });
     } else if (intent === "delete_draw") {
       await api(`/draws/${formData.get("draw_id")}`, {
         method: "DELETE",
@@ -241,6 +255,8 @@ export default function GatheringDetailPage() {
   const isOrganizer =
     gathering.created_by === user.id || user.is_admin || (club && staff);
   const [editing, setEditing] = useState(false);
+  // 직접 바꾸기 중인 대진표 id
+  const [editingDraw, setEditingDraw] = useState<number | null>(null);
   // 등록된 실제 코트 번호 ("3, 5" → ["3","5"]). 대진의 코트 순번을 실제 번호로 변환하는 데 사용.
   const courtLabels = gathering.court_numbers
     ? gathering.court_numbers
@@ -1042,20 +1058,54 @@ export default function GatheringDetailPage() {
                     </span>
                   ) : null}
                 </p>
-                {isOrganizer ? (
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="delete_draw" />
-                    <input type="hidden" name="draw_id" value={draw.id} />
+                <div className="flex items-center gap-1">
+                  {(isOrganizer || myAttending) &&
+                  draw.matches.some((m) => m.result_match_id === null) ? (
                     <button
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/10"
-                      title="대진표 삭제"
-                      aria-label="대진표 삭제"
+                      type="button"
+                      onClick={() =>
+                        setEditingDraw(editingDraw === draw.id ? null : draw.id)
+                      }
+                      aria-pressed={editingDraw === draw.id}
+                      className={`${
+                        editingDraw === draw.id ? "btn-primary" : "btn-ghost"
+                      } btn-sm`}
                     >
-                      <Trash2 size={16} />
+                      {editingDraw === draw.id ? (
+                        <>
+                          <Check size={14} />
+                          다 바꿨어요
+                        </>
+                      ) : (
+                        <>
+                          <Shuffle size={14} />
+                          직접 바꾸기
+                        </>
+                      )}
                     </button>
-                  </Form>
-                ) : null}
+                  ) : null}
+                  {isOrganizer ? (
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="delete_draw" />
+                      <input type="hidden" name="draw_id" value={draw.id} />
+                      <button
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-ink/10"
+                        title="대진표 삭제"
+                        aria-label="대진표 삭제"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </Form>
+                  ) : null}
+                </div>
               </div>
+              {editingDraw === draw.id ? (
+                <p className="mt-3 rounded-2xl bg-house-yellow/25 px-4 py-3 text-xs font-semibold">
+                  선수 이름을 눌러 바꿀 사람을 고르세요. 같은 라운드에 뛰는 사람을 고르면 두
+                  사람 자리가 서로 바뀌고, 쉬던 사람을 고르면 원래 선수가 쉬어요. 결과가 입력된
+                  경기는 바꿀 수 없어요.
+                </p>
+              ) : null}
               <div className="draw-grid">
                 {draw.matches.map((m) => (
                   <DrawMatchRow
@@ -1064,6 +1114,15 @@ export default function GatheringDetailPage() {
                     canRecord={isOrganizer}
                     courtLabels={courtLabels}
                     club={club}
+                    edit={
+                      editingDraw === draw.id
+                        ? {
+                            attendees: attendees.map((p) => p.user),
+                            seats: roundSeats(draw.matches, m.round_number, courtLabels),
+                            canDelete: isOrganizer,
+                          }
+                        : null
+                    }
                   />
                 ))}
               </div>
@@ -1635,16 +1694,39 @@ function DrawGenerator({
   );
 }
 
+// 같은 라운드에서 누가 어느 코트에 있는지 (직접 바꾸기에서 "3코트"·"쉬는 중" 표시)
+function roundSeats(
+  matches: DrawMatch[],
+  round: number | null,
+  courtLabels: string[]
+): Map<number, string> {
+  const seats = new Map<number, string>();
+  for (const m of matches) {
+    if (m.round_number !== round) continue;
+    const label =
+      m.court_number != null && courtLabels[m.court_number - 1]
+        ? courtLabels[m.court_number - 1]
+        : String(m.court_number ?? "");
+    for (const id of m.slot_ids) if (id != null) seats.set(id, `${label}코트`);
+  }
+  return seats;
+}
+
+const SLOT_NAMES = ["team1_player1", "team1_player2", "team2_player1", "team2_player2"];
+
 function DrawMatchRow({
   match,
   canRecord,
   courtLabels,
   club,
+  edit,
 }: {
   match: DrawMatch;
   canRecord: boolean;
   courtLabels: string[];
   club: boolean;
+  /** 직접 바꾸기 중이면 고를 수 있는 참석자와 같은 라운드 자리 */
+  edit: { attendees: UserBrief[]; seats: Map<number, string>; canDelete: boolean } | null;
 }) {
   const navigation = useNavigation();
   const recorded = match.result_match_id !== null;
@@ -1657,6 +1739,57 @@ function DrawMatchRow({
       : match.court_number ?? "—";
   // 관리자에게만 온다
   const balance = match.balance;
+  const editable = edit !== null && !recorded;
+  const swapping =
+    navigation.state !== "idle" &&
+    navigation.formData?.get("intent") === "swap_slot" &&
+    navigation.formData?.get("draw_match_id") === String(match.id);
+  const known = new Map<number, UserBrief>(
+    [...match.team1, ...match.team2, ...(edit?.attendees ?? [])].map((u) => [u.id, u])
+  );
+  const singles = match.match_type === "singles";
+  // 한 자리 선택 칸: 고르면 바로 저장(같은 라운드면 맞바꾸기, 쉬던 사람이면 교체)
+  const slotPicker = (index: number) => {
+    const current = match.slot_ids[index] ?? null;
+    const options = [...(edit?.attendees ?? [])].sort((a, b) =>
+      a.name.localeCompare(b.name, "ko")
+    );
+    const currentUser = current != null ? known.get(current) : undefined;
+    return (
+      <Form key={index} method="post" className="min-w-0">
+        <input type="hidden" name="intent" value="swap_slot" />
+        <input type="hidden" name="draw_match_id" value={match.id} />
+        <input type="hidden" name="slot" value={SLOT_NAMES[index]} />
+        <select
+          name="user_id"
+          aria-label={`${index < 2 ? "팀1" : "팀2"} ${index % 2 + 1}번 선수`}
+          className="input !h-10 !py-0 !pl-3 !pr-8 text-[13px] font-semibold"
+          value={current ?? ""}
+          disabled={swapping}
+          onChange={(e) => e.currentTarget.form?.requestSubmit()}
+        >
+          {current == null ? <option value="">비어 있음</option> : null}
+          {currentUser && current != null && !options.some((o) => o.id === current) ? (
+            <option value={current}>{currentUser.name} (불참)</option>
+          ) : null}
+          {options.map((u) => {
+            const seat = edit?.seats.get(u.id);
+            const note =
+              u.id === current ? "" : seat ? ` · ${seat}` : " · 쉬는 중";
+            return (
+              <option key={u.id} value={u.id}>
+                {u.name}
+                {note}
+              </option>
+            );
+          })}
+        </select>
+      </Form>
+    );
+  };
+  const editTeam = (indexes: number[]) => (
+    <div className="space-y-2">{indexes.map((i) => slotPicker(i))}</div>
+  );
   const team = (players: UserBrief[]) => (
     <div className="space-y-3">
       {players.map((p) => (
@@ -1696,12 +1829,27 @@ function DrawMatchRow({
         </span>
       </div>
       <div className="draw-teams">
-        {team(match.team1)}
+        {editable ? editTeam(singles ? [0] : [0, 1]) : team(match.team1)}
         <span className="text-center font-display text-xs text-slate-400">
           VS
         </span>
-        {team(match.team2)}
+        {editable ? editTeam(singles ? [2] : [2, 3]) : team(match.team2)}
       </div>
+      {editable && edit?.canDelete ? (
+        <Form
+          method="post"
+          className="-mt-2 mb-3 flex justify-end"
+          onSubmit={(e) => {
+            if (!confirm("이 경기를 대진표에서 뺄까요?")) e.preventDefault();
+          }}
+        >
+          <input type="hidden" name="intent" value="delete_draw_match" />
+          <input type="hidden" name="draw_match_id" value={match.id} />
+          <button className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline">
+            이 경기 빼기
+          </button>
+        </Form>
+      ) : null}
       <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
         {recorded ? (
           <span className="badge-gray">

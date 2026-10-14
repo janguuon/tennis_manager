@@ -528,6 +528,18 @@ class DrawMatchRead(BaseModel):
     team1_score: int | None = None
     team2_score: int | None = None
     balance: DrawBalance | None = None
+    # 자리별 회원 id [팀1 1번, 팀1 2번, 팀2 1번, 팀2 2번] (빈자리는 null) — 직접 바꾸기 화면용
+    slot_ids: list[int | None] = []
+
+
+DrawSlot = Literal["team1_player1", "team1_player2", "team2_player1", "team2_player2"]
+
+
+class DrawSlotChange(BaseModel):
+    """대진의 한 자리에 참석자를 넣는다. 같은 라운드에 뛰는 사람이면 서로 자리를 바꾼다."""
+
+    slot: DrawSlot
+    user_id: int
 
 
 class DrawRead(BaseModel):

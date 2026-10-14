@@ -31,6 +31,7 @@ from ..models import (
 from ..schemas import (
     DrawBalance,
     DrawCreate,
+    DrawSlotChange,
     DrawGenerateRequest,
     DrawMatchCreate,
     DrawMatchEdit,
@@ -117,6 +118,7 @@ def _draw_match_reads(
                 team1_score=result.team1_score if result else None,
                 team2_score=result.team2_score if result else None,
                 balance=_balance(dm, book),
+                slot_ids=[getattr(dm, slot) for slot in _SLOT_COLUMNS],
             )
         )
     return reads
@@ -158,6 +160,38 @@ def _require_organizer(db: Session, gathering_id: int, user: User) -> Gathering:
     if g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff):
         return g
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
+
+
+_SLOT_COLUMNS = ("team1_player1_id", "team1_player2_id", "team2_player1_id", "team2_player2_id")
+
+
+def _require_editor(db: Session, gathering_id: int, user: User) -> Gathering:
+    """대진 자리 바꾸기: 운영진(주최자·관리자·오테식 모임 임원진) 또는 그 모임 참석자."""
+    g = db.get(Gathering, gathering_id)
+    if not g:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
+    if g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff):
+        return g
+    attending = db.scalar(
+        select(Participant.id).where(
+            Participant.gathering_id == gathering_id,
+            Participant.user_id == user.id,
+            Participant.status == AttendanceStatus.ATTENDING,
+        )
+    )
+    if attending is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="이 모임 참석자만 대진을 바꿀 수 있어요.")
+    return g
+
+
+def _retype(dm: DrawMatch, genders: dict) -> None:
+    """복식은 바뀐 성별 구성으로 남복·여복·혼복·잡복을 다시 붙인다."""
+    if dm.match_type == MatchType.SINGLES:
+        return
+    t1 = [p for p in (dm.team1_player1_id, dm.team1_player2_id) if p is not None]
+    t2 = [p for p in (dm.team2_player1_id, dm.team2_player2_id) if p is not None]
+    if len(t1) == 2 and len(t2) == 2:
+        dm.match_type = matchmaking.classify(t1, t2, genders)
 
 
 # --- 자동 생성 --------------------------------------------------------------
@@ -349,6 +383,85 @@ def edit_draw_match(
     db.commit()
     db.refresh(dm)
     return _single_draw_match_read(dm, db)
+
+
+@router.post("/draw-matches/{draw_match_id}/slot", response_model=DrawRead)
+def change_draw_slot(
+    draw_match_id: int,
+    payload: DrawSlotChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """현장에서 대진 바꾸기: 한 자리에 참석자를 넣는다.
+
+    - 같은 라운드의 다른 경기(또는 같은 경기 다른 자리)에 있던 사람이면 두 사람 자리를 서로 바꾼다.
+    - 그 라운드에 쉬던 사람이면 들어가고, 원래 있던 사람이 쉰다.
+    결과가 입력된 경기는 바꿀 수 없다. 모임 참석자와 운영진이 쓸 수 있다.
+    """
+    dm = db.get(DrawMatch, draw_match_id)
+    if not dm:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
+    draw = db.get(Draw, dm.draw_id)
+    gathering = _require_editor(db, draw.gathering_id, current_user)
+    if not visibility.is_open_for(current_user, gathering):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="아직 공개되지 않은 일정이에요.")
+    if dm.result_match_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="결과가 입력된 경기는 바꿀 수 없어요.")
+    column = f"{payload.slot}_id"
+    if dm.match_type == MatchType.SINGLES and column.endswith("player2_id"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="단식은 한 팀에 한 명이에요.")
+
+    attendees = {
+        p.user_id: p
+        for p in db.scalars(
+            select(Participant).where(
+                Participant.gathering_id == gathering.id,
+                Participant.status == AttendanceStatus.ATTENDING,
+            )
+        )
+    }
+    if payload.user_id not in attendees:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="이 모임에 참석하는 회원만 넣을 수 있어요.")
+
+    current = getattr(dm, column)
+    if current == payload.user_id:
+        return _build_draw_read(_load_draw(db, draw.id), db, _book_for(db, current_user))
+
+    changed = [dm]
+    # 같은 경기 다른 자리에 있으면 그 자리와 맞바꾼다
+    same_match = next((c for c in _SLOT_COLUMNS if getattr(dm, c) == payload.user_id), None)
+    if same_match:
+        setattr(dm, same_match, current)
+    else:
+        # 같은 라운드의 다른 경기에 있으면 서로 바꾼다 (없으면 쉬던 사람 → 원래 선수가 쉰다)
+        others = db.scalars(
+            select(DrawMatch).where(
+                DrawMatch.draw_id == draw.id,
+                DrawMatch.round_number == dm.round_number,
+                DrawMatch.id != dm.id,
+            )
+        ).all()
+        for other in others:
+            slot = next((c for c in _SLOT_COLUMNS if getattr(other, c) == payload.user_id), None)
+            if slot:
+                if other.result_match_id is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        detail="그 회원이 뛴 같은 라운드 경기에 이미 결과가 있어 바꿀 수 없어요.",
+                    )
+                setattr(other, slot, current)
+                changed.append(other)
+                break
+    setattr(dm, column, payload.user_id)
+
+    ids = {pid for m in changed for pid in _draw_match_player_ids(m)}
+    genders = {
+        u.id: u.gender for u in db.scalars(select(User).where(User.id.in_(ids)))
+    } if ids else {}
+    for m in changed:
+        _retype(m, genders)
+    db.commit()
+    return _build_draw_read(_load_draw(db, draw.id), db, _book_for(db, current_user))
 
 
 @router.delete("/draw-matches/{draw_match_id}", status_code=status.HTTP_204_NO_CONTENT)

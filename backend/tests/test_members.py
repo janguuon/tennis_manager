@@ -179,3 +179,18 @@ def test_username_nickname_duplicates_ignore_case_and_spaces(club):
     assert c.patch("/users/me", json={"nickname": "abc "}, headers=h).status_code == 409
     assert c.patch("/users/me", json={"nickname": "테식이"}, headers=h).status_code == 200
     assert c.patch("/users/me", json={"nickname": ""}, headers=h).json()["nickname"] is None
+
+
+def test_signup_rules_answer_in_korean(club):
+    c = club.c
+    r = c.post("/auth/signup", json={"username": "테식", "password": "1234", "name": "테식"})
+    assert r.status_code == 422 and "한글" in r.json()["detail"][0]["msg"]
+    r = c.post("/auth/signup", json={"username": "ㅅㄷ냐ㅏ", "password": "1234", "name": "테식"})
+    assert "한/영" in r.json()["detail"][0]["msg"]
+    r = c.post("/auth/signup", json={"username": "ab", "password": "1234", "name": "테식"})
+    assert "3자 이상" in r.json()["detail"][0]["msg"]
+    r = c.post("/auth/signup", json={"username": "te sik", "password": "1234", "name": "테식"})
+    assert "띄어쓰기" in r.json()["detail"][0]["msg"]
+    r = c.post("/auth/signup", json={"username": "tesik", "password": "12", "name": "테식"})
+    assert r.json()["detail"][0]["msg"] == "비밀번호는 4자 이상이어야 해요."
+    assert c.post("/auth/signup", json={"username": "te_si.k-1", "password": "1234", "name": "테식"}).status_code == 201

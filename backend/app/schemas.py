@@ -3,10 +3,12 @@ Pydantic 입출력 스키마 (요청 검증 / 응답 직렬화).
 
 ORM 모델(models.py)과 분리해 API 계약을 명확히 한다.
 """
+import re
 from datetime import date, datetime, time
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from .models import (
     ApprovalStatus,
@@ -37,9 +39,33 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """회원가입(신청) 요청. 로그인 ID는 username."""
 
-    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_.-]+$")
-    password: str = Field(..., min_length=4, max_length=72)
+    username: str = Field(..., description="영문·숫자(_ . -) 3~50자")
+    password: str = Field(..., description="4~72자")
     email: EmailStr | None = None
+
+    # 회원에게 그대로 보이는 안내라 한글 문구로 돌려준다 (기본 문구는 영어 정규식)
+    @field_validator("username")
+    @classmethod
+    def _username_rule(cls, v: str) -> str:
+        v = v.strip()
+        if re.search(r"[ㄱ-ㅎㅏ-ㅣ가-힣]", v):
+            raise PydanticCustomError(
+                "username_hangul", "아이디는 한글을 쓸 수 없어요. 영문·숫자로 적어 주세요. (한/영 키를 확인해 주세요)"
+            )
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{3,50}", v):
+            raise PydanticCustomError(
+                "username_rule", "아이디는 영문·숫자로 3자 이상 적어 주세요. (띄어쓰기는 안 되고 기호는 _ . - 만 돼요)"
+            )
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def _password_rule(cls, v: str) -> str:
+        if len(v) < 4:
+            raise PydanticCustomError("password_short", "비밀번호는 4자 이상이어야 해요.")
+        if len(v) > 72:
+            raise PydanticCustomError("password_long", "비밀번호는 72자 이하로 적어 주세요.")
+        return v
 
 
 class UserUpdate(BaseModel):

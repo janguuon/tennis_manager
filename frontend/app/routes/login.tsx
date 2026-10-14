@@ -12,6 +12,8 @@ import {
   useSearchParams,
 } from "@remix-run/react";
 
+import { useState } from "react";
+
 import { AuthLayout } from "~/components/AuthLayout";
 import { ApiError, api } from "~/lib/api.server";
 import {
@@ -20,6 +22,7 @@ import {
   safeRedirect,
 } from "~/lib/session.server";
 import type { LoginResponse } from "~/lib/types";
+import { hasHangul } from "~/lib/username";
 
 export const meta: MetaFunction = () => [{ title: "로그인 · 오테식 매니저" }];
 
@@ -61,6 +64,7 @@ export default function LoginPage() {
   const submitting = navigation.state === "submitting";
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? "";
+  const [korean, setKorean] = useState(false);
 
   return (
     <AuthLayout>
@@ -86,7 +90,13 @@ export default function LoginPage() {
             autoCorrect="off"
             spellCheck={false}
             required
+            onChange={(e) => setKorean(hasHangul(e.target.value))}
           />
+          {korean ? (
+            <p role="alert" className="mt-1.5 text-xs font-semibold text-[#B42318] dark:text-red-300">
+              아이디에 한글이 들어갔어요. 한/영 키를 눌러 영문으로 바꿔 주세요.
+            </p>
+          ) : null}
         </div>
         <div>
           <label className="label" htmlFor="password">

@@ -6,10 +6,12 @@ import type {
 import { redirect } from "@remix-run/node";
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { Check } from "lucide-react";
+import { useState } from "react";
 
 import { AuthLayout } from "~/components/AuthLayout";
 import { ApiError, api } from "~/lib/api.server";
 import { getToken } from "~/lib/session.server";
+import { usernameHint } from "~/lib/username";
 import type { SignupResponse } from "~/lib/types";
 
 export const meta: MetaFunction = () => [
@@ -55,6 +57,8 @@ export default function SignupPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submitting = navigation.state === "submitting";
+  const [username, setUsername] = useState("");
+  const hint = usernameHint(username);
 
   return (
     <AuthLayout>
@@ -96,8 +100,32 @@ export default function SignupPage() {
                 spellCheck={false}
                 required
                 minLength={3}
+                maxLength={50}
+                pattern="[A-Za-z0-9_.\-]{3,50}"
                 placeholder="영문/숫자 3자 이상"
+                value={username}
+                aria-invalid={hint ? true : undefined}
+                aria-describedby={hint ? "username-hint" : undefined}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  e.target.setCustomValidity("");
+                }}
+                onInvalid={(e) =>
+                  e.currentTarget.setCustomValidity(
+                    usernameHint(e.currentTarget.value) ??
+                      "아이디는 영문·숫자로 3자 이상 적어 주세요."
+                  )
+                }
               />
+              {hint ? (
+                <p
+                  id="username-hint"
+                  role="alert"
+                  className="mt-1.5 text-xs font-semibold text-[#B42318] dark:text-red-300"
+                >
+                  {hint}
+                </p>
+              ) : null}
             </div>
             <div>
               <label className="label" htmlFor="name">
@@ -119,6 +147,10 @@ export default function SignupPage() {
               required
               minLength={4}
               placeholder="4자 이상"
+              onChange={(e) => e.target.setCustomValidity("")}
+              onInvalid={(e) =>
+                e.currentTarget.setCustomValidity("비밀번호는 4자 이상이어야 해요.")
+              }
             />
           </div>
 

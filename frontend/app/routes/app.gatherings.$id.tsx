@@ -197,6 +197,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           end_time: get("end_time") || null,
           location: get("location") || null,
           court_numbers: courtNumbers || null,
+          court_fairy: get("court_fairy") || null,
           court_count: courtNumbers
             ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
             : Number(get("court_count") || 1),
@@ -497,6 +498,9 @@ export default function GatheringDetailPage() {
                 : `코트 ${gathering.court_count}면`}{" "}
               · 총 {gathering.court_count}면
             </p>
+            {gathering.court_fairy ? (
+              <p className="pl-6">코트요정 {gathering.court_fairy}</p>
+            ) : null}
             {club ? (
               <p className="pl-6">
                 회비 지출
@@ -1106,6 +1110,19 @@ export default function GatheringDetailPage() {
                   className="input"
                   placeholder="예: 3, 5 (쉼표로 구분)"
                   defaultValue={gathering.court_numbers ?? ""}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="e_fairy">
+                  코트요정 <span className="font-medium text-slate-400">(선택)</span>
+                </label>
+                <input
+                  id="e_fairy"
+                  name="court_fairy"
+                  className="input"
+                  placeholder="코트를 잡아 준 사람, 예: 서승우, 김하린"
+                  maxLength={200}
+                  defaultValue={gathering.court_fairy ?? ""}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

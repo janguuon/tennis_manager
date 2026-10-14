@@ -29,7 +29,13 @@ export async function action({ request }: ActionFunctionArgs) {
   fd.append("file", file, file.name);
 
   try {
-    const result = await api<{ created: number; failed: number; errors: { row: number; error: string }[] }>(
+    const result = await api<{
+      created: number;
+      failed: number;
+      errors: { row: number; error: string }[];
+      skipped: number;
+      skips: { row: number; message: string }[];
+    }>(
       "/gatherings/import",
       { method: "POST", token, multipart: fd },
     );

@@ -13,7 +13,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": 'attachment; filename="gathering_template.xlsx"',
+      "Content-Disposition": 'attachment; filename="schedule_template.xlsx"',
     },
   });
 }

@@ -290,9 +290,7 @@ def test_import_with_kind_columns(club):
     member = club.c.post("/gatherings/import", files=files, headers=club.headers["kim"]).json()
     assert member["errors"][0]["row"] == 2
 
-    template = club.c.get("/gatherings/import/template", headers=club.admin).content
-    first_row = next(openpyxl.load_workbook(io.BytesIO(template)).active.iter_rows(values_only=True))
-    assert "종류" in first_row and "참가비" not in first_row
+    # 양식 다운로드는 새 코트 예약 시트(test_schedule_import.py). 예전 양식 파일도 계속 올릴 수 있다.
 
 
 # --- 마이그레이션 -------------------------------------------------------------

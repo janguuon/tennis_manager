@@ -10,15 +10,19 @@
   코트비는 예약자(CourtBooking)에게 총무가 돌려준다 (routers/court_bookings.py).
 """
 import io
+from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 
 import openpyxl
+from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import schedule_import as sheet
 from .. import visibility
 from ..database import get_db
 from ..deps import get_current_user
@@ -43,6 +47,7 @@ from ..schemas import (
     GatheringDetail,
     GatheringImportResult,
     GatheringImportRowError,
+    GatheringImportRowNote,
     GatheringPaymentSummary,
     GatheringRead,
     GatheringUpdate,
@@ -57,7 +62,7 @@ from ..schemas import (
 
 router = APIRouter(prefix="/gatherings", tags=["gatherings"])
 
-# 엑셀 헤더(한국어) → 모임 필드명 매핑
+# 예전 엑셀 양식(한 행 = 한 모임) 헤더 → 모임 필드명. 새 양식(코트 예약 시트)은 schedule_import.py
 IMPORT_HEADER_MAP = {
     "날짜": "event_date",
     "제목": "title",
@@ -76,8 +81,6 @@ IMPORT_HEADER_MAP = {
     "예금주": "account_holder",
     "설명": "description",
 }
-# 양식에 넣는 열 (예전 양식의 '참가비'는 업로드만 허용)
-IMPORT_COLUMNS = [k for k in IMPORT_HEADER_MAP if k != "참가비"]
 # 필드명 → 한국어 헤더 (오류 메시지 표기용)
 FIELD_TO_HEADER = {v: k for k, v in IMPORT_HEADER_MAP.items()}
 
@@ -417,7 +420,12 @@ async def import_gatherings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """엑셀(.xlsx) 한 행 = 한 모임으로 일괄 등록. 오류 행은 건너뛰고 보고한다."""
+    """엑셀(.xlsx)로 일정을 한꺼번에 등록한다. 오류 행은 건너뛰고 보고한다.
+
+    - 코트 예약 시트(새 양식, schedule_import.py): 한 행 = 코트 한 면 예약. 같은 날짜·시간·장소·종류는
+      한 모임으로 묶고, 이미 등록된 일정은 건너뛴다.
+    - 예전 양식: 한 행 = 한 모임.
+    """
     if not (file.filename or "").lower().endswith(".xlsx"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=".xlsx 파일만 업로드할 수 있습니다.")
 
@@ -427,6 +435,15 @@ async def import_gatherings(
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="엑셀 파일을 읽을 수 없습니다.")
 
+    # 코트 예약 시트(새 양식)가 있는 시트를 먼저 찾는다 — 첫 시트가 빈 시트일 수 있다
+    for candidate in wb.worksheets:
+        first = next(candidate.iter_rows(max_row=1, values_only=True), None)
+        if first and sheet.is_court_sheet(first):
+            rows = candidate.iter_rows(values_only=True)
+            header = next(rows)
+            return _import_court_sheet(db, header, rows, current_user)
+
+    # 예전 양식: 한 행 = 한 모임 (제목·종류·시작시간… 열)
     ws = wb.active
     rows = ws.iter_rows(values_only=True)
     try:
@@ -478,33 +495,236 @@ async def import_gatherings(
 
 
 @router.get("/import/template")
-def import_template(_: User = Depends(get_current_user)):
-    """업로드용 엑셀 양식(.xlsx) 다운로드: 헤더 + 예시 1행."""
+def import_template(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """일정 자동 등록 양식(.xlsx): 코트 예약 시트. 예약자명·코트요정은 회원 이름 목록에서 고른다."""
+    names = sorted(
+        {
+            u.name.strip()
+            for u in db.scalars(
+                select(User).where(
+                    User.is_active.is_(True), User.approval_status == ApprovalStatus.APPROVED
+                )
+            )
+        }
+    )
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "모임목록"
-    ws.append(IMPORT_COLUMNS)
-    # 예시: 오테식 정모(회비 지출, 게스트비) / 일반 벙개(코트비 + 캔볼값 n빵)
-    ws.append([
-        "2026-07-05", "토요 정모", "오테식 정모", "09:00", "12:00", "시민 테니스장", "3, 5", 12,
-        None, None, 5000, "국민", "123-456-7890", "총무", "코트 예약자는 모임 화면에서 등록",
-    ])
-    ws.append([
-        "2026-07-08", "평일 저녁 벙개", "일반 벙개", "19:00", "21:00", "시민 테니스장", "2", 6,
-        40000, 8000, None, "카카오", "3333-01-2345678", "홍길동", None,
-    ])
-    # 계좌번호 열은 텍스트 서식으로(숫자 자동 인식·0 누락 방지)
-    acct_col = get_column_letter(IMPORT_COLUMNS.index("계좌번호") + 1)
-    ws.column_dimensions[acct_col].number_format = "@"
-    for cell in ws[acct_col]:
-        cell.number_format = "@"
+    ws.title = "템플릿"
+    ws.append(sheet.TEMPLATE_HEADERS)
+    required = {"날짜", "시간", "코트 번호", "예약자명", "코트요정", "코트비", "사용 여부", "장소"}
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        if cell.value in required:
+            cell.fill = PatternFill("solid", fgColor="F5CD52")
+    widths = [12, 13, 10, 11, 11, 10, 12, 22, 14, 18, 28]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    last = 500
+    for r in range(2, last + 1):
+        ws.cell(r, 1).number_format = "yyyy-mm-dd"
+        ws.cell(r, 6).number_format = "#,##0"
+        ws.cell(r, 7).number_format = "#,##0"
+    ws.freeze_panes = "A2"
+
+    # 목록에서 고르되, 목록에 없는 값도 적을 수 있게(오류창 끔)
+    def dropdown(formula: str, col: str) -> None:
+        dv = DataValidation(type="list", formula1=formula, allow_blank=True, showErrorMessage=False)
+        ws.add_data_validation(dv)
+        dv.add(f"{col}2:{col}{last}")
+
+    dropdown('"' + ",".join(sheet.TIME_SLOTS) + '"', "B")
+    dropdown('"' + ",".join(sheet.USAGE_OPTIONS) + '"', "H")
+    if names:
+        lists = wb.create_sheet("회원목록")
+        for n in names:
+            lists.append([n])
+        lists.sheet_state = "hidden"
+        ref = f"'회원목록'!$A$1:$A${len(names)}"
+        dropdown(f"={ref}", "D")
+        dropdown(f"={ref}", "E")
+
+    guide = wb.create_sheet("작성 안내")
+    guide.append(sheet.TEMPLATE_HEADERS)
+    for cell in guide[1]:
+        cell.font = Font(bold=True)
+    guide.append(["2026-10-17", "10:00~12:00", 3, "홍길동", "김요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
+    guide.append(["2026-10-17", "10:00~12:00", 5, "이예약", "김요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
+    guide.append(["2026-10-21", "19:00~21:00", 2, "홍길동", "박요정", 20000, 6000, "일반 벙개", 8, "구립 테니스장", "야간 조명"])
+    guide.append(["2026-10-24", "14:00~16:00", 4, "이예약", "김요정", 20000, None, "우천 취소", None, "시민 테니스장", None])
+    guide.append([])
+    for line in (
+        "· 노란 칸(날짜·시간·코트 번호·예약자명·코트요정·코트비·사용 여부·장소)을 모두 채운 행만 등록돼요.",
+        "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
+        "· 사용 여부가 오테식 정모 / 오테식 벙개 / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
+        "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
+        "· 예약자명은 앱에 가입한 이름과 같아야 해요. 오테식 모임은 예약자에게 코트비를 지급할 목록이 만들어지고,",
+        "  일반 벙개는 첫 번째 예약자가 벙주가 되어 그 사람의 환급 계좌로 코트비+캔볼비를 n빵해요.",
+        "· 오테식 모임의 캔볼비는 회비에서 나가므로 반영하지 않아요. 게스트비는 5,000원으로 들어가요.",
+        "· 이 '작성 안내' 시트는 올려도 읽지 않아요. '템플릿' 시트에 적어 주세요.",
+    ):
+        guide.append([line])
+
     bio = io.BytesIO()
     wb.save(bio)
     bio.seek(0)
     return Response(
         content=bio.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="gathering_template.xlsx"'},
+        headers={"Content-Disposition": 'attachment; filename="schedule_template.xlsx"'},
+    )
+
+
+def _court_label(court: str) -> str:
+    return f"{court}번" if court.isdigit() else court
+
+
+def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) -> GatheringImportResult:
+    """코트 예약 시트를 모임으로 등록한다 (schedule_import.py 의 규칙)."""
+    cols = sheet.column_map(header)
+    missing = [sheet.LABEL[f] for f in sheet.REQUIRED if f not in cols]
+    if missing:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail=f"양식에 이 열이 없어요: {', '.join(missing)}"
+        )
+
+    errors: list[GatheringImportRowError] = []
+    skips: list[GatheringImportRowNote] = []
+    blocked: set[tuple] = set()
+    good: list[sheet.SheetRow] = []
+    for i, values in enumerate(rows, start=2):
+        parsed = sheet.parse_row(i, values, cols)
+        if parsed is None:
+            continue
+        if isinstance(parsed, sheet.RowSkip):
+            skips.append(GatheringImportRowNote(row=parsed.row, message=parsed.message))
+        elif isinstance(parsed, sheet.RowProblem):
+            errors.append(GatheringImportRowError(row=parsed.row, error=parsed.message))
+            if parsed.key is not None:
+                blocked.add(parsed.key)
+        else:
+            good.append(parsed)
+
+    # 예약자 이름 → 회원 (승인된 활동 회원, 이름이 없으면 닉네임)
+    members = db.scalars(
+        select(User).where(User.is_active.is_(True), User.approval_status == ApprovalStatus.APPROVED)
+    ).all()
+    by_name: dict[str, list[User]] = defaultdict(list)
+    by_nick: dict[str, list[User]] = defaultdict(list)
+    for u in members:
+        by_name[" ".join(u.name.split())].append(u)
+        if u.nickname:
+            by_nick[" ".join(u.nickname.split())].append(u)
+
+    def find_member(name: str) -> User | str:
+        found = by_name.get(name) or by_nick.get(name) or []
+        if not found:
+            return f"예약자 '{name}'님을 회원에서 찾을 수 없어요(가입한 이름과 같게 적어 주세요)"
+        if len(found) > 1:
+            return f"'{name}' 이름의 회원이 여럿이라 예약자를 정할 수 없어요"
+        return found[0]
+
+    # 오테식 모임 입금 계좌: 가장 최근 오테식 모임의 회비 통장
+    club_account = db.scalar(
+        select(Gathering)
+        .where(Gathering.kind.in_(CLUB_KINDS), Gathering.account_number.is_not(None))
+        .order_by(Gathering.event_date.desc(), Gathering.id.desc())
+        .limit(1)
+    )
+
+    created = 0
+    for group in sheet.group_rows(good):
+        first = group.first
+        if first.key in blocked:
+            errors.append(
+                GatheringImportRowError(
+                    row=first.row,
+                    error=f"{group.row_text}: 같은 모임으로 묶이는 다른 행에 오류가 있어 함께 등록하지 않았어요",
+                )
+            )
+            continue
+        problems: list[str] = []
+        club = first.kind in CLUB_KINDS
+        if club and not current_user.is_staff:
+            problems.append("오테식 정모·벙개는 관리자와 임원진만 등록할 수 있어요")
+        dup = [c for c, n in Counter(group.courts).items() if n > 1]
+        if dup:
+            problems.append(f"같은 코트({', '.join(_court_label(c) for c in dup)})가 두 번 적혀 있어요")
+        bookers: list[User] = []
+        for r in group.rows:
+            found = find_member(r.booker)
+            if isinstance(found, str):
+                problems.append(f"{r.row}행 {found}" if len(group.rows) > 1 else found)
+            else:
+                bookers.append(found)
+        if problems:
+            errors.append(GatheringImportRowError(row=first.row, error=f"{group.row_text}: " + " · ".join(problems)))
+            continue
+
+        location = " ".join(first.location.split())
+        same = [
+            g
+            for g in db.scalars(
+                select(Gathering).where(
+                    Gathering.event_date == first.event_date,
+                    Gathering.start_time == first.start,
+                    Gathering.end_time == first.end,
+                    Gathering.kind == first.kind,
+                )
+            )
+            if " ".join((g.location or "").split()) == location
+        ]
+        if same:
+            skips.append(
+                GatheringImportRowNote(
+                    row=first.row,
+                    message=f"{group.row_text}: 이미 등록된 일정이라 건너뛰었어요 ({same[0].title}, 코트 {same[0].court_numbers or '-'})",
+                )
+            )
+            continue
+
+        gathering = Gathering(
+            title=sheet.KIND_TITLE[first.kind],
+            kind=first.kind,
+            event_date=first.event_date,
+            start_time=first.start,
+            end_time=first.end,
+            location=location,
+            court_numbers=", ".join(group.courts),
+            court_count=len(group.courts),
+            court_fairy=", ".join(group.fairies)[:200],
+            max_participants=next((r.max_participants for r in group.rows if r.max_participants), None),
+            description="\n".join(group.notes) or None,
+            created_by=current_user.id,
+        )
+        if club:
+            gathering.guest_fee = GUEST_FEE_DEFAULT
+            if club_account is not None:
+                gathering.bank = club_account.bank
+                gathering.account_number = club_account.account_number
+                gathering.account_holder = club_account.account_holder
+            for r, booker in zip(group.rows, bookers):
+                gathering.court_bookings.append(
+                    CourtBooking(booker_id=booker.id, amount=r.court_fee, court_label=_court_label(r.court))
+                )
+        else:
+            # 일반 벙개: 첫 번째 예약자가 벙주 — 그 사람 환급 계좌로 코트비+캔볼비를 n빵
+            host = bookers[0]
+            gathering.created_by = host.id
+            gathering.court_fee = sum(r.court_fee for r in group.rows)
+            gathering.ball_fee = sum(r.ball_fee for r in group.rows)
+            gathering.bank = host.bank
+            gathering.account_number = host.account_number
+            gathering.account_holder = host.account_holder
+        _apply_kind_rules(gathering)
+        db.add(gathering)
+        created += 1
+
+    db.commit()
+    return GatheringImportResult(
+        created=created, failed=len(errors), errors=errors, skipped=len(skips), skips=skips
     )
 
 

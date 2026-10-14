@@ -251,6 +251,7 @@ class GatheringBase(BaseModel):
     location: str | None = Field(None, max_length=200)
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
+    court_fairy: str | None = Field(None, max_length=200, description="코트요정(코트를 잡아 준 사람) 이름")
     max_participants: int | None = Field(None, ge=1)
     kind: GatheringKind = Field(GatheringKind.FLASH, description="오테식 정모 / 오테식 벙개 / 일반 벙개")
     fee: int = Field(0, ge=0, description="일반 벙개: n빵할 총액. 코트비·캔볼값을 넣으면 둘의 합.")
@@ -315,12 +316,19 @@ class GatheringImportRowError(BaseModel):
     error: str
 
 
+class GatheringImportRowNote(BaseModel):
+    row: int
+    message: str
+
+
 class GatheringImportResult(BaseModel):
-    """엑셀 일괄 업로드 결과."""
+    """엑셀 일괄 업로드 결과. 건너뛴 행(이미 등록된 일정, 모임이 아닌 사용 여부)은 skips."""
 
     created: int
     failed: int
     errors: list[GatheringImportRowError]
+    skipped: int = 0
+    skips: list[GatheringImportRowNote] = []
 
 
 class GatheringUpdate(BaseModel):
@@ -332,6 +340,7 @@ class GatheringUpdate(BaseModel):
     location: str | None = Field(None, max_length=200)
     court_count: int | None = Field(None, ge=1)
     court_numbers: str | None = Field(None, max_length=200)
+    court_fairy: str | None = Field(None, max_length=200)
     max_participants: int | None = Field(None, ge=1)
     kind: GatheringKind | None = None
     fee: int | None = Field(None, ge=0)

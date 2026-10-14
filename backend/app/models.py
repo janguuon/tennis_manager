@@ -246,6 +246,8 @@ class Gathering(Base):
     court_count: Mapped[int] = mapped_column(Integer, default=1)
     # 실제 코트 번호 목록 (쉼표 구분, 예: "3, 5"). 입력 시 court_count는 이 개수로 자동 설정.
     court_numbers: Mapped[str | None] = mapped_column(String(200))
+    # 코트요정: 코트를 잡아 준 사람(들) 이름. 엑셀 일정 등록에서 채운다 (예: "서승우, 김하린")
+    court_fairy: Mapped[str | None] = mapped_column(String(200))
     max_participants: Mapped[int | None] = mapped_column(Integer)
 
     kind: Mapped[GatheringKind] = mapped_column(

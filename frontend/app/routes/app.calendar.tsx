@@ -117,6 +117,7 @@ export async function action({ request }: ActionFunctionArgs) {
     end_time: get("end_time") || null,
     location: get("location") || null,
     court_numbers: courtNumbers || null,
+    court_fairy: get("court_fairy") || null,
     // 코트 번호를 적었으면 면수는 자동(백엔드 계산), 아니면 직접 입력값 사용
     court_count: courtNumbers
       ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
@@ -170,6 +171,8 @@ export default function CalendarPage() {
     created?: number;
     failed?: number;
     errors?: { row: number; error: string }[];
+    skipped?: number;
+    skips?: { row: number; message: string }[];
     error?: string;
   }>();
   // 시간 제어 상태: 시작 선택 시 종료를 +2h 자동 설정하되, 사용자가 종료를 직접 바꾸면 자동 변경 중단
@@ -605,6 +608,18 @@ export default function CalendarPage() {
                   입력한 코트 수만큼 동시에 경기를 진행해요.
                 </p>
               </div>
+              <div>
+                <label className="label" htmlFor="court_fairy">
+                  코트요정 <span className="font-medium text-slate-400">(선택)</span>
+                </label>
+                <input
+                  id="court_fairy"
+                  name="court_fairy"
+                  className="input"
+                  placeholder="코트를 잡아 준 사람, 예: 서승우, 김하린"
+                  maxLength={200}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label" htmlFor="court_count">
@@ -697,11 +712,18 @@ export default function CalendarPage() {
             encType="multipart/form-data"
             className="space-y-4"
           >
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              한 행에 모임 하나씩 적어 올리면 한 번에 등록돼요. ‘종류’ 칸에는
-              오테식 정모 / 오테식 벙개 / 일반 벙개를 적어요(비우면 일반 벙개).
-              오테식 모임의 코트 예약자는 등록 후 모임 화면에서 추가해요.
-            </p>
+            <div className="space-y-1.5 text-sm text-slate-500 dark:text-slate-400">
+              <p>
+                코트 예약 시트를 올리면 일정이 한 번에 등록돼요. 한 행에 코트 한
+                면씩 적고, 날짜·시간·코트 번호·예약자명·코트요정·코트비·사용
+                여부·장소를 모두 채운 행만 등록돼요.
+              </p>
+              <p>
+                날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요. 사용
+                여부가 오테식 정모·오테식 벙개·일반 벙개가 아닌 행(예약대기·우천
+                취소 등)과 이미 등록된 일정은 건너뛰어요.
+              </p>
+            </div>
             <a
               href="/resources/gatherings-template"
               className="btn-secondary w-full"
@@ -735,17 +757,30 @@ export default function CalendarPage() {
               importFetcher.data.ok ? (
                 <div className="alert-success space-y-2">
                   <p className="font-semibold">
-                    {importFetcher.data.created}건 등록
+                    일정 {importFetcher.data.created}건 등록
+                    {importFetcher.data.skipped
+                      ? ` · ${importFetcher.data.skipped}건 건너뜀`
+                      : ""}
                     {importFetcher.data.failed
                       ? ` · ${importFetcher.data.failed}건 실패`
                       : ""}
                   </p>
+                  {importFetcher.data.skips &&
+                  importFetcher.data.skips.length > 0 ? (
+                    <ul className="max-h-32 space-y-0.5 overflow-y-auto text-xs text-slate-600 dark:text-slate-300">
+                      {importFetcher.data.skips.map((s) => (
+                        <li key={`s${s.row}`}>
+                          {s.message.match(/^\d/) ? s.message : `${s.row}행: ${s.message}`}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {importFetcher.data.errors &&
                   importFetcher.data.errors.length > 0 ? (
                     <ul className="max-h-40 space-y-0.5 overflow-y-auto text-xs text-red-600 dark:text-red-400">
                       {importFetcher.data.errors.map((e) => (
-                        <li key={e.row}>
-                          {e.row}행: {e.error}
+                        <li key={`e${e.row}`}>
+                          {e.error.match(/^\d/) ? e.error : `${e.row}행: ${e.error}`}
                         </li>
                       ))}
                     </ul>

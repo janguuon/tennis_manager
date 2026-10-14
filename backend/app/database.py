@@ -60,6 +60,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "court_fee", "court_fee INTEGER NOT NULL DEFAULT 0"),
     ("gatherings", "ball_fee", "ball_fee INTEGER NOT NULL DEFAULT 0"),
     ("gatherings", "guest_fee", "guest_fee INTEGER NOT NULL DEFAULT 0"),
+    # 코트요정 (엑셀 일정 등록)
+    ("gatherings", "court_fairy", "court_fairy VARCHAR(200)"),
 ]
 
 

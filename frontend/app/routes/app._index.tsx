@@ -8,6 +8,7 @@ import {
   MapPin,
   Wallet,
   CalendarDays,
+  FileDown,
 } from "lucide-react";
 
 import {
@@ -36,6 +37,8 @@ import type {
 } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "홈 · 오테식 매니저" }];
+
+const MEMBER_GUIDE_URL = "/guide/otesik-member-guide.pdf";
 
 /** 오늘 날짜 "YYYY-MM-DD" (서버가 어느 시간대에 있든 한국 기준) */
 function todayKST(): string {
@@ -142,9 +145,19 @@ export default function HomePage() {
             : "반가워요. 다음 만남을 준비해 볼까요?"
         }`}
         actions={
-          <Link to="/app/calendar" className="btn-ghost">
-            이번 달 일정 <ArrowUpRight size={16} />
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link to="/app/calendar" className="btn-ghost">
+              이번 달 일정 <ArrowUpRight size={16} />
+            </Link>
+            {/* 회원 이용 안내 PDF (public/guide) */}
+            <a
+              href={MEMBER_GUIDE_URL}
+              download="오테식매니저_회원안내.pdf"
+              className="btn-ghost"
+            >
+              <FileDown size={16} /> 이용 안내
+            </a>
+          </div>
         }
       />
       <div className="club-news">

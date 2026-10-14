@@ -124,8 +124,9 @@ def delete_member(
     회원 삭제.
 
     - 남은 기록이 없으면(경기·대진·만든 모임·입금·코트 예약 기록 없음) 계정을 완전히 지운다 → "deleted"
-    - 기록이 있으면 다른 회원의 전적·정산이 깨지지 않도록 **탈퇴 처리**한다 → "deactivated"
-      로그인 불가, 회원 목록·랭킹에서 빠지고, 앞으로 있을 모임의 참석은 불참으로 바꾼다
+    - 기록이 있으면 정산이 깨지지 않도록 기록은 남기고 **탈퇴 처리**한다 → "deactivated"
+      로그인 불가, 회원 목록·랭킹에서 빠지고, 그 회원이 뛴 경기는 다른 회원의 전적·랭킹·티어
+      계산에서도 빠진다. 앞으로 있을 모임의 참석은 불참으로 바꾼다
       (이미 입금했다면 그 모임의 "돌려줄 참가비"에 나타난다). 복구할 수 있다.
     """
     user = _get_user_or_404(db, user_id)
@@ -158,7 +159,7 @@ def delete_member(
 
 @router.post("/users/{user_id}/restore", response_model=UserRead)
 def restore_member(user_id: int, db: Session = Depends(get_db)):
-    """탈퇴 처리한 회원을 되살린다 (다시 로그인·회원 목록·랭킹에 나타남)."""
+    """탈퇴 처리한 회원을 되살린다 (다시 로그인·회원 목록·랭킹에 나타나고 그 경기들도 다시 집계된다)."""
     user = _get_user_or_404(db, user_id)
     user.is_active = True
     db.commit()

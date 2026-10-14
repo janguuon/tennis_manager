@@ -111,7 +111,7 @@ export default function TiersPage() {
           <ul className="mt-3 list-disc space-y-1.5 pl-6 text-[13px] font-medium text-slate-600 dark:text-slate-400">
             <li>
               오테식 정모·벙개에서 <b>대진표로 치르고 결과를 입력한 경기만</b>{" "}
-              반영해요. 일반 벙개와 직접 입력한 경기는 빠져요. 게스트도 똑같이
+              반영해요. 일반 벙개, 직접 입력한 경기, 탈퇴한 회원이 뛴 경기는 빠져요. 게스트도 똑같이
               계산해요.
             </li>
             <li>

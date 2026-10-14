@@ -80,7 +80,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const notice =
         res.result === "deleted"
           ? `${res.name}님을 삭제했어요.`
-          : `${res.name}님은 경기·입금 기록이 있어 기록을 남기고 탈퇴 처리했어요. 아래 '탈퇴한 회원'에서 복구할 수 있어요.`;
+          : `${res.name}님은 경기·입금 기록이 있어 기록을 남기고 탈퇴 처리했어요. ${res.name}님이 뛴 경기는 전적·랭킹·티어 계산에서 빠져요. 아래 '탈퇴한 회원'에서 복구할 수 있어요.`;
       return json({ ok: true, error: null as string | null, reset: false, notice });
     }
     if (intent === "set_type") {
@@ -249,8 +249,9 @@ export default function AdminPage() {
               게스트는 오테식 모임에 참석하면 게스트비를 내요.
             </p>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
-              <b className="font-bold text-ink dark:text-white">삭제</b>: 경기·입금 기록이 없는 회원은 완전히 삭제돼요. 기록이 있는 회원은 다른 회원의 전적과 정산이 깨지지
-              않도록 기록을 남기고 탈퇴 처리돼요(로그인 불가, 회원 목록·랭킹에서 빠짐).
+              <b className="font-bold text-ink dark:text-white">삭제</b>: 경기·입금 기록이 없는 회원은 완전히 삭제돼요. 기록이 있는 회원은 정산이 깨지지 않고 나중에 복구할
+              수 있도록 기록을 남기고 탈퇴 처리돼요(로그인 불가, 회원 목록·랭킹에서 빠짐). 탈퇴한 회원이 뛴 경기는 다른 회원의 전적·랭킹·티어에서도
+              빠지고, 복구하면 다시 반영돼요.
             </p>
           </div>
           <label className="relative w-full sm:w-56">
@@ -316,7 +317,7 @@ export default function AdminPage() {
                   onSubmit={(e) => {
                     if (
                       !confirm(
-                        `${m.name}님을 삭제할까요?\n\n경기·입금 기록이 있으면 기록은 남기고 탈퇴 처리돼요. 탈퇴 처리한 회원은 나중에 복구할 수 있어요.`
+                        `${m.name}님을 삭제할까요?\n\n경기·입금 기록이 있으면 기록은 남기고 탈퇴 처리돼요. 이 회원과 함께했거나 맞선 경기는 모두의 전적·랭킹·티어에서 빠져요.\n탈퇴 처리한 회원은 나중에 복구할 수 있어요.`
                       )
                     ) {
                       e.preventDefault();
@@ -346,7 +347,8 @@ export default function AdminPage() {
             <span className="badge-gray">{inactive.length}</span>
           </h2>
           <p className="mt-1 text-[13px] font-medium text-slate-500">
-            로그인할 수 없고 회원 목록·랭킹에서 빠져 있어요. 지난 경기·정산 기록은 그대로 남아 있어요.
+            로그인할 수 없고 회원 목록·랭킹에서 빠져 있어요. 이 회원이 뛴 경기는 전적·랭킹·티어 계산에서 빠져 있고, 복구하면 다시 반영돼요.
+            정산 기록은 그대로 남아 있어요.
           </p>
           <ul className="record-rows mt-3">
             {inactive.map((m) => (

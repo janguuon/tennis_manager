@@ -2,6 +2,7 @@
 전적 통계 라우터: 개인 전적/승률, 페어 전적, 상대 전적, 팀 랭킹.
 
 모든 수치는 Match/MatchPlayer 기록에서 실시간 집계한다(stats.py).
+탈퇴한 회원이 뛴 경기는 모든 집계에서 빠지고, 복구하면 다시 반영된다.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -23,11 +24,14 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 def _load_user_matches(db: Session, user_id: int) -> list[Match]:
-    """해당 회원이 참가한 모든 경기 (참가자/회원 eager load)."""
+    """해당 회원이 참가한 경기 (탈퇴한 회원과 함께한 경기 제외, 참가자/회원 eager load)."""
     return list(
         db.scalars(
             select(Match)
-            .where(Match.players.any(MatchPlayer.user_id == user_id))
+            .where(
+                Match.players.any(MatchPlayer.user_id == user_id),
+                stats_svc.without_withdrawn(),
+            )
             .options(selectinload(Match.players).selectinload(MatchPlayer.user))
             .order_by(Match.played_at.desc())
         ).all()
@@ -84,12 +88,12 @@ def get_ranking(
     _: User = Depends(get_current_user),
     min_games: int = Query(0, ge=0, description="랭킹 포함 최소 경기 수(승+패)"),
 ):
-    """팀 랭킹: 승률 → 승수 순."""
+    """팀 랭킹: 승률 → 승수 순. 탈퇴한 회원과 함께한 경기는 빼고 계산한다."""
     matches = list(
         db.scalars(
-            select(Match).options(
-                selectinload(Match.players).selectinload(MatchPlayer.user)
-            )
+            select(Match)
+            .where(stats_svc.without_withdrawn())
+            .options(selectinload(Match.players).selectinload(MatchPlayer.user))
         ).all()
     )
     return stats_svc.ranking(matches, min_games=min_games)

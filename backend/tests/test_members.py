@@ -58,28 +58,66 @@ def test_member_with_history_is_deactivated_and_restorable(club):
     assert "amy" in _users(club)
 
 
-def test_deactivated_member_leaves_ranking_but_records_stay(club):
-    club.add_members("amy", "ben")
+def _doubles(club, t1, t2, s1, s2, played_at="2026-10-01"):
     match = {
-        "match_type": "singles",
-        "played_at": "2026-10-01",
-        "team1_score": 6,
-        "team2_score": 3,
-        "players": [
-            {"user_id": club.ids["amy"], "team": 1},
-            {"user_id": club.ids["ben"], "team": 2},
-        ],
+        "match_type": "mens_doubles",
+        "played_at": played_at,
+        "team1_score": s1,
+        "team2_score": s2,
+        "players": [{"user_id": club.ids[n], "team": 1} for n in t1]
+        + [{"user_id": club.ids[n], "team": 2} for n in t2],
     }
     assert club.c.post("/matches", json=match, headers=club.admin).status_code == 201
+
+
+def _stats(club, name, part=""):
+    return club.c.get(f"/stats/users/{club.ids[name]}{part}", headers=club.admin).json()
+
+
+def test_withdrawn_members_matches_are_excluded_and_restored(club):
+    club.add_members("amy", "ben", "cal", "dan", "eve")
+    # amy 가 낀 경기(파트너·상대 모두) 2개 + amy 없는 경기 1개
+    _doubles(club, ["amy", "ben"], ["cal", "dan"], 6, 3)
+    _doubles(club, ["ben", "cal"], ["amy", "eve"], 6, 4)
+    _doubles(club, ["ben", "eve"], ["cal", "dan"], 2, 6)
+    assert _stats(club, "ben")["overall"]["total"] == 3
 
     r = club.c.delete(f"/admin/users/{club.ids['amy']}", headers=club.admin)
     assert r.json()["result"] == "deactivated"
 
+    # amy 와 함께했거나 맞선 경기는 다시 계산할 때 빠진다
+    ben = _stats(club, "ben")["overall"]
+    assert (ben["wins"], ben["losses"], ben["total"]) == (0, 1, 1)
+    assert {p["partner"]["username"] for p in _stats(club, "ben", "/partners")} == {"eve"}
+    assert {o["opponent"]["username"] for o in _stats(club, "ben", "/opponents")} == {"cal", "dan"}
     ranking = club.c.get("/stats/ranking", headers=club.admin).json()
-    assert [row["user"]["username"] for row in ranking] == ["ben"]
-    # ben의 전적에는 amy와의 경기가 그대로 남는다
-    ben = club.c.get(f"/stats/users/{club.ids['ben']}", headers=club.admin).json()
-    assert ben["overall"]["losses"] == 1
+    assert {row["user"]["username"] for row in ranking} == {"ben", "cal", "dan", "eve"}
+    assert {row["user"]["username"]: row["record"]["total"] for row in ranking}["cal"] == 1
+
+    # 복구하면 경기 기록이 그대로 있어서 다시 반영된다
+    club.c.post(f"/admin/users/{club.ids['amy']}/restore", headers=club.admin)
+    assert _stats(club, "ben")["overall"]["total"] == 3
+    assert "amy" in {o["opponent"]["username"] for o in _stats(club, "ben", "/opponents")}
+
+
+def test_withdrawn_members_club_games_leave_tiers(club):
+    club.add_members("amy", "ben", "cal", "dan")
+    gid = club.create(kind="club_regular").json()["id"]
+    for n in ("amy", "ben", "cal", "dan"):
+        club.vote(gid, n)
+    draw = club.c.post(
+        f"/gatherings/{gid}/draws/generate", json={"match_type": "mens_doubles"}, headers=club.admin
+    ).json()
+    dm = draw["matches"][0]
+    club.c.post(f"/draw-matches/{dm['id']}/result", json={"team1_score": 6, "team2_score": 1}, headers=club.admin)
+    board = club.c.get("/admin/ratings", headers=club.admin).json()
+    assert board["counted_matches"] == 1
+
+    club.c.delete(f"/admin/users/{club.ids['amy']}", headers=club.admin)
+    board = club.c.get("/admin/ratings", headers=club.admin).json()
+    assert board["counted_matches"] == 0
+    assert all(row["rating"] == 1000 and row["games"] == 0 for row in board["rows"])
+    assert "amy" not in {row["user"]["username"] for row in board["rows"]}
 
 
 def test_cannot_delete_self_and_members_cannot_delete(club):

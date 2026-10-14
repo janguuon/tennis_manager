@@ -4,7 +4,7 @@
 반영 경기
 ---------
 오테식 모임(정모·벙개)에서 **대진표로 치르고 결과를 입력한 경기만** 반영한다.
-일반 벙개, 직접 입력한 경기, 취소된 모임, 점수 없는(0:0) 결과는 빠진다.
+일반 벙개, 직접 입력한 경기, 취소된 모임, 점수 없는(0:0) 결과, 탈퇴한 회원이 뛴 경기는 빠진다.
 
 계산
 ----
@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from .models import CLUB_KINDS, DrawMatch, Gathering, GatheringStatus, Match, TeamSide
+from .stats import without_withdrawn
 
 BASE = 1000.0
 # 시뮬레이션(tests/test_rating.py)으로 고른 값: 처음엔 빨리 자리를 찾고, 이후엔 덜 출렁이게.
@@ -237,6 +238,7 @@ def rated_games(db: Session) -> list[RatedGame]:
         .where(
             Gathering.kind.in_(CLUB_KINDS),
             Gathering.status != GatheringStatus.CANCELED,
+            without_withdrawn(),
         )
         .options(selectinload(Match.players))
     ).all()

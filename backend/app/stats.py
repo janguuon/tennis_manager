@@ -3,11 +3,19 @@
 
 Match / MatchPlayer 기록으로부터 개인·페어·상대 전적, 랭킹을 계산한다.
 별도 집계 테이블 없이 매 조회 시 계산하므로(= derived) 데이터 정합성이 보장된다.
+
+탈퇴한 회원이 뛴 경기는 집계에서 뺀다(without_withdrawn). 경기 기록 자체는 남아 있어
+회원을 복구하면 다시 반영된다.
 """
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from .models import Match, MatchType, TeamSide
+from .models import Match, MatchPlayer, MatchType, TeamSide, User
+
+
+def without_withdrawn():
+    """탈퇴한 회원이 한 명이라도 뛴 경기를 빼는 조건 (select(Match).where(...) 에 붙인다)."""
+    return ~Match.players.any(MatchPlayer.user.has(User.is_active.is_(False)))
 
 
 @dataclass

@@ -1,3 +1,5 @@
+import { Link } from "@remix-run/react";
+import { BookOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { ClubIllustration, Eyebrow } from "~/components/Club";
 import { Wordmark } from "~/components/Logo";
@@ -21,6 +23,11 @@ export function AuthLayout({ children }: { children: ReactNode }) {
       </section>
       <div className="auth-form">
         {children}
+        {/* 가입 전에도 볼 수 있는 이용 안내 (/guide) */}
+        <Link to="/guide" className="btn-ghost btn-sm mx-auto mt-4 flex w-fit">
+          <BookOpen size={14} />
+          처음이세요? 이용 안내 보기
+        </Link>
         <p className="mt-8 text-center text-[10px] tracking-[0.12em] text-slate-500 dark:text-slate-400">
           OUR LITTLE TENNIS CLUBHOUSE
         </p>

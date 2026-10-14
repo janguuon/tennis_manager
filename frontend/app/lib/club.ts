@@ -36,6 +36,10 @@ export const KIND_ORDER: GatheringKind[] = [
 
 export const isClubKind = (kind: GatheringKind) => kind !== "flash";
 
-/** 관리자 또는 임원진: 오테식 모임 생성, 코트비 지급 처리 */
+/** 관리자·임원진·총무: 오테식 모임 생성·운영, 대진, 일정 먼저 보기 (서버 User.is_staff) */
 export const isStaff = (u: Pick<User, "is_admin" | "member_type">) =>
-  u.is_admin || u.member_type === "officer";
+  u.is_admin || u.member_type === "officer" || u.member_type === "treasurer";
+
+/** 관리자·총무: 정산(오테식 모임 입금 확인, 코트비 지급·지급 내역, 예약자 계좌) (서버 User.can_settle) */
+export const canSettle = (u: Pick<User, "is_admin" | "member_type">) =>
+  u.is_admin || u.member_type === "treasurer";

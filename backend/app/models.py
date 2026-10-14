@@ -81,7 +81,8 @@ class MemberType(str, enum.Enum):
     일정이 보이는 시점(app/visibility.py)과 정산 권한·금액이 다르다.
     """
 
-    OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개 생성, 코트비 지급 처리
+    TREASURER = "treasurer"  # 총무: 임원진 권한 + 정산(입금 확인·코트비 지급)
+    OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개 생성·운영, 대진
     MEMBER = "member"     # 정회원: 해당 주 월요일 0시부터
     GUEST = "guest"       # 게스트: 모임 3일 전 0시부터, 오테식 모임 참석 시 게스트비
 
@@ -162,8 +163,13 @@ class User(Base):
 
     @property
     def is_staff(self) -> bool:
-        """관리자 또는 임원진: 오테식 모임 생성, 코트비 지급 처리."""
-        return self.is_admin or self.member_type == MemberType.OFFICER
+        """관리자·임원진·총무: 오테식 모임 생성·운영, 대진, 일정 먼저 보기."""
+        return self.is_admin or self.member_type in (MemberType.OFFICER, MemberType.TREASURER)
+
+    @property
+    def can_settle(self) -> bool:
+        """관리자·총무: 정산(오테식 모임 입금 확인, 코트비 지급·지급 내역, 예약자 계좌 보기)."""
+        return self.is_admin or self.member_type == MemberType.TREASURER
 
 
 # ---------------------------------------------------------------------------

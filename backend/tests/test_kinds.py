@@ -105,8 +105,9 @@ def test_guest_fee_change_after_payment_creates_due(club):
 
 # --- 코트 예약 / 코트비 지급 ---------------------------------------------------
 def test_multiple_bookers_and_reimbursement(club):
-    club.add_members("off", "kim", "lee", "park")
+    club.add_members("off", "kim", "lee", "park", "tre")
     club.set_type("off", "officer")
+    club.set_type("tre", "treasurer")
     club.c.patch(
         "/users/me",
         json={"bank": "신한", "account_number": "110-1", "account_holder": "김"},
@@ -123,9 +124,11 @@ def test_multiple_bookers_and_reimbursement(club):
     gid = r.json()["id"]
     assert r.json()["court_total"] == 50000
 
-    # 계좌: 임원진은 보이고, 다른 회원에게는 숨김 (본인 것은 보임)
-    by_staff = club.c.get(f"/gatherings/{gid}", headers=club.headers["off"]).json()["court_bookings"]
+    # 계좌: 정산 담당(총무)은 보이고, 임원진·다른 회원에게는 숨김 (본인 것은 보임)
+    by_staff = club.c.get(f"/gatherings/{gid}", headers=club.headers["tre"]).json()["court_bookings"]
     assert by_staff[0]["account"]["account_number"] == "110-1"
+    by_off = club.c.get(f"/gatherings/{gid}", headers=club.headers["off"]).json()["court_bookings"]
+    assert [b["account"] for b in by_off] == [None, None]
     by_park = club.c.get(f"/gatherings/{gid}", headers=club.headers["park"]).json()["court_bookings"]
     assert [b["account"] for b in by_park] == [None, None]
     by_kim = club.c.get(f"/gatherings/{gid}", headers=club.headers["kim"]).json()["court_bookings"]
@@ -133,22 +136,23 @@ def test_multiple_bookers_and_reimbursement(club):
 
     kim_booking, lee_booking = (b["id"] for b in by_staff)
 
-    # 정회원은 지급 처리·목록 조회 불가
-    assert club.c.put(
-        f"/court-bookings/{kim_booking}/reimbursement", json={"reimbursed": True},
-        headers=club.headers["park"],
-    ).status_code == 403
-    assert club.c.get("/court-bookings", headers=club.headers["park"]).status_code == 403
+    # 정회원·임원진은 지급 처리·목록 조회 불가 (정산은 관리자·총무만)
+    for who in ("park", "off"):
+        assert club.c.put(
+            f"/court-bookings/{kim_booking}/reimbursement", json={"reimbursed": True},
+            headers=club.headers[who],
+        ).status_code == 403
+        assert club.c.get("/court-bookings", headers=club.headers[who]).status_code == 403
 
-    # 임원진이 지급 처리
+    # 총무가 지급 처리
     r = club.c.put(
         f"/court-bookings/{kim_booking}/reimbursement", json={"reimbursed": True},
-        headers=club.headers["off"],
+        headers=club.headers["tre"],
     )
     assert r.status_code == 200
-    assert r.json()["reimbursed"] is True and r.json()["reimbursed_by"]["name"] == "off"
+    assert r.json()["reimbursed"] is True and r.json()["reimbursed_by"]["name"] == "tre"
 
-    pending = club.c.get("/court-bookings", headers=club.headers["off"]).json()
+    pending = club.c.get("/court-bookings", headers=club.headers["tre"]).json()
     assert [b["id"] for b in pending] == [lee_booking]
     assert len(club.c.get("/court-bookings?pending=false", headers=club.admin).json()) == 2
 
@@ -172,18 +176,23 @@ def test_multiple_bookers_and_reimbursement(club):
 
 
 def test_add_edit_booking_permissions(club):
-    club.add_members("off", "kim")
+    club.add_members("off", "kim", "tre")
     club.set_type("off", "officer")
+    club.set_type("tre", "treasurer")
     gid = club.create(kind="club_flash").json()["id"]
     body = {"booker_id": club.ids["kim"], "amount": 24000}
 
-    assert club.c.post(f"/gatherings/{gid}/court-bookings", json=body,
-                       headers=club.headers["kim"]).status_code == 403
-    r = club.c.post(f"/gatherings/{gid}/court-bookings", json=body, headers=club.headers["off"])
+    # 지급 내역 추가·수정은 정산 담당(관리자·총무)만
+    for who in ("kim", "off"):
+        assert club.c.post(f"/gatherings/{gid}/court-bookings", json=body,
+                           headers=club.headers[who]).status_code == 403
+    r = club.c.post(f"/gatherings/{gid}/court-bookings", json=body, headers=club.headers["tre"])
     assert r.status_code == 201
     bid = r.json()["id"]
+    assert club.c.patch(f"/court-bookings/{bid}", json={"amount": 1},
+                        headers=club.headers["off"]).status_code == 403
     r = club.c.patch(f"/court-bookings/{bid}", json={"amount": 26000, "court_label": "7번"},
-                     headers=club.headers["off"])
+                     headers=club.headers["tre"])
     assert (r.json()["amount"], r.json()["court_label"]) == (26000, "7번")
 
     # 없는 회원, 0원은 거부
@@ -234,9 +243,10 @@ def test_kind_change_blocked_by_payments_and_bookings(club):
 
 
 def test_officer_manages_club_gatherings_only(club):
-    club.add_members("off", "kim", "gst")
+    club.add_members("off", "kim", "gst", "tre")
     club.set_type("off", "officer")
     club.set_type("gst", "guest")
+    club.set_type("tre", "treasurer")
     club_gid = club.create(kind="club_regular").json()["id"]
     flash_gid = club.create(kind="flash", fee=10000).json()["id"]
 
@@ -246,8 +256,19 @@ def test_officer_manages_club_gatherings_only(club):
     assert edit(flash_gid, "off").status_code == 403
     assert edit(club_gid, "kim").status_code == 403
 
+    # 총무는 임원진 권한도 갖는다
+    assert edit(club_gid, "tre").status_code == 200
+
+    # 입금 처리(정산)는 관리자·총무만 — 임원진은 못 한다
     club.vote(club_gid, "gst")
-    assert club.pay(club_gid, "gst", as_="off").status_code == 200
+    assert club.pay(club_gid, "gst", as_="off").status_code == 403
+    assert club.pay(club_gid, "gst", as_="tre").status_code == 200
+
+    # 일반 벙개는 만든 벙주가 자기 모임 입금 처리를 할 수 있다
+    mine = club.create("kim", kind="flash", court_fee=20000).json()["id"]
+    club.vote(mine, "gst")
+    assert club.pay(mine, "gst", as_="kim").status_code == 200
+    assert club.pay(mine, "gst", as_="off").status_code == 403
 
     # 정회원은 자기 일반 벙개를 오테식 모임으로 바꿀 수 없다
     own = club.create("kim", kind="flash").json()["id"]
@@ -326,3 +347,21 @@ def test_booker_is_deactivated_not_deleted(club):
     r = club.c.delete(f"/admin/users/{club.ids['kim']}", headers=club.admin)
     assert r.json()["result"] == "deactivated"
     assert [b["booker"]["name"] for b in club.detail(gid)["court_bookings"]] == ["kim"]
+
+
+def test_treasurer_has_officer_powers_and_settles(club):
+    club.add_members("tre", "kim")
+    club.set_type("tre", "treasurer")
+    assert club.c.get("/users/me", headers=club.headers["tre"]).json()["member_type"] == "treasurer"
+    # 임원진 권한: 오테식 모임 만들기, 다음 주 일정 먼저 보기
+    assert club.create("tre", kind="club_regular").status_code == 201
+    nxt = club.create(kind="club_flash", event_date="2099-01-22").json()["id"]
+    assert club.c.get(f"/gatherings/{nxt}", headers=club.headers["tre"]).status_code == 200
+    assert club.c.get(f"/gatherings/{nxt}", headers=club.headers["kim"]).status_code == 403
+    # 정산: 지급 대기 목록
+    assert club.c.get("/court-bookings", headers=club.headers["tre"]).status_code == 200
+    # 가입 승인 때 바로 총무로 지정할 수도 있다
+    club.c.post("/auth/signup", json={"username": "newtre", "password": "1234", "name": "새총무"})
+    uid = club.c.get("/admin/signups/pending", headers=club.admin).json()[0]["id"]
+    r = club.c.post(f"/admin/signups/{uid}/approve?member_type=treasurer", headers=club.admin)
+    assert r.json()["member_type"] == "treasurer"

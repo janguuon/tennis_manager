@@ -258,7 +258,7 @@ export default function MyPage() {
         <h2 className="section-title">환급 계좌</h2>
         <p className="mt-1 text-[13px] font-medium text-slate-500">
           오테식 모임 코트를 잡으면 총무가 이 계좌로 코트비를 보내요. 관리자와
-          임원진에게만 보여요.
+          총무에게만 보여요.
         </p>
         <Form method="post" className="mt-5 space-y-4">
           <input type="hidden" name="intent" value="account" />

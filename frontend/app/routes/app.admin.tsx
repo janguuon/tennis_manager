@@ -26,7 +26,7 @@ import { requireToken } from "~/lib/session.server";
 import { MEMBER_TYPE_LABEL, withRo } from "~/lib/status";
 import type { MemberType, User } from "~/lib/types";
 
-const MEMBER_TYPES: MemberType[] = ["officer", "member", "guest"];
+const MEMBER_TYPES: MemberType[] = ["treasurer", "officer", "member", "guest"];
 
 /** 탈퇴 회원을 완전히 지울 때 함께 지워지는 것 (서버 PurgePreview) */
 type PurgePreview = {
@@ -279,11 +279,13 @@ export default function AdminPage() {
               회원 관리
             </h2>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
-              <b className="font-bold text-ink dark:text-white">구분</b>에 따라 일정이 보이는 때가 달라요: 임원진은 등록
+              <b className="font-bold text-ink dark:text-white">구분</b>에 따라 일정이 보이는 때가 달라요: 총무·임원진은 등록
               즉시, 정회원은 그 주 월요일 0시, 게스트는 모임 3일 전 0시부터 보고 투표할 수 있어요.
             </p>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
-              <b className="font-bold text-ink dark:text-white">정산</b>: 임원진은 오테식 정모·벙개를 만들고 코트비 지급을 처리해요.
+              <b className="font-bold text-ink dark:text-white">권한</b>: 임원진은 오테식 정모·벙개를 만들고 운영해요(대진·결과 입력).
+              <b className="font-bold text-ink dark:text-white"> 총무</b>는 임원진 권한에 더해 <b className="font-bold text-ink dark:text-white">정산</b>(입금 확인, 코트비
+              지급·지급 내역, 예약자 계좌 보기)을 해요. 정산은 관리자와 총무만 할 수 있어요(일반 벙개 입금 확인은 만든 사람도 가능).
               게스트는 오테식 모임에 참석하면 게스트비를 내요.
             </p>
             <p className="mt-1 text-[13px] font-medium text-slate-500">

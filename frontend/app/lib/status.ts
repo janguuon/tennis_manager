@@ -35,6 +35,7 @@ export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 /** 회원 구분 이름 */
 export const MEMBER_TYPE_LABEL: Record<MemberType, string> = {
+  treasurer: "총무",
   officer: "임원진",
   member: "정회원",
   guest: "게스트",

@@ -27,7 +27,7 @@ import { CopyButton } from "~/components/CopyButton";
 import { Eyebrow, SectionHeading } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_BADGE, KIND_LABEL, isClubKind, isStaff } from "~/lib/club";
+import { KIND_BADGE, KIND_LABEL, canSettle, isClubKind } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import type {
@@ -78,8 +78,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     api<CourtBooking[]>("/court-bookings/me", { token }),
     api<Me>("/users/me", { token }),
   ]);
-  // 관리자·임원진: 달과 상관없이 아직 지급하지 않은 코트비 전체
-  const pendingBookings = isStaff(me)
+  // 정산 담당(관리자·총무): 달과 상관없이 아직 지급하지 않은 코트비 전체
+  const pendingBookings = canSettle(me)
     ? await api<CourtBooking[]>("/court-bookings", { token })
     : [];
   return json({ month, summary, myDues, myBookings, pendingBookings });
@@ -169,7 +169,7 @@ export default function PaymentsPage() {
         </p>
       ) : null}
 
-      {/* 관리자·임원진: 아직 지급하지 않은 코트비 (달과 상관없이 전체) */}
+      {/* 정산 담당(관리자·총무): 아직 지급하지 않은 코트비 (달과 상관없이 전체) */}
       {pendingBookings.length > 0 ? (
         <section className="tile-green space-y-3">
           <Eyebrow>COURT FEE TO SEND</Eyebrow>

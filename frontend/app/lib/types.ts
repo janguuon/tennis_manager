@@ -3,7 +3,8 @@
 export type Gender = "male" | "female";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 /** 회원 구분: 임원진(일정 즉시) · 정회원(그 주 월요일 0시) · 게스트(3일 전 0시) */
-export type MemberType = "officer" | "member" | "guest";
+/** treasurer = 총무(임원진 권한 + 정산) */
+export type MemberType = "treasurer" | "officer" | "member" | "guest";
 export type MatchType =
   | "singles"
   | "mens_doubles"

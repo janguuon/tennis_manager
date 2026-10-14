@@ -34,8 +34,8 @@ def guest_open_at(event_date: date) -> datetime:
 
 
 def sees_early(user: User) -> bool:
-    """공개 시점과 관계없이 모든 일정을 보는 사람: 관리자·임원진."""
-    return user.is_admin or user.member_type == MemberType.OFFICER
+    """공개 시점과 관계없이 모든 일정을 보는 사람: 관리자·임원진·총무."""
+    return user.is_staff
 
 
 def open_at_for(user: User, event_date: date) -> datetime | None:

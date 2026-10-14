@@ -39,7 +39,7 @@ import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_LABEL, isClubKind, isStaff } from "~/lib/club";
+import { KIND_LABEL, canSettle, isClubKind, isStaff } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
 import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao } from "~/lib/kakao";
@@ -254,6 +254,9 @@ export default function GatheringDetailPage() {
   // 주최자·관리자. 오테식 모임은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
   const isOrganizer =
     gathering.created_by === user.id || user.is_admin || (club && staff);
+  // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
+  const settle = canSettle(user);
+  const canPay = settle || (!club && gathering.created_by === user.id);
   const [editing, setEditing] = useState(false);
   // 직접 바꾸기 중인 대진표 id
   const [editingDraw, setEditingDraw] = useState<number | null>(null);
@@ -749,7 +752,7 @@ export default function GatheringDetailPage() {
                 total={gathering.court_total}
                 bookings={gathering.court_bookings}
                 members={members}
-                staff={staff}
+                staff={settle}
                 userId={user.id}
               />
             ) : null}
@@ -899,7 +902,7 @@ export default function GatheringDetailPage() {
                             ) : null}
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
-                            {isOrganizer && note ? (
+                            {canPay && note ? (
                               <Form method="post">
                                 <input
                                   type="hidden"
@@ -920,7 +923,7 @@ export default function GatheringDetailPage() {
                                 </button>
                               </Form>
                             ) : null}
-                            {isOrganizer ? (
+                            {canPay ? (
                               <Form method="post">
                                 <input
                                   type="hidden"
@@ -971,7 +974,7 @@ export default function GatheringDetailPage() {
                           <span className="font-semibold">
                             {p.user.name} · {won(refundOf.get(p.user.id) ?? 0)}
                           </span>
-                          {isOrganizer ? (
+                          {canPay ? (
                             <Form method="post">
                               <input
                                 type="hidden"
@@ -996,7 +999,7 @@ export default function GatheringDetailPage() {
                 ) : null}
 
                 {/* 총무 도구 */}
-                {isOrganizer ? (
+                {canPay ? (
                   <div className="space-y-2">
                     {payment.dues.length > 0 ? (
                       <button
@@ -1350,7 +1353,7 @@ const shortDate = (iso: string) =>
 
 /**
  * 오테식 모임의 회비 지출: 코트 예약자별 코트비와 지급 여부.
- * 관리자·임원진은 예약자를 추가하고, 계좌를 복사해 송금한 뒤 지급 완료를 누른다.
+ * 정산 담당(관리자·총무)은 예약자를 추가하고, 계좌를 복사해 송금한 뒤 지급 완료를 누른다.
  */
 function CourtExpenseTile({
   total,

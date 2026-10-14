@@ -140,8 +140,8 @@ def _require_open(gathering: Gathering, user: User) -> None:
 
 
 def court_booking_read(b: CourtBooking, viewer: User) -> CourtBookingRead:
-    """코트 예약 응답. 예약자 계좌는 본인과 관리자·임원진에게만 보여준다."""
-    show_account = viewer.is_staff or viewer.id == b.booker_id
+    """코트 예약 응답. 예약자 계좌는 본인과 정산 담당(관리자·총무)에게만 보여준다."""
+    show_account = viewer.can_settle or viewer.id == b.booker_id
     return CourtBookingRead(
         id=b.id,
         gathering_id=b.gathering_id,
@@ -1047,7 +1047,7 @@ def set_payment(
     current_user: User = Depends(get_current_user),
 ):
     """
-    참가비 입금/미입금 처리. 주최자 또는 관리자(오테식 모임은 임원진도)만 가능.
+    참가비 입금/미입금 처리. 정산 담당(관리자·총무)만. 일반 벙개는 그 모임을 만든 벙주도 가능.
 
     - paid=true : 낼 돈이 있는 참석자만 가능. 현재 낼 금액을 입금 금액으로 기록한다.
                   (일반 벙개는 1인 금액, 오테식 모임은 게스트비)
@@ -1055,7 +1055,11 @@ def set_payment(
     - paid=false: 누구든 가능(입금 취소, 환불 완료). 기록을 지운다.
     """
     gathering = _load_gathering(db, gathering_id)
-    _require_organizer(gathering, current_user)
+    if not (current_user.can_settle or (not gathering.is_club and gathering.created_by == current_user.id)):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="입금 처리는 관리자와 총무만 할 수 있어요. (일반 벙개는 만든 사람도 가능)",
+        )
 
     participant = next((p for p in gathering.participants if p.user_id == user_id), None)
     if participant is None:

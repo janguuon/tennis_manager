@@ -49,10 +49,10 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def get_current_staff(current_user: User = Depends(get_current_user)) -> User:
-    """관리자 또는 임원진 전용 의존성 (코트비 지급 처리 등)."""
-    if not current_user.is_staff:
+def get_current_settler(current_user: User = Depends(get_current_user)) -> User:
+    """정산 담당(관리자·총무) 전용 의존성: 코트비 지급 처리, 지급 내역, 지급 대기 목록."""
+    if not current_user.can_settle:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="관리자 또는 임원진만 가능합니다."
+            status_code=status.HTTP_403_FORBIDDEN, detail="정산은 관리자와 총무만 할 수 있어요."
         )
     return current_user

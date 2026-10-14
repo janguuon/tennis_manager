@@ -306,6 +306,9 @@ def test_import_with_kind_columns(club):
     assert got["정모"] == ("club_regular", 0, 6000)
     assert got["벙개"] == ("flash", 48000, 0)
     assert got["예전 양식"][0] == "flash"
+    # 최대인원을 비운 오테식 모임은 코트 1면 × 6명(회칙 제10조), 일반 벙개는 제한 없음
+    cap = {g["title"]: g["max_participants"] for g in listed}
+    assert (cap["정모"], cap["벙개"]) == (6, None)
 
     # 정회원은 오테식 모임 행을 올릴 수 없다
     member = club.c.post("/gatherings/import", files=files, headers=club.headers["kim"]).json()

@@ -562,6 +562,8 @@ async def import_gatherings(
                 raise ValueError("오테식 정모·벙개는 관리자와 임원진만 등록할 수 있습니다.")
             d = payload.model_dump(exclude={"court_bookings"})
             _normalize_courts(d)
+            if payload.kind in CLUB_KINDS and d.get("max_participants") is None:
+                d["max_participants"] = d["court_count"] * sheet.SEATS_PER_COURT  # 회칙 제10조
             gathering = Gathering(**d, created_by=current_user.id)
             _apply_kind_rules(gathering)
             db.add(gathering)
@@ -649,8 +651,8 @@ def import_template(
     guide.append(sheet.TEMPLATE_HEADERS)
     for cell in guide[1]:
         cell.font = Font(bold=True)
-    guide.append(["2026-10-17", "10:00~12:00", 3, "홍길동", "김요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
-    guide.append(["2026-10-17", "10:00~12:00", 5, "이예약", "박요정", 24000, None, "오테식 정모", 16, "시민 테니스장", None])
+    guide.append(["2026-10-17", "10:00~12:00", 3, "홍길동", "김요정", 24000, None, "오테식 정모", None, "시민 테니스장", None])
+    guide.append(["2026-10-17", "10:00~12:00", 5, "이예약", "박요정", 24000, None, "오테식 정모", None, "시민 테니스장", None])
     guide.append(["2026-10-21", "19:00~21:00", 2, "홍길동", "박요정", 20000, 6000, "일반 벙개", 8, "구립 테니스장", "야간 조명"])
     guide.append(["2026-10-24", "14:00~16:00", 4, "이예약", "김요정", 20000, None, "우천 취소", None, "시민 테니스장", None])
     guide.append([])
@@ -660,6 +662,8 @@ def import_template(
         "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
         "· 사용 여부가 오테식 정모 / 오테식 벙개 / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
         "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
+        f"· 최대 인원을 비우면 오테식 모임은 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명).",
+        "  정원이 차면 다음 신청자는 대기로 들어가요. 일반 벙개는 비우면 인원 제한이 없어요.",
         "· 코트요정은 앱에 가입한 이름과 같아야 해요. 오테식 모임의 코트비는 총무가 코트요정에게 정산하므로",
         "  '지급할 코트비'에 코트요정 앞으로 올라가요(예약자명은 '3번 · 예약 홍길동'처럼 코트 칸에 남아요).",
         "· 일반 벙개는 참석자끼리 코트비+캔볼비를 n빵해요. 첫 번째 코트요정이 벙주가 돼요.",
@@ -797,7 +801,8 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             court_numbers=", ".join(group.courts),
             court_count=len(group.courts),
             court_fairy=", ".join(group.fairies)[:200],
-            max_participants=next((r.max_participants for r in group.rows if r.max_participants), None),
+            max_participants=next((r.max_participants for r in group.rows if r.max_participants), None)
+            or (len(group.courts) * sheet.SEATS_PER_COURT if club else None),
             description="\n".join(group.notes) or None,
             created_by=current_user.id,
         )

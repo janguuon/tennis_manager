@@ -125,6 +125,8 @@ def test_court_sheet_import_end_to_end(club):
     assert (flash["kind"], flash["court_fee"], flash["ball_fee"], flash["fee"]) == ("flash", 20000, 6000, 26000)
     assert flash["created_by"] == club.ids["ohj"]
     assert (flash["bank"], flash["account_number"]) == ("카카오", "3333-01")
+    # 일반 벙개에 적은 최대 인원은 그대로
+    assert flash["max_participants"] == 8
 
     # 같은 파일을 다시 올리면 이미 등록된 일정은 건너뛴다
     again = _upload(club, _sheet(rows))
@@ -132,6 +134,28 @@ def test_court_sheet_import_end_to_end(club):
     already = [s for s in again["skips"] if "이미 등록된" in s["message"]]
     assert sorted(s["row"] for s in already) == [2, 4]
     assert len(_month(club)) == 2
+
+
+def test_blank_capacity_defaults_to_six_per_court(club):
+    """회칙 제10조: 최대 인원을 비운 오테식 모임은 코트 수 × 6명 → 다 차면 대기."""
+    _people(club, seo="서승우")
+    rows = [
+        [D, "10:00~12:00", 3, "장미주", "서승우", 24000, None, "오테식 정모", None, "시민 테니스장", None],
+        [D, "10:00~12:00", 5, "김다빈", "서승우", 24000, None, "오테식 정모", None, "시민 테니스장", None],
+        # 정회원에게 이미 공개된 주(FAR_DATE)의 벙개
+        [datetime(2099, 1, 15), "18:00~20:00", 1, "장미주", "서승우", 20000, None, "오테식 벙개", None, "시민 테니스장", None],
+        [datetime(2099, 1, 21), "19:00~21:00", 2, "김다빈", "서승우", 20000, None, "일반 벙개", None, "구립 테니스장", None],
+    ]
+    assert _upload(club, _sheet(rows))["created"] == 3
+    cap = {g["title"]: g["max_participants"] for g in _month(club)}
+    assert cap == {"오테식 정모": 12, "오테식 벙개": 6, "일반 벙개": None}
+
+    # 6명이 차면 7번째는 대기
+    gid = next(g["id"] for g in _month(club) if g["title"] == "오테식 벙개")
+    names = ("aaa", "bbb", "ccc", "ddd", "eee", "fff", "ggg")
+    club.add_members(*names)
+    got = [club.vote(gid, n).json()["status"] for n in names]
+    assert got == ["attending"] * 6 + ["waiting"]
 
 
 def test_member_cannot_import_club_rows_and_template(club):

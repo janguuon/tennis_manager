@@ -71,7 +71,6 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
         ntrp=payload.ntrp,
         phone=payload.phone,
         bio=payload.bio,
-        avatar_url=payload.avatar_url,
         is_admin=is_first_user,
         approval_status=ApprovalStatus.APPROVED if is_first_user else ApprovalStatus.PENDING,
     )

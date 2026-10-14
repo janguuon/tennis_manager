@@ -4,6 +4,7 @@ import tempfile
 
 # app 모듈이 import 될 때 DB 엔진이 만들어지므로, 그 전에 임시 DB 경로를 지정한다.
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
+os.environ["AVATAR_DIR"] = f"{tempfile.mkdtemp()}/avatars"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

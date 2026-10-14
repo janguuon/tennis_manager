@@ -11,6 +11,7 @@ import {
   useNavigation,
 } from "@remix-run/react";
 
+import { AvatarEditor } from "~/components/AvatarEditor";
 import { PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { requireToken } from "~/lib/session.server";
@@ -131,9 +132,7 @@ export default function MyPage() {
       />
       {/* 프로필 머리 */}
       <section className="tile-lav flex items-center gap-4 sm:gap-5">
-        <span className="avatar h-16 w-16 bg-house-yellow text-[26px] text-ink sm:h-20 sm:w-20 sm:text-[32px]">
-          {user.name.charAt(0)}
-        </span>
+        <AvatarEditor user={user} />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="truncate font-display text-[30px] font-extrabold leading-tight tracking-[-0.05em] sm:text-[40px]">

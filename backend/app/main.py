@@ -15,6 +15,7 @@ from .database import Base, engine, run_lightweight_migrations
 from .routers import (
     admin,
     auth,
+    avatars,
     club,
     court_bookings,
     draws,
@@ -58,6 +59,7 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(avatars.router)
 app.include_router(admin.router)
 app.include_router(matches.router)
 app.include_router(stats.router)

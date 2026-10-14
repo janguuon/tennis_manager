@@ -50,6 +50,8 @@ export interface UserBrief {
   gender: Gender | null;
   ntrp: number | null;
   member_type: MemberType;
+  /** 프로필 사진 ("/avatars/…", 없으면 이름 첫 글자) */
+  avatar_url: string | null;
 }
 
 export interface LoginResponse {

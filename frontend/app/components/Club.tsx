@@ -11,21 +11,32 @@ const COLORS = [
 export function memberColor(id: number) {
   return COLORS[Math.abs(id) % COLORS.length];
 }
+/** 회원 동그라미: 프로필 사진이 있으면 사진, 없으면 이름 첫 글자 */
 export function MemberAvatar({
   user,
   className = "",
 }: {
-  user: { id: number; name: string };
+  user: { id: number; name: string; avatar_url?: string | null };
   className?: string;
 }) {
   return (
     <span
-      className={`avatar h-10 w-10 text-sm text-ink ${memberColor(
+      className={`avatar h-10 w-10 overflow-hidden text-sm text-ink ${memberColor(
         user.id
       )} ${className}`}
       title={user.name}
     >
-      {user.name.charAt(0)}
+      {user.avatar_url ? (
+        <img
+          src={user.avatar_url}
+          alt={user.name}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        user.name.charAt(0)
+      )}
     </span>
   );
 }

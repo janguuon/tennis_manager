@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     secret_key: str = "CHANGE_ME_IN_PRODUCTION_use_a_long_random_string"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7일
+    # 프로필 사진 저장 폴더 (Docker 에서는 영속 볼륨 /app/data/avatars)
+    avatar_dir: str = "data/avatars"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

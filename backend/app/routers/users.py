@@ -1,10 +1,11 @@
 """
 회원 라우터: 내 프로필 조회/수정, 회원 목록/단건 조회.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import avatars
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import ApprovalStatus, User
@@ -43,6 +44,44 @@ def update_my_profile(
         setattr(current_user, field, value)
 
     db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/me/avatar", response_model=UserMe)
+def upload_my_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """프로필 사진 올리기: 가운데 정사각형 400px 로 저장하고, 예전 사진은 지운다."""
+    data = file.file.read(avatars.MAX_AVATAR_BYTES + 1)
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="사진을 선택하세요.")
+    if len(data) > avatars.MAX_AVATAR_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="사진은 8MB까지 올릴 수 있어요.")
+    try:
+        url = avatars.save_avatar(current_user.id, data)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(err)) from err
+    old = current_user.avatar_url
+    current_user.avatar_url = url
+    db.commit()
+    avatars.remove_avatar(old)
+    db.refresh(current_user)
+    return current_user
+
+
+@router.delete("/me/avatar", response_model=UserMe)
+def delete_my_avatar(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """프로필 사진 지우기 (이름 첫 글자로 돌아간다)."""
+    old = current_user.avatar_url
+    current_user.avatar_url = None
+    db.commit()
+    avatars.remove_avatar(old)
     db.refresh(current_user)
     return current_user
 

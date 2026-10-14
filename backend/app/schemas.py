@@ -77,7 +77,6 @@ class UserUpdate(BaseModel):
     ntrp: float | None = Field(None, ge=1.0, le=7.0)
     phone: str | None = Field(None, max_length=20)
     bio: str | None = None
-    avatar_url: str | None = Field(None, max_length=500)
     # 코트비 등을 돌려받을 계좌
     bank: str | None = Field(None, max_length=50)
     account_number: str | None = Field(None, max_length=50)
@@ -169,6 +168,7 @@ class UserBrief(BaseModel):
     gender: Gender | None = None
     ntrp: float | None = None
     member_type: MemberType = MemberType.MEMBER
+    avatar_url: str | None = None
 
 
 # --- 경기 / 전적 ------------------------------------------------------------

@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
 
-import { Eyebrow } from "~/components/Club";
+import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { BackLink, PageBody } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
@@ -63,9 +63,10 @@ export default function MemberDetailPage() {
       >
         {/* 프로필 */}
         <section className="tile-lav flex items-center gap-4 sm:gap-5">
-          <span className="avatar h-16 w-16 bg-house-yellow text-[26px] text-ink sm:h-20 sm:w-20 sm:text-[32px]">
-            {u.name.charAt(0)}
-          </span>
+          <MemberAvatar
+            user={u}
+            className="!h-16 !w-16 shrink-0 !bg-house-yellow !text-[26px] sm:!h-20 sm:!w-20 sm:!text-[32px]"
+          />
           <div className="min-w-0">
             <Eyebrow>PLAYER PROFILE</Eyebrow>
             <h1 className="truncate font-display text-[32px] font-extrabold leading-tight tracking-[-0.05em] sm:text-[42px]">

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from .. import avatars
 from ..database import get_db
 from ..deps import get_current_admin
 from ..models import (
@@ -169,8 +170,10 @@ def delete_member(
     for g in freed:
         promote_waiting(db, g)  # 빠진 자리에 대기자를 올린다
     name = user.name
+    avatar_url = user.avatar_url
     db.delete(user)
     db.commit()
+    avatars.remove_avatar(avatar_url)
     return MemberDeleteResult(result="deleted", name=name)
 
 
@@ -271,8 +274,12 @@ def purge_all_withdrawn(
     current_admin: User = Depends(get_current_admin),
 ):
     """탈퇴 처리된 회원을 모두 DB 에서 완전히 지운다(되돌릴 수 없음)."""
-    purged = [_purge(db, u, current_admin) for u in _withdrawn(db) if u.id != current_admin.id]
+    targets = [u for u in _withdrawn(db) if u.id != current_admin.id]
+    avatar_urls = [u.avatar_url for u in targets]
+    purged = [_purge(db, u, current_admin) for u in targets]
     db.commit()
+    for url in avatar_urls:
+        avatars.remove_avatar(url)
     return PurgeResult(purged=purged)
 
 
@@ -285,8 +292,10 @@ def purge_member(
     """탈퇴 처리된 회원을 DB 에서 완전히 지운다(되돌릴 수 없음)."""
     user = _get_user_or_404(db, user_id)
     _require_withdrawn(user, current_admin)
+    avatar_url = user.avatar_url
     result = _purge(db, user, current_admin)
     db.commit()
+    avatars.remove_avatar(avatar_url)
     return PurgeResult(purged=[result])
 
 

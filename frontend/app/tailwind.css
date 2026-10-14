@@ -1092,6 +1092,171 @@
   }
 }
 
+/* ---- 이용 안내 (/guide, 로그인 없이 열림) ---- */
+@layer components {
+  .guide-topbar {
+    @apply sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 backdrop-blur dark:border-slate-700 dark:bg-slate-950/95;
+  }
+  .guide-topbar-inner {
+    @apply mx-auto flex h-16 max-w-3xl items-center justify-between gap-3 px-4 sm:px-6;
+  }
+  .guide-main {
+    @apply mx-auto max-w-3xl space-y-4 px-4 pb-16 pt-5 sm:space-y-5 sm:px-6 sm:pt-8;
+    word-break: keep-all;
+  }
+  .guide-hero {
+    @apply px-6 py-8 sm:px-9 sm:py-10;
+  }
+  .guide-hero-title {
+    @apply relative mt-4 font-display text-[32px] font-bold leading-[1.15] tracking-[-0.05em] sm:text-[44px];
+  }
+  /* 테니스공: 원 + 양옆 솔기 */
+  .guide-ball {
+    @apply absolute -right-6 -top-6 h-28 w-28 overflow-hidden rounded-full bg-house-ball sm:right-9 sm:top-9 sm:h-24 sm:w-24;
+  }
+  .guide-ball::before,
+  .guide-ball::after {
+    content: "";
+    position: absolute;
+    top: 10%;
+    bottom: 10%;
+    width: 70%;
+    border: 3px solid #fff;
+    border-radius: 50%;
+  }
+  .guide-ball::before {
+    left: -46%;
+  }
+  .guide-ball::after {
+    right: -46%;
+  }
+  .guide-steps {
+    @apply grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3;
+  }
+  .guide-step {
+    @apply flex min-h-[100px] flex-col justify-between gap-3 !p-4 transition-transform hover:-translate-y-0.5;
+  }
+  .guide-step > strong {
+    @apply text-[14px] font-bold leading-snug;
+  }
+  .guide-section {
+    @apply scroll-mt-20;
+  }
+  .guide-section-title {
+    @apply flex items-center gap-3 font-display text-[22px] font-bold tracking-[-0.04em];
+  }
+  .guide-section-title > span {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-[15px] text-ink;
+  }
+  .guide-section-sub {
+    @apply mt-2 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400;
+  }
+  .guide-list,
+  .guide-bullets {
+    @apply mt-5 space-y-3;
+  }
+  .guide-list {
+    counter-reset: guide;
+  }
+  .guide-list > li,
+  .guide-bullets > li {
+    @apply relative text-[14.5px] leading-relaxed text-slate-700 dark:text-slate-300;
+  }
+  .guide-list > li {
+    @apply pl-9;
+    counter-increment: guide;
+  }
+  .guide-list > li::before {
+    content: counter(guide);
+    @apply absolute left-0 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-ink font-display text-[11px] font-bold text-white dark:bg-white dark:text-ink;
+  }
+  .guide-bullets > li {
+    @apply pl-5;
+  }
+  .guide-bullets > li::before {
+    content: "";
+    @apply absolute left-1 top-[0.65em] h-1.5 w-1.5 rounded-full bg-ink dark:bg-white;
+  }
+  .guide-section b {
+    @apply font-bold text-ink dark:text-white;
+  }
+  .guide-link {
+    @apply font-bold text-ink underline decoration-house-blue decoration-2 underline-offset-4 dark:text-white;
+  }
+  .guide-examples {
+    @apply mt-5 grid gap-2.5 sm:grid-cols-2;
+  }
+  .guide-examples > div {
+    @apply rounded-2xl border-[1.5px] border-dashed border-slate-300 px-4 py-3 dark:border-slate-600;
+  }
+  .guide-examples small {
+    @apply block text-[11px] text-slate-500 dark:text-slate-400;
+  }
+  .guide-examples p {
+    @apply mt-1 font-display text-[22px] font-bold tracking-[-0.03em];
+  }
+  .guide-examples p > span {
+    @apply ml-1 font-sans text-xs font-medium tracking-normal text-slate-500 dark:text-slate-400;
+  }
+  .guide-tip {
+    @apply mt-5 rounded-2xl bg-house-yellow/25 px-4 py-3.5 text-[13.5px] leading-relaxed text-slate-700 dark:bg-house-yellow/10 dark:text-slate-300;
+  }
+  .guide-kinds {
+    @apply mt-5 space-y-3;
+  }
+  .guide-kinds > div {
+    @apply flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4;
+  }
+  .guide-kinds dt {
+    @apply inline-flex h-8 w-fit shrink-0 items-center rounded-full px-3.5 text-xs font-bold text-ink sm:w-36 sm:justify-center;
+  }
+  .guide-kinds dd {
+    @apply text-[14px] leading-relaxed text-slate-700 dark:text-slate-300;
+  }
+  .guide-scores {
+    @apply mt-5 grid grid-cols-3 gap-2 sm:gap-3;
+  }
+  .guide-scores > div {
+    @apply flex flex-col items-center gap-1.5 !px-2 !py-4 text-center;
+  }
+  .guide-scores strong {
+    @apply font-display text-[26px] font-bold leading-none tracking-[-0.02em] sm:text-[34px];
+  }
+  .guide-scores span {
+    @apply text-[11px] font-semibold leading-snug sm:text-xs;
+  }
+  .guide-courts {
+    @apply mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3;
+  }
+  .guide-courts > div {
+    @apply !p-3.5 text-[12px] font-semibold leading-relaxed;
+  }
+  .guide-courts > div:nth-child(3) {
+    @apply hidden sm:block;
+  }
+  .guide-courts small {
+    @apply mb-1 block text-[10px] font-bold tracking-[0.1em] opacity-75;
+  }
+  .guide-menus {
+    @apply mt-3;
+  }
+  .guide-menus a {
+    @apply flex items-center gap-3 border-b border-slate-200 py-3.5 transition-colors hover:text-ink dark:border-slate-700 dark:hover:text-white;
+  }
+  .guide-menus > li:last-child a {
+    @apply border-0;
+  }
+  .guide-menus strong {
+    @apply w-[84px] shrink-0 text-sm font-bold;
+  }
+  .guide-menus span {
+    @apply min-w-0 flex-1 text-[13px] leading-relaxed text-slate-600 dark:text-slate-400;
+  }
+  .guide-footer {
+    @apply flex flex-col items-center gap-4 pt-6 text-center text-sm text-slate-500 dark:text-slate-400;
+  }
+}
+
 /* 인쇄: 메뉴·머리·꼬리를 빼고 본문만 */
 @media print {
   .club-sidebar,

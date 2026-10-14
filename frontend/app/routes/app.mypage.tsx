@@ -45,7 +45,8 @@ export async function action({ request }: ActionFunctionArgs) {
     const body = {
       name: get("name"),
       nickname: get("nickname") || null,
-      gender: get("gender") || null,
+      // 성별은 비울 수 없다: 고르지 않았으면 보내지 않아 그대로 둔다
+      gender: get("gender") || undefined,
       ntrp: get("ntrp") ? Number(get("ntrp")) : null,
       phone: get("phone") || null,
       bio: get("bio") || null,
@@ -191,8 +192,17 @@ export default function MyPage() {
                 name="gender"
                 className="input"
                 defaultValue={user.gender ?? ""}
+                required
+                onChange={(e) => e.target.setCustomValidity("")}
+                onInvalid={(e) =>
+                  e.currentTarget.setCustomValidity("성별을 골라 주세요.")
+                }
               >
-                <option value="">선택 안 함</option>
+                {user.gender ? null : (
+                  <option value="" disabled>
+                    골라 주세요
+                  </option>
+                )}
                 <option value="male">남성</option>
                 <option value="female">여성</option>
               </select>

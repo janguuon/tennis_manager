@@ -365,7 +365,7 @@ def test_treasurer_has_officer_powers_and_settles(club):
     # 정산: 지급 대기 목록
     assert club.c.get("/court-bookings", headers=club.headers["tre"]).status_code == 200
     # 가입 승인 때 바로 총무로 지정할 수도 있다
-    club.c.post("/auth/signup", json={"username": "newtre", "password": "1234", "name": "새총무"})
+    club.c.post("/auth/signup", json={"gender": "male", "username": "newtre", "password": "1234", "name": "새총무"})
     uid = club.c.get("/admin/signups/pending", headers=club.admin).json()[0]["id"]
     r = club.c.post(f"/admin/signups/{uid}/approve?member_type=treasurer", headers=club.admin)
     assert r.json()["member_type"] == "treasurer"

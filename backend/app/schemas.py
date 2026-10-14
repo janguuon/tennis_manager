@@ -42,6 +42,8 @@ class UserCreate(UserBase):
     username: str = Field(..., description="영문·숫자(_ . -) 3~50자")
     password: str = Field(..., description="4~72자")
     email: EmailStr | None = None
+    # 대진(혼복·남복·여복)에 쓰여 가입할 때 꼭 받는다 (안 보내도 아래 한글 안내가 나가게 기본값을 검사)
+    gender: Gender | None = Field(None, validate_default=True)
 
     # 회원에게 그대로 보이는 안내라 한글 문구로 돌려준다 (기본 문구는 영어 정규식)
     @field_validator("username")
@@ -56,6 +58,13 @@ class UserCreate(UserBase):
             raise PydanticCustomError(
                 "username_rule", "아이디는 영문·숫자로 3자 이상 적어 주세요. (띄어쓰기는 안 되고 기호는 _ . - 만 돼요)"
             )
+        return v
+
+    @field_validator("gender", mode="before")
+    @classmethod
+    def _gender_required(cls, v):
+        if v not in (Gender.MALE, Gender.FEMALE, "male", "female"):
+            raise PydanticCustomError("gender_required", "성별을 골라 주세요.")
         return v
 
     @field_validator("password")
@@ -81,6 +90,14 @@ class UserUpdate(BaseModel):
     bank: str | None = Field(None, max_length=50)
     account_number: str | None = Field(None, max_length=50)
     account_holder: str | None = Field(None, max_length=50)
+
+    # 성별은 필수 항목이라 바꿀 수는 있어도 비울 수는 없다 (보내지 않으면 그대로)
+    @field_validator("gender")
+    @classmethod
+    def _gender_not_blank(cls, v: Gender | None) -> Gender:
+        if v is None:
+            raise PydanticCustomError("gender_required", "성별은 비워 둘 수 없어요. 남성·여성 중에 골라 주세요.")
+        return v
 
 
 class PasswordUpdate(BaseModel):

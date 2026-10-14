@@ -12,9 +12,10 @@ import {
   useSearchParams,
 } from "@remix-run/react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AuthLayout } from "~/components/AuthLayout";
+import { resetGenderPrompt } from "~/components/GenderPrompt";
 import { ApiError, api } from "~/lib/api.server";
 import {
   createUserSession,
@@ -65,6 +66,8 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? "";
   const [korean, setKorean] = useState(false);
+  // 다시 로그인하면 비어 있는 성별을 다시 묻는다
+  useEffect(() => resetGenderPrompt(), []);
 
   return (
     <AuthLayout>

@@ -90,7 +90,7 @@ def test_guest_takes_only_remaining_seats(club, fixed_now):
 
 
 def test_approve_as_guest_and_change_type(club):
-    club.c.post("/auth/signup", json={"username": "newbie", "password": "1234", "name": "새친구"})
+    club.c.post("/auth/signup", json={"gender": "male", "username": "newbie", "password": "1234", "name": "새친구"})
     pending = club.c.get("/admin/signups/pending", headers=club.admin).json()
     uid = pending[0]["id"]
     r = club.c.post(f"/admin/signups/{uid}/approve?member_type=guest", headers=club.admin)

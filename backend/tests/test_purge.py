@@ -58,7 +58,7 @@ def test_purge_removes_records_and_keeps_others_intact(club):
     after = club.c.get(f"/gatherings/{regular}/draws", headers=club.admin).json()[0]["matches"][0]
     assert club.ids["amy"] not in after["slot_ids"] and None in after["slot_ids"]
     # 아이디가 비어서 다시 가입할 수 있다
-    r = club.c.post("/auth/signup", json={"username": "amy", "password": "1234", "name": "amy"})
+    r = club.c.post("/auth/signup", json={"gender": "male", "username": "amy", "password": "1234", "name": "amy"})
     assert r.status_code == 201
 
 

@@ -20,7 +20,7 @@ def test_no_history_member_is_fully_deleted(club):
     # 미입금 참석 기록도 지워져 1인 금액이 다시 계산된다
     assert club.detail(gid)["per_person"] == 10000
     # 같은 아이디로 다시 가입할 수 있다
-    r = club.c.post("/auth/signup", json={"username": "amy", "password": "1234", "name": "amy"})
+    r = club.c.post("/auth/signup", json={"gender": "male", "username": "amy", "password": "1234", "name": "amy"})
     assert r.status_code == 201
 
 
@@ -156,16 +156,16 @@ def test_records_are_admin_only(club):
 
 def test_username_nickname_duplicates_ignore_case_and_spaces(club):
     c = club.c
-    r = c.post("/auth/signup", json={"username": "Tesik", "password": "1234", "name": "테식", "nickname": "테식이"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "Tesik", "password": "1234", "name": "테식", "nickname": "테식이"})
     assert r.status_code == 201 and r.json()["user"]["username"] == "tesik"  # 소문자로 저장
     # 대소문자만 다른 아이디, 공백만 다른 닉네임은 중복
-    r = c.post("/auth/signup", json={"username": "tesik", "password": "1234", "name": "다른"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "tesik", "password": "1234", "name": "다른"})
     assert r.status_code == 409 and "아이디" in r.json()["detail"]
-    r = c.post("/auth/signup", json={"username": "other", "password": "1234", "name": "다른", "nickname": " 테식이 "})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "other", "password": "1234", "name": "다른", "nickname": " 테식이 "})
     assert r.status_code == 409 and "닉네임" in r.json()["detail"]
-    r = c.post("/auth/signup", json={"username": "other2", "password": "1234", "name": "또", "nickname": "ABC"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "other2", "password": "1234", "name": "또", "nickname": "ABC"})
     assert r.status_code == 201
-    r = c.post("/auth/signup", json={"username": "other3", "password": "1234", "name": "또또", "nickname": "abc"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "other3", "password": "1234", "name": "또또", "nickname": "abc"})
     assert r.status_code == 409
 
     for p in c.get("/admin/signups/pending", headers=club.admin).json():
@@ -183,14 +183,47 @@ def test_username_nickname_duplicates_ignore_case_and_spaces(club):
 
 def test_signup_rules_answer_in_korean(club):
     c = club.c
-    r = c.post("/auth/signup", json={"username": "테식", "password": "1234", "name": "테식"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "테식", "password": "1234", "name": "테식"})
     assert r.status_code == 422 and "한글" in r.json()["detail"][0]["msg"]
-    r = c.post("/auth/signup", json={"username": "ㅅㄷ냐ㅏ", "password": "1234", "name": "테식"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "ㅅㄷ냐ㅏ", "password": "1234", "name": "테식"})
     assert "한/영" in r.json()["detail"][0]["msg"]
-    r = c.post("/auth/signup", json={"username": "ab", "password": "1234", "name": "테식"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "ab", "password": "1234", "name": "테식"})
     assert "3자 이상" in r.json()["detail"][0]["msg"]
-    r = c.post("/auth/signup", json={"username": "te sik", "password": "1234", "name": "테식"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "te sik", "password": "1234", "name": "테식"})
     assert "띄어쓰기" in r.json()["detail"][0]["msg"]
-    r = c.post("/auth/signup", json={"username": "tesik", "password": "12", "name": "테식"})
+    r = c.post("/auth/signup", json={"gender": "male", "username": "tesik", "password": "12", "name": "테식"})
     assert r.json()["detail"][0]["msg"] == "비밀번호는 4자 이상이어야 해요."
-    assert c.post("/auth/signup", json={"username": "te_si.k-1", "password": "1234", "name": "테식"}).status_code == 201
+    assert c.post("/auth/signup", json={"gender": "male", "username": "te_si.k-1", "password": "1234", "name": "테식"}).status_code == 201
+
+
+def test_gender_is_required(club):
+    """성별은 가입할 때 꼭 고르고, 이후 바꿀 수는 있어도 비울 수는 없다."""
+    c = club.c
+    for body in (
+        {"username": "nogender", "password": "1234", "name": "성별없음"},
+        {"username": "nogender", "password": "1234", "name": "성별없음", "gender": None},
+        {"username": "nogender", "password": "1234", "name": "성별없음", "gender": ""},
+    ):
+        r = c.post("/auth/signup", json=body)
+        assert r.status_code == 422 and r.json()["detail"][0]["msg"] == "성별을 골라 주세요.", body
+    r = c.post("/auth/signup", json={"username": "lady", "password": "1234", "name": "레이디", "gender": "female"})
+    assert r.status_code == 201 and r.json()["user"]["gender"] == "female"
+
+    # 예전에 성별 없이 가입한 회원: 프로필에서 고를 수 있고, 다른 항목만 저장하면 그대로 비어 있다
+    club.add_members("old")
+    from app.database import SessionLocal
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.get(User, club.ids["old"]).gender = None
+        db.commit()
+    h = club.headers["old"]
+    assert c.get("/users/me", headers=h).json()["gender"] is None
+    r = c.patch("/users/me", json={"bio": "안녕하세요"}, headers=h)
+    assert r.status_code == 200 and r.json()["gender"] is None
+    r = c.patch("/users/me", json={"gender": "female"}, headers=h)
+    assert r.status_code == 200 and r.json()["gender"] == "female"
+    # 비우기는 안 된다
+    r = c.patch("/users/me", json={"gender": None}, headers=h)
+    assert r.status_code == 422 and "비워 둘 수 없어요" in r.json()["detail"][0]["msg"]
+    assert c.get("/users/me", headers=h).json()["gender"] == "female"

@@ -22,7 +22,7 @@ class Club:
 
     def __init__(self, client: TestClient):
         self.c = client
-        client.post("/auth/signup", json={"username": "admin1", "password": "1234", "name": "총무"})
+        client.post("/auth/signup", json={"gender": "male", "username": "admin1", "password": "1234", "name": "총무"})
         self.admin = self._login("admin1")
         self.headers: dict[str, dict] = {}
         self.ids: dict[str, int] = {}
@@ -33,7 +33,7 @@ class Club:
 
     def add_members(self, *names: str) -> None:
         for n in names:
-            self.c.post("/auth/signup", json={"username": n, "password": "1234", "name": n})
+            self.c.post("/auth/signup", json={"gender": "male", "username": n, "password": "1234", "name": n})
         for s in self.c.get("/admin/signups/pending", headers=self.admin).json():
             self.c.post(f"/admin/signups/{s['id']}/approve", headers=self.admin)
         for n in names:

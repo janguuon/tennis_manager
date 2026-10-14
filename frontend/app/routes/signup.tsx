@@ -135,23 +135,48 @@ export default function SignupPage() {
             </div>
           </div>
 
-          <div>
-            <label className="label" htmlFor="password">
-              비밀번호
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              className="input"
-              required
-              minLength={4}
-              placeholder="4자 이상"
-              onChange={(e) => e.target.setCustomValidity("")}
-              onInvalid={(e) =>
-                e.currentTarget.setCustomValidity("비밀번호는 4자 이상이어야 해요.")
-              }
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="password">
+                비밀번호
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                className="input"
+                required
+                minLength={4}
+                placeholder="4자 이상"
+                onChange={(e) => e.target.setCustomValidity("")}
+                onInvalid={(e) =>
+                  e.currentTarget.setCustomValidity("비밀번호는 4자 이상이어야 해요.")
+                }
+              />
+            </div>
+            {/* 대진(혼복·남복·여복)에 쓰여 꼭 받는다 */}
+            <div>
+              <label className="label" htmlFor="gender">
+                성별
+              </label>
+              <select
+                id="gender"
+                name="gender"
+                className="input"
+                required
+                defaultValue=""
+                onChange={(e) => e.target.setCustomValidity("")}
+                onInvalid={(e) =>
+                  e.currentTarget.setCustomValidity("성별을 골라 주세요.")
+                }
+              >
+                <option value="" disabled>
+                  골라 주세요
+                </option>
+                <option value="male">남성</option>
+                <option value="female">여성</option>
+              </select>
+            </div>
           </div>
 
           <div className="border-t-[1.5px] border-slate-200 pt-4 dark:border-slate-800">
@@ -162,16 +187,6 @@ export default function SignupPage() {
                   닉네임
                 </label>
                 <input id="nickname" name="nickname" className="input" />
-              </div>
-              <div>
-                <label className="label" htmlFor="gender">
-                  성별
-                </label>
-                <select id="gender" name="gender" className="input">
-                  <option value="">선택 안 함</option>
-                  <option value="male">남성</option>
-                  <option value="female">여성</option>
-                </select>
               </div>
               <div>
                 <label className="label" htmlFor="ntrp">
@@ -188,7 +203,7 @@ export default function SignupPage() {
                   placeholder="1.0 ~ 7.0"
                 />
               </div>
-              <div>
+              <div className="col-span-2">
                 <label className="label" htmlFor="email">
                   이메일
                 </label>

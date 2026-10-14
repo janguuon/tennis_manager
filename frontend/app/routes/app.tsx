@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { MemberAvatar } from "~/components/Club";
+import { GenderPrompt } from "~/components/GenderPrompt";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
 import { FEATURES, canSeeRecords } from "~/lib/features";
@@ -260,6 +261,7 @@ export default function AppLayout() {
           <span>오순도순 테니스 식구</span>
         </footer>
       </main>
+      <GenderPrompt user={user} />
       <nav className="club-bottom-nav" aria-label="모바일 주 메뉴">
         {items.map(({ to, short, icon: Icon, end }) => (
           <NavLink

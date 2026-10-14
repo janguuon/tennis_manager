@@ -33,7 +33,7 @@ def _upload(club, data: bytes, as_=None) -> dict:
 def _people(club, **names):
     """username=이름 으로 가입·승인."""
     for username, name in names.items():
-        club.c.post("/auth/signup", json={"username": username, "password": "1234", "name": name})
+        club.c.post("/auth/signup", json={"gender": "male", "username": username, "password": "1234", "name": name})
     for p in club.c.get("/admin/signups/pending", headers=club.admin).json():
         club.c.post(f"/admin/signups/{p['id']}/approve", headers=club.admin)
     for username in names:

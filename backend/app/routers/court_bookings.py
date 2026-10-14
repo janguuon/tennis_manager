@@ -19,9 +19,10 @@ from ..schemas import (
     CourtBookingInput,
     CourtBookingRead,
     CourtBookingUpdate,
+    ReimbursementBulkUpdate,
     ReimbursementUpdate,
 )
-from .gatherings import _load_gathering, court_booking_read, require_booker
+from .gatherings import _load_gathering, court_booking_read, require_booker, sync_court_fairy
 
 router = APIRouter(tags=["court-bookings"])
 
@@ -70,6 +71,8 @@ def add_court_booking(
     require_booker(db, payload.booker_id)
     booking = CourtBooking(gathering_id=g.id, **payload.model_dump())
     db.add(booking)
+    db.flush()
+    sync_court_fairy(db, g.id)
     db.commit()
     return court_booking_read(_load_booking(db, booking.id), settler)
 
@@ -92,6 +95,9 @@ def update_court_booking(
         require_booker(db, data["booker_id"])
     for key, value in data.items():
         setattr(b, key, value)
+    db.flush()
+    db.expire_all()
+    sync_court_fairy(db, b.gathering_id)
     db.commit()
     db.expire_all()
     return court_booking_read(_load_booking(db, booking_id), settler)
@@ -106,7 +112,11 @@ def delete_court_booking(
     """예약 삭제 (지급 전만)."""
     b = _load_booking(db, booking_id)
     _require_not_reimbursed(b)
+    gathering_id = b.gathering_id
     db.delete(b)
+    db.flush()
+    db.expire_all()
+    sync_court_fairy(db, gathering_id)
     db.commit()
 
 
@@ -128,6 +138,32 @@ def set_reimbursement(
     db.commit()
     db.expire_all()
     return court_booking_read(_load_booking(db, booking_id), settler)
+
+
+@router.put("/court-bookings/reimbursement", response_model=list[CourtBookingRead])
+def set_reimbursement_many(
+    payload: ReimbursementBulkUpdate,
+    db: Session = Depends(get_db),
+    settler: User = Depends(get_current_settler),
+):
+    """여러 코트비를 한 번에 지급 완료/취소 (코트요정 한 명에게 한 번에 보냈을 때)."""
+    ids = list(dict.fromkeys(payload.booking_ids))
+    found = {b.id: b for b in db.scalars(_booking_query().where(CourtBooking.id.in_(ids)))}
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="코트 예약을 찾을 수 없습니다.")
+    now = datetime.now()
+    for b in found.values():
+        if payload.reimbursed:
+            if b.reimbursed_at is None:  # 이미 지급한 건은 처음 기록 그대로
+                b.reimbursed_at = now
+                b.reimbursed_by = settler.id
+        else:
+            b.reimbursed_at = None
+            b.reimbursed_by = None
+    db.commit()
+    db.expire_all()
+    return [court_booking_read(_load_booking(db, i), settler) for i in ids]
 
 
 @router.get("/court-bookings", response_model=list[CourtBookingRead])

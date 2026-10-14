@@ -320,6 +320,23 @@ def require_booker(db: Session, user_id: int) -> User:
     return user
 
 
+def court_fairy_text(names: list[str]) -> str | None:
+    """코트요정 표시: 코트비를 받을 회원 이름(겹치면 한 번) — 예: "서승우, 김하린"."""
+    return ", ".join(dict.fromkeys(names))[:200] or None
+
+
+def sync_court_fairy(db: Session, gathering_id: int) -> None:
+    """오테식 모임의 코트요정 칸을 코트비 지급 내역(예약자)에 맞춘다. 바뀐 내역을 flush 한 뒤 부른다."""
+    g = db.scalar(
+        select(Gathering)
+        .where(Gathering.id == gathering_id)
+        .options(*gathering_load_options())
+        .execution_options(populate_existing=True)  # 이미 읽어 둔 예약 목록도 새로
+    )
+    if g is not None and g.is_club:
+        g.court_fairy = court_fairy_text([b.booker.name for b in g.court_bookings])
+
+
 def _apply_kind_rules(g: Gathering) -> None:
     """
     종류별 금액 정리.
@@ -465,9 +482,13 @@ def create_gathering(
     gathering = Gathering(**data, created_by=current_user.id)
     _apply_kind_rules(gathering)
     _fill_club_account(db, gathering)
+    fairies = []
     for b in bookings:
-        require_booker(db, b["booker_id"])
+        fairies.append(require_booker(db, b["booker_id"]).name)
         gathering.court_bookings.append(CourtBooking(**b))
+    if fairies:
+        # 오테식 모임의 코트요정 = 코트비를 받을 회원
+        gathering.court_fairy = court_fairy_text(fairies)
     db.add(gathering)
     db.commit()
     return _to_read(_load_gathering(db, gathering.id))

@@ -326,6 +326,13 @@ class ReimbursementUpdate(BaseModel):
     reimbursed: bool
 
 
+class ReimbursementBulkUpdate(BaseModel):
+    """여러 코트비를 한 번에 지급 처리 (같은 코트요정에게 한 번에 보낼 때)."""
+
+    booking_ids: list[int] = Field(..., min_length=1, max_length=200)
+    reimbursed: bool = True
+
+
 class BookerAccount(BaseModel):
     bank: str | None = None
     account_number: str | None = None

@@ -217,7 +217,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
           end_time: get("end_time") || null,
           location: get("location") || null,
           court_numbers: courtNumbers || null,
-          court_fairy: get("court_fairy") || null,
+          // 오테식 모임은 코트요정 칸이 없다(지급 내역에서 맞춘다) → 보내지 않아 그대로 둔다
+          ...(formData.has("court_fairy")
+            ? { court_fairy: get("court_fairy") || null }
+            : {}),
           court_count: courtNumbers
             ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
             : Number(get("court_count") || 1),
@@ -1305,19 +1308,27 @@ export default function GatheringDetailPage() {
                       {isClubKind(kind) ? "회칙상 코트 1면에 6명이에요. " : ""}
                       정원이 차면 다음 신청은 대기로 받아요.
                     </p>
-                    <div>
-                      <label className="label" htmlFor="e_fairy">
-                        코트요정 <span className="font-medium text-slate-400">(선택)</span>
-                      </label>
-                      <input
-                        id="e_fairy"
-                        name="court_fairy"
-                        className="input"
-                        placeholder="코트를 잡아 준 사람"
-                        maxLength={200}
-                        defaultValue={gathering.court_fairy ?? ""}
-                      />
-                    </div>
+                    {isClubKind(kind) ? (
+                      <p className="rounded-2xl bg-house-green/20 px-4 py-3 text-[13px] font-medium leading-relaxed">
+                        <strong>코트요정</strong>은 모임 화면의{" "}
+                        <strong>‘회비 지출’</strong> 카드에서 회원으로 추가해요.
+                        추가하면 정산 탭에 올라가 총무가 코트비를 보내요.
+                      </p>
+                    ) : (
+                      <div>
+                        <label className="label" htmlFor="e_fairy">
+                          코트요정 <span className="font-medium text-slate-400">(선택)</span>
+                        </label>
+                        <input
+                          id="e_fairy"
+                          name="court_fairy"
+                          className="input"
+                          placeholder="코트를 잡아 준 사람"
+                          maxLength={200}
+                          defaultValue={gathering.court_fairy ?? ""}
+                        />
+                      </div>
+                    )}
                   </FieldGroup>
                 </>
               )}
@@ -1403,7 +1414,7 @@ function CourtExpenseTile({
       {bookings.length === 0 ? (
         <p className="text-sm font-semibold">
           {staff
-            ? "코트를 잡은 사람을 추가하면 회비에서 코트비를 보내 줄 수 있어요."
+            ? "코트요정(코트를 잡고 코트비를 낸 회원)을 추가하면 정산 탭에 올라가요."
             : "아직 등록된 코트 예약이 없어요."}
         </p>
       ) : (
@@ -1517,17 +1528,17 @@ function CourtExpenseTile({
         <Form method="post" className="court-booking-form">
           <input type="hidden" name="intent" value="add_booking" />
           <p className="col-span-full text-xs font-extrabold">
-            코트 예약자 추가
+            코트요정 추가
           </p>
           <select
             name="booker_id"
             className="tile-input col-span-full sm:col-span-1"
-            aria-label="예약자"
+            aria-label="코트요정"
             required
             defaultValue=""
           >
             <option value="" disabled>
-              예약자
+              코트요정
             </option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>

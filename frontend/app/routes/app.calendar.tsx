@@ -688,21 +688,30 @@ export default function CalendarPage() {
                         : ""}
                       정원이 차면 다음 신청은 대기로 받아요.
                     </p>
-                    <div>
-                      <label className="label" htmlFor="court_fairy">
-                        코트요정{" "}
-                        <span className="font-medium text-slate-400">
-                          (선택)
-                        </span>
-                      </label>
-                      <input
-                        id="court_fairy"
-                        name="court_fairy"
-                        className="input"
-                        placeholder="코트를 잡아 준 사람"
-                        maxLength={200}
-                      />
-                    </div>
+                    {isClubKind(kind) ? (
+                      <p className="rounded-2xl bg-house-green/20 px-4 py-3 text-[13px] font-medium leading-relaxed">
+                        <strong>코트요정</strong>은 아래{" "}
+                        <strong>‘코트요정 · 코트비’</strong>에서 회원으로
+                        추가해요. 추가하면 정산 탭에 올라가 총무가 코트비를
+                        보내요.
+                      </p>
+                    ) : (
+                      <div>
+                        <label className="label" htmlFor="court_fairy">
+                          코트요정{" "}
+                          <span className="font-medium text-slate-400">
+                            (선택)
+                          </span>
+                        </label>
+                        <input
+                          id="court_fairy"
+                          name="court_fairy"
+                          className="input"
+                          placeholder="코트를 잡아 준 사람"
+                          maxLength={200}
+                        />
+                      </div>
+                    )}
                   </FieldGroup>
                 </>
               )}

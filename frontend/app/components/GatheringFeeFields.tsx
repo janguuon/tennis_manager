@@ -240,7 +240,7 @@ export function GatheringFeeFields({
       </FieldGroup>
 
       {club ? (
-        <FieldGroup title="코트 예약자">
+        <FieldGroup title="코트요정 · 코트비">
           {members ? (
             <>
               {rows.map((r, i) => (
@@ -248,14 +248,14 @@ export function GatheringFeeFields({
                   <select
                     name="booking_booker"
                     className="input col-span-2 col-start-1 row-start-1 sm:col-span-1"
-                    aria-label={`${i + 1}번째 예약자`}
+                    aria-label={`${i + 1}번째 코트요정`}
                     value={r.booker}
                     onChange={(e) =>
                       updateRow(r.key, { booker: e.target.value })
                     }
                     required
                   >
-                    <option value="">예약자</option>
+                    <option value="">코트요정</option>
                     {members.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
@@ -289,7 +289,7 @@ export function GatheringFeeFields({
                   <button
                     type="button"
                     className="icon-btn col-start-3 row-start-1 self-center sm:col-start-4"
-                    aria-label={`${i + 1}번째 예약 빼기`}
+                    aria-label={`${i + 1}번째 코트요정 빼기`}
                     onClick={() =>
                       setRows((rs) => rs.filter((x) => x.key !== r.key))
                     }
@@ -309,19 +309,19 @@ export function GatheringFeeFields({
                 }
               >
                 <Plus size={14} />
-                예약자 추가
+                코트요정 추가
               </button>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {rows.length
                   ? `회비 지출 코트비 총 ${won(bookingTotal)} · `
                   : ""}
-                코트를 잡은 사람에게 총무가 회비에서 코트비를 보내요. 모임
-                화면에서도 추가할 수 있어요.
+                코트를 잡고 코트비를 낸 회원이에요. 정산 탭에 올라가 총무가
+                회비에서 코트비를 보내요. 모임 화면에서도 추가할 수 있어요.
               </p>
             </>
           ) : (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              코트 예약자는 모임 화면의 ‘회비 지출’ 카드에서 추가·지급 처리해요.
+              코트요정은 모임 화면의 ‘회비 지출’ 카드에서 추가·지급 처리해요.
             </p>
           )}
         </FieldGroup>

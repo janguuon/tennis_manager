@@ -942,6 +942,19 @@
   .file-drop.has-file {
     @apply border-solid border-ink text-ink dark:border-white dark:text-white;
   }
+  /* 정산 탭: 코트요정별 지급할 코트비 */
+  .payout-group {
+    @apply rounded-2xl bg-white/50 p-3.5 sm:p-4;
+  }
+  .payout-items {
+    @apply mt-2 border-t border-ink/10;
+  }
+  .payout-items > li {
+    @apply flex items-center gap-3 border-b border-ink/10 py-2 text-[13px] font-semibold last:border-0;
+  }
+  .payout-item-btn {
+    @apply inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-ink/30 px-2.5 text-xs font-bold transition-colors hover:bg-ink hover:text-white disabled:opacity-50;
+  }
   .booking-row {
     @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_auto];
   }

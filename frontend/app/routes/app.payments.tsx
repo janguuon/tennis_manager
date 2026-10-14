@@ -89,6 +89,19 @@ export async function action({ request }: ActionFunctionArgs) {
   const token = await requireToken(request);
   const formData = await request.formData();
   try {
+    if (formData.get("intent") === "reimburse_many") {
+      // 코트요정 한 명에게 한 번에 보낸 코트비들
+      const ids = String(formData.get("booking_ids") ?? "")
+        .split(",")
+        .map(Number)
+        .filter((n) => n > 0);
+      await api("/court-bookings/reimbursement", {
+        method: "PUT",
+        token,
+        body: { booking_ids: ids, reimbursed: true },
+      });
+      return json({ error: null as string | null });
+    }
     await api(`/court-bookings/${formData.get("booking_id")}/reimbursement`, {
       method: "PUT",
       token,
@@ -102,12 +115,42 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
+/** 지급할 코트비를 코트요정(받을 사람)별로 묶는다. 모임 날짜가 빠른 사람부터. */
+function groupByFairy(bookings: CourtBooking[]) {
+  const groups = new Map<
+    number,
+    {
+      booker: CourtBooking["booker"];
+      account: CourtBooking["account"];
+      items: CourtBooking[];
+      total: number;
+    }
+  >();
+  for (const b of bookings) {
+    const g = groups.get(b.booker.id) ?? {
+      booker: b.booker,
+      account: b.account,
+      items: [],
+      total: 0,
+    };
+    g.items.push(b);
+    g.total += b.amount;
+    if (!g.account?.account_number && b.account?.account_number)
+      g.account = b.account;
+    groups.set(b.booker.id, g);
+  }
+  return [...groups.values()];
+}
+
 export default function PaymentsPage() {
   const { month, summary, myDues, myBookings, pendingBookings } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const pendingTotal = pendingBookings.reduce((s, b) => s + b.amount, 0);
+  const payoutGroups = groupByFairy(pendingBookings);
+  const submitting = (key: string, value: string) =>
+    navigation.state !== "idle" && navigation.formData?.get(key) === value;
   const myBookingTotal = myBookings.reduce((s, b) => s + b.amount, 0);
   const [, setSearchParams] = useSearchParams();
   const goMonth = (m: string) => setSearchParams({ month: m });
@@ -177,7 +220,7 @@ export default function PaymentsPage() {
             <div>
               <h2 className="tile-title">지급할 코트비</h2>
               <p className="tile-sub">
-                코트를 잡은 사람에게 회비에서 보내 주세요 ·{" "}
+                코트요정에게 회비에서 보내 주세요 · {payoutGroups.length}명{" "}
                 {pendingBookings.length}건
               </p>
             </div>
@@ -185,45 +228,35 @@ export default function PaymentsPage() {
               {won(pendingTotal)}
             </p>
           </div>
-          <ul className="tile-rows">
-            {pendingBookings.map((b) => {
-              const busy =
-                navigation.state !== "idle" &&
-                navigation.formData?.get("booking_id") === String(b.id);
+          <ul className="space-y-3">
+            {payoutGroups.map((g) => {
+              const ids = g.items.map((b) => b.id).join(",");
               return (
-                <li key={b.id} className="!block">
+                <li key={g.booker.id} className="payout-group">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <Link
-                        to={`/app/gatherings/${b.gathering_id}?from=${b.event_date}`}
-                        className="block truncate text-xs font-bold hover:underline"
-                      >
-                        {shortDate(b.event_date)} · {b.gathering_title}
-                      </Link>
-                      <p className="mt-0.5">
-                        <span className="font-extrabold">{b.booker.name}</span>
-                        {b.court_label ? (
-                          <span className="ml-1.5 text-xs font-semibold">
-                            · {b.court_label}
-                          </span>
-                        ) : null}
+                      <p className="text-[17px] font-extrabold">
+                        {g.booker.name}
+                      </p>
+                      <p className="text-xs font-semibold">
+                        코트 {g.items.length}건
                       </p>
                     </div>
-                    <strong className="shrink-0 font-display text-lg font-extrabold tracking-[-0.03em]">
-                      {won(b.amount)}
+                    <strong className="shrink-0 font-display text-xl font-extrabold tracking-[-0.03em]">
+                      {won(g.total)}
                     </strong>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {b.account?.account_number ? (
+                    {g.account?.account_number ? (
                       <>
                         <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold">
                           <Landmark size={14} className="shrink-0" />
                           <span className="break-all">
-                            {accountText(b.account)}
+                            {accountText(g.account)}
                           </span>
                         </span>
                         <CopyButton
-                          text={b.account.account_number}
+                          text={g.account.account_number}
                           label="계좌 복사"
                           tone="ink"
                         />
@@ -233,15 +266,69 @@ export default function PaymentsPage() {
                         환급 계좌 미등록 · 카톡으로 정산해 주세요
                       </span>
                     )}
-                    <Form method="post">
-                      <input type="hidden" name="booking_id" value={b.id} />
-                      <input type="hidden" name="reimbursed" value="true" />
-                      <button className="btn-ink btn-sm" disabled={busy}>
-                        <Check size={14} />
-                        지급 완료
-                      </button>
-                    </Form>
                   </div>
+                  <ul className="payout-items">
+                    {g.items.map((b) => (
+                      <li key={b.id}>
+                        <Link
+                          to={`/app/gatherings/${b.gathering_id}?from=${b.event_date}`}
+                          className="min-w-0 flex-1 hover:underline"
+                        >
+                          <span className="block truncate">
+                            {shortDate(b.event_date)} · {b.gathering_title}
+                          </span>
+                          {b.court_label ? (
+                            <span className="block truncate text-[11px] font-medium opacity-75">
+                              {b.court_label}
+                            </span>
+                          ) : null}
+                        </Link>
+                        <span className="shrink-0 font-bold tabular-nums">
+                          {won(b.amount)}
+                        </span>
+                        {g.items.length > 1 ? (
+                          // 일부만 보냈을 때 한 건씩
+                          <Form method="post">
+                            <input type="hidden" name="booking_id" value={b.id} />
+                            <input type="hidden" name="reimbursed" value="true" />
+                            <button
+                              className="payout-item-btn"
+                              disabled={submitting("booking_id", String(b.id))}
+                              aria-label={`${shortDate(b.event_date)} ${b.gathering_title} 코트비만 지급 완료`}
+                            >
+                              <Check size={12} />
+                              지급
+                            </button>
+                          </Form>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <Form
+                    method="post"
+                    className="mt-3"
+                    onSubmit={(e) => {
+                      if (
+                        g.items.length > 1 &&
+                        !confirm(
+                          `${g.booker.name}님에게 코트비 ${g.items.length}건 ${won(g.total)}을 보냈나요?`
+                        )
+                      )
+                        e.preventDefault();
+                    }}
+                  >
+                    <input type="hidden" name="intent" value="reimburse_many" />
+                    <input type="hidden" name="booking_ids" value={ids} />
+                    <button
+                      className="btn-ink btn-sm w-full sm:w-auto"
+                      disabled={submitting("booking_ids", ids)}
+                    >
+                      <Check size={14} />
+                      {g.items.length > 1
+                        ? `${g.items.length}건 ${won(g.total)} 한 번에 지급 완료`
+                        : "지급 완료"}
+                    </button>
+                  </Form>
                 </li>
               );
             })}

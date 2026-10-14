@@ -22,10 +22,12 @@ import {
   FileSpreadsheet,
   List,
   Plus,
+  Share2,
   Upload,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { CopyButton } from "~/components/CopyButton";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
 import { FieldGroup, Modal } from "~/components/Modal";
@@ -33,6 +35,13 @@ import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { KIND_LABEL, KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
+import { KAKAO_TEXT_LIMIT, shareTextToKakao } from "~/lib/kakao";
+import {
+  scheduleNoticePath,
+  scheduleNoticeShort,
+  scheduleNoticeText,
+  type NewSchedule,
+} from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
 import {
   GATHERING_STATUS_CHIP,
@@ -175,6 +184,7 @@ export default function CalendarPage() {
     errors?: { row: number; error: string }[];
     skipped?: number;
     skips?: { row: number; message: string }[];
+    items?: NewSchedule[];
     error?: string;
   }>();
   // 시간 제어 상태: 시작 선택 시 종료를 +2h 자동 설정하되, 사용자가 종료를 직접 바꾸면 자동 변경 중단
@@ -809,6 +819,9 @@ export default function CalendarPage() {
                       ? ` · ${importFetcher.data.failed}건 실패`
                       : ""}
                   </p>
+                  {importFetcher.data.items?.length ? (
+                    <ImportNotice items={importFetcher.data.items} />
+                  ) : null}
                   {importFetcher.data.skips &&
                   importFetcher.data.skips.length > 0 ? (
                     <ul className="max-h-32 space-y-0.5 overflow-y-auto text-xs text-slate-600 dark:text-slate-300">
@@ -838,6 +851,42 @@ export default function CalendarPage() {
         </Modal>
       ) : null}
     </>
+  );
+}
+
+/** 엑셀로 새로 올린 일정을 단톡방에 알리기: 카톡 공유(200자 안으로 줄임) · 전체 문구 복사 */
+function ImportNotice({ items }: { items: NewSchedule[] }) {
+  const path = scheduleNoticePath(items);
+  const [fullText, setFullText] = useState("");
+  // 복사 문구의 링크는 지금 접속한 주소 기준 (브라우저에서만 알 수 있다)
+  useEffect(() => {
+    setFullText(
+      scheduleNoticeText(items, `${window.location.origin}${path}`)
+    );
+  }, [items, path]);
+  return (
+    <div className="space-y-2 border-t border-ink/10 pt-2.5 dark:border-white/10">
+      <p className="text-xs text-slate-600 dark:text-slate-300">
+        단톡방에 새 일정을 알려 주세요.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn-accent btn-sm"
+          onClick={() =>
+            shareTextToKakao({
+              text: scheduleNoticeShort(items, KAKAO_TEXT_LIMIT),
+              path,
+              buttonTitle: "일정 보기",
+            })
+          }
+        >
+          <Share2 size={14} />
+          카톡방에 알리기
+        </button>
+        <CopyButton text={fullText} label="문구 복사" />
+      </div>
+    </div>
   );
 }
 

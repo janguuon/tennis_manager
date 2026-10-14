@@ -45,6 +45,7 @@ from ..schemas import (
     CourtBookingRead,
     GatheringCreate,
     GatheringDetail,
+    GatheringImportItem,
     GatheringImportResult,
     GatheringImportRowError,
     GatheringImportRowNote,
@@ -544,7 +545,7 @@ async def import_gatherings(
         if key in IMPORT_HEADER_MAP:
             col_to_field[idx] = IMPORT_HEADER_MAP[key]
 
-    created = 0
+    made: list[Gathering] = []
     errors: list[GatheringImportRowError] = []
 
     for i, row in enumerate(rows, start=2):  # 2행부터 데이터
@@ -567,7 +568,7 @@ async def import_gatherings(
             gathering = Gathering(**d, created_by=current_user.id)
             _apply_kind_rules(gathering)
             db.add(gathering)
-            created += 1
+            made.append(gathering)
         except ValidationError as ve:
             parts = []
             for err in ve.errors():
@@ -579,7 +580,15 @@ async def import_gatherings(
             errors.append(GatheringImportRowError(row=i, error=str(e)))
 
     db.commit()
-    return GatheringImportResult(created=created, failed=len(errors), errors=errors)
+    return GatheringImportResult(
+        created=len(made), failed=len(errors), errors=errors, items=_import_items(made)
+    )
+
+
+def _import_items(made: list[Gathering]) -> list[GatheringImportItem]:
+    """새로 등록한 일정을 날짜·시간 순으로 (카톡 알림 문구용)."""
+    made.sort(key=lambda g: (g.event_date, g.start_time or time.min, g.id))
+    return [GatheringImportItem.model_validate(g) for g in made]
 
 
 @router.get("/import/template")
@@ -740,7 +749,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         .limit(1)
     )
 
-    created = 0
+    made: list[Gathering] = []
     for group in sheet.group_rows(good):
         first = group.first
         if first.key in blocked:
@@ -829,11 +838,16 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             gathering.account_holder = host.account_holder
         _apply_kind_rules(gathering)
         db.add(gathering)
-        created += 1
+        made.append(gathering)
 
     db.commit()
     return GatheringImportResult(
-        created=created, failed=len(errors), errors=errors, skipped=len(skips), skips=skips
+        created=len(made),
+        failed=len(errors),
+        errors=errors,
+        skipped=len(skips),
+        skips=skips,
+        items=_import_items(made),
     )
 
 

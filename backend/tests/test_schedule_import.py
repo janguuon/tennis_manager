@@ -102,6 +102,12 @@ def test_court_sheet_import_end_to_end(club):
     r = _upload(club, _sheet(rows))
     assert r["created"] == 2
     assert r["skipped"] == 1 and r["skips"][0]["row"] == 5
+    # 새로 등록된 일정 목록 (카톡 알림 문구용, 날짜 순)
+    assert [(i["title"], i["event_date"], i["start_time"][:5], i["location"], i["court_numbers"]) for i in r["items"]] == [
+        ("오테식 정모", "2099-01-17", "10:00", "시민 테니스장", "3, 5"),
+        ("일반 벙개", "2099-01-20", "19:00", "구립 테니스장", "2"),
+    ]
+    assert [i["kind"] for i in r["items"]] == ["club_regular", "flash"]
     failed_rows = sorted(e["row"] for e in r["errors"])
     assert failed_rows == [6, 7, 9, 10]
     assert "코트요정" in next(e for e in r["errors"] if e["row"] == 6)["error"]
@@ -130,7 +136,7 @@ def test_court_sheet_import_end_to_end(club):
 
     # 같은 파일을 다시 올리면 이미 등록된 일정은 건너뛴다
     again = _upload(club, _sheet(rows))
-    assert again["created"] == 0
+    assert again["created"] == 0 and again["items"] == []
     already = [s for s in again["skips"] if "이미 등록된" in s["message"]]
     assert sorted(s["row"] for s in already) == [2, 4]
     assert len(_month(club)) == 2

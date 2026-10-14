@@ -364,14 +364,31 @@ class GatheringImportRowNote(BaseModel):
     message: str
 
 
+class GatheringImportItem(BaseModel):
+    """엑셀로 새로 등록된 일정 (카톡 알림 문구용)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    kind: GatheringKind
+    event_date: date
+    start_time: time | None = None
+    end_time: time | None = None
+    location: str | None = None
+    court_numbers: str | None = None
+
+
 class GatheringImportResult(BaseModel):
-    """엑셀 일괄 업로드 결과. 건너뛴 행(이미 등록된 일정, 모임이 아닌 사용 여부)은 skips."""
+    """엑셀 일괄 업로드 결과. 건너뛴 행(이미 등록된 일정, 모임이 아닌 사용 여부)은 skips.
+    items: 이번에 새로 등록된 일정(날짜·시간 순)."""
 
     created: int
     failed: int
     errors: list[GatheringImportRowError]
     skipped: int = 0
     skips: list[GatheringImportRowNote] = []
+    items: list[GatheringImportItem] = []
 
 
 class GatheringUpdate(BaseModel):

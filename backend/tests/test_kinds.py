@@ -299,6 +299,7 @@ def test_import_with_kind_columns(club):
     files = {"file": ("m.xlsx", data, "application/octet-stream")}
     r = club.c.post("/gatherings/import", files=files, headers=club.admin).json()
     assert (r["created"], r["failed"]) == (3, 1) and r["errors"][0]["row"] == 5
+    assert [i["title"] for i in r["items"]] == ["정모", "벙개", "예전 양식"]
 
     listed = club.c.get("/gatherings?date_from=2099-01-01&date_to=2099-01-31",
                         headers=club.admin).json()

@@ -1,6 +1,29 @@
 // 카카오톡 공유. window를 쓰므로 클릭 핸들러 안에서만 호출한다(렌더 중 호출 금지).
 
 const LIMIT = 200; // 카카오 텍스트 메시지 길이 제한
+export const KAKAO_TEXT_LIMIT = LIMIT;
+
+type KakaoSdk = {
+  isInitialized: () => boolean;
+  init: (key: string) => void;
+  Share: { sendDefault: (o: object) => void };
+};
+
+/** 카카오 SDK를 준비한다. 설정이 없으면 안내하고 null. */
+function kakaoSdk(): KakaoSdk | null {
+  const w = window as unknown as {
+    Kakao?: KakaoSdk;
+    ENV?: { KAKAO_JS_KEY?: string };
+  };
+  const Kakao = w.Kakao;
+  const key = w.ENV?.KAKAO_JS_KEY;
+  if (!Kakao || !key) {
+    alert("카카오 공유가 아직 설정되지 않았어요. (KAKAO_JS_KEY 필요)");
+    return null;
+  }
+  if (!Kakao.isInitialized()) Kakao.init(key);
+  return Kakao;
+}
 
 /**
  * "라벨 N명: 이름, 이름" 한 줄. budget(남은 글자 수)을 넘으면
@@ -41,21 +64,8 @@ export function shareToKakao({
   namesLabel?: string;
   path: string;
 }) {
-  const w = window as unknown as {
-    Kakao?: {
-      isInitialized: () => boolean;
-      init: (key: string) => void;
-      Share: { sendDefault: (o: object) => void };
-    };
-    ENV?: { KAKAO_JS_KEY?: string };
-  };
-  const Kakao = w.Kakao;
-  const key = w.ENV?.KAKAO_JS_KEY;
-  if (!Kakao || !key) {
-    alert("카카오 공유가 아직 설정되지 않았어요. (KAKAO_JS_KEY 필요)");
-    return;
-  }
-  if (!Kakao.isInitialized()) Kakao.init(key);
+  const Kakao = kakaoSdk();
+  if (!Kakao) return;
 
   const url = `${window.location.origin}${path}`;
   const suffix = `\n\n👉 모임 보기: ${url}`;
@@ -64,5 +74,29 @@ export function shareToKakao({
     objectType: "text",
     text: base + line + suffix,
     link: { mobileWebUrl: url, webUrl: url },
+  });
+}
+
+/**
+ * 이미 다듬은 문구(200자 안)를 카카오톡 공유창으로 보낸다(사용자가 톡방을 고른다).
+ * 메시지 아래 버튼(buttonTitle)을 누르면 path 로 이동한다.
+ */
+export function shareTextToKakao({
+  text,
+  path,
+  buttonTitle,
+}: {
+  text: string;
+  path: string;
+  buttonTitle?: string;
+}) {
+  const Kakao = kakaoSdk();
+  if (!Kakao) return;
+  const url = `${window.location.origin}${path}`;
+  Kakao.Share.sendDefault({
+    objectType: "text",
+    text: text.slice(0, LIMIT),
+    link: { mobileWebUrl: url, webUrl: url },
+    ...(buttonTitle ? { buttonTitle } : {}),
   });
 }

@@ -6,6 +6,7 @@ import {
 } from "@remix-run/node";
 
 import { ApiError, api } from "~/lib/api.server";
+import type { NewSchedule } from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
 
 // 엑셀 업로드 → 백엔드 /gatherings/import 로 멀티파트 전달.
@@ -35,6 +36,7 @@ export async function action({ request }: ActionFunctionArgs) {
       errors: { row: number; error: string }[];
       skipped: number;
       skips: { row: number; message: string }[];
+      items: NewSchedule[];
     }>(
       "/gatherings/import",
       { method: "POST", token, multipart: fd },

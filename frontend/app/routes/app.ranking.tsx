@@ -6,7 +6,7 @@ import { ArrowUpRight, Trophy } from "lucide-react";
 import { MemberAvatar, SectionHeading } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
-import { api } from "~/lib/api.server";
+import { ApiError, api } from "~/lib/api.server";
 import { FEATURES } from "~/lib/features";
 import { requireToken } from "~/lib/session.server";
 import type { RankingEntry } from "~/lib/types";
@@ -17,8 +17,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   // 랭킹은 아직 쓰지 않아 숨겨 둔다 (lib/features.ts)
   if (!FEATURES.ranking) throw redirect("/app");
-  const ranking = await api<RankingEntry[]>("/stats/ranking", { token });
-  return json({ ranking });
+  try {
+    const ranking = await api<RankingEntry[]>("/stats/ranking", { token });
+    return json({ ranking });
+  } catch (err) {
+    // 승률은 관리자만 볼 수 있다
+    if (err instanceof ApiError && err.status === 403) throw redirect("/app");
+    throw err;
+  }
 }
 
 const PODIUM_TILE = ["tile-green", "tile-yellow", "tile-lav"];

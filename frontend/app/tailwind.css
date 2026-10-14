@@ -371,6 +371,10 @@
   .home-record {
     @apply col-span-1 flex flex-col lg:col-span-5 xl:col-span-3;
   }
+  /* MY RECORD 카드를 숨겼을 때 코트 카드가 그 자리까지 */
+  .home-court-wide {
+    @apply col-span-2 lg:col-span-12 xl:col-span-7;
+  }
   .home-ranking {
     @apply col-span-2 lg:col-span-12;
   }

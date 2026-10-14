@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_admin, get_current_user
 from ..models import DrawMatch, Gathering, Match, MatchPlayer, MatchType, TeamSide, User
 from ..schemas import MatchCreate, MatchRead, MatchUpdate
 
@@ -85,7 +85,7 @@ def create_match(
 @router.get("", response_model=list[MatchRead])
 def list_matches(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_current_admin),
     user_id: int | None = Query(None, description="해당 회원이 참가한 경기만"),
     gathering_id: int | None = None,
     match_type: MatchType | None = None,
@@ -94,7 +94,7 @@ def list_matches(
     skip: int = 0,
     limit: int = Query(100, le=500),
 ):
-    """경기(전적) 히스토리 조회. 다양한 필터 지원."""
+    """경기(전적) 히스토리 조회. 다양한 필터 지원. 승률·전적은 당분간 관리자만 본다."""
     stmt = select(Match).options(
         selectinload(Match.players).selectinload(MatchPlayer.user)
     )
@@ -117,7 +117,7 @@ def list_matches(
 def get_match(
     match_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_current_admin),
 ):
     return _load_match(db, match_id)
 

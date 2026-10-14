@@ -20,7 +20,7 @@ import {
 import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
-import { FEATURES } from "~/lib/features";
+import { FEATURES, canSeeRecords } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import { WEEKDAYS } from "~/lib/status";
@@ -79,25 +79,28 @@ const VOTE_LABEL: Record<AttendanceStatus, string> = {
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   const today = todayKST();
-  const [me, gatherings, myDues, ranking] = await Promise.all([
+  const [me, gatherings, myDues] = await Promise.all([
     api<User>("/users/me", { token }),
     api<Gathering[]>(
       `/gatherings?date_from=${today}&date_to=${addDays(today, 60)}`,
       { token }
     ),
     api<MyPaymentDue[]>("/gatherings/payments/me", { token }),
-    FEATURES.ranking
-      ? api<RankingEntry[]>("/stats/ranking", { token })
-      : Promise.resolve([] as RankingEntry[]),
   ]);
   const upcoming = gatherings.filter(
     (g) => g.status === "planned" || g.status === "ongoing"
   );
-  const [next, stats, pending] = await Promise.all([
+  const records = canSeeRecords(me);
+  const [next, stats, ranking, pending] = await Promise.all([
     upcoming[0]
       ? api<GatheringDetail>(`/gatherings/${upcoming[0].id}`, { token })
       : Promise.resolve(null),
-    api<PlayerStats>(`/stats/users/${me.id}`, { token }),
+    records
+      ? api<PlayerStats>(`/stats/users/${me.id}`, { token })
+      : Promise.resolve(null),
+    FEATURES.ranking && records
+      ? api<RankingEntry[]>("/stats/ranking", { token })
+      : Promise.resolve([] as RankingEntry[]),
     me.is_admin
       ? api<User[]>("/admin/signups/pending", { token })
       : Promise.resolve([] as User[]),
@@ -131,7 +134,7 @@ export default function HomePage() {
     )
       ? myDues[0]
       : null;
-  const pct = Math.round(stats.overall.win_rate * 100);
+  const pct = stats ? Math.round(stats.overall.win_rate * 100) : 0;
   return (
     <PageBody>
       <PageHeader
@@ -297,41 +300,43 @@ export default function HomePage() {
             꾸준히 만나는 즐거움, 오테식
           </p>
         </section>
-        <CourtTile next={next} />
-        <Link to={`/app/members/${me.id}`} className="tile-ink home-record">
-          <span className="flex items-center justify-between gap-2">
-            <Eyebrow>MY RECORD</Eyebrow>
-            <ArrowUpRight size={17} className="text-white/70" />
-          </span>
-          <h2 className="mt-3 text-xs font-medium text-white/80">
-            차곡차곡 쌓인 실력
-          </h2>
-          <p className="mt-5 font-display text-[48px] font-bold leading-none tracking-[-0.06em] text-house-yellow sm:text-[64px]">
-            {stats.overall.total ? pct : "—"}
-            {stats.overall.total > 0 && (
-              <span className="ml-1 text-2xl">%</span>
-            )}
-          </p>
-          {stats.overall.total > 0 && (
-            <div
-              className="record-meter"
-              aria-label={`${stats.overall.wins}승 ${stats.overall.losses}패 ${stats.overall.draws}무`}
-            >
-              <span style={{ flex: stats.overall.wins }} />
-              <span style={{ flex: stats.overall.losses }} />
-              <span style={{ flex: stats.overall.draws }} />
-            </div>
-          )}
-          <span className="mt-auto flex flex-wrap justify-between gap-2 pt-5 text-xs text-white/70">
-            <span>
-              {stats.overall.total
-                ? `${stats.overall.wins}승 ${stats.overall.losses}패`
-                : "첫 경기를 기다려요"}
+        <CourtTile next={next} wide={!stats} />
+        {stats ? (
+          <Link to={`/app/members/${me.id}`} className="tile-ink home-record">
+            <span className="flex items-center justify-between gap-2">
+              <Eyebrow>MY RECORD</Eyebrow>
+              <ArrowUpRight size={17} className="text-white/70" />
             </span>
-            <span>총 {stats.overall.total}경기</span>
-          </span>
-        </Link>
-        {FEATURES.ranking ? (
+            <h2 className="mt-3 text-xs font-medium text-white/80">
+              차곡차곡 쌓인 실력
+            </h2>
+            <p className="mt-5 font-display text-[48px] font-bold leading-none tracking-[-0.06em] text-house-yellow sm:text-[64px]">
+              {stats.overall.total ? pct : "—"}
+              {stats.overall.total > 0 && (
+                <span className="ml-1 text-2xl">%</span>
+              )}
+            </p>
+            {stats.overall.total > 0 && (
+              <div
+                className="record-meter"
+                aria-label={`${stats.overall.wins}승 ${stats.overall.losses}패 ${stats.overall.draws}무`}
+              >
+                <span style={{ flex: stats.overall.wins }} />
+                <span style={{ flex: stats.overall.losses }} />
+                <span style={{ flex: stats.overall.draws }} />
+              </div>
+            )}
+            <span className="mt-auto flex flex-wrap justify-between gap-2 pt-5 text-xs text-white/70">
+              <span>
+                {stats.overall.total
+                  ? `${stats.overall.wins}승 ${stats.overall.losses}패`
+                  : "첫 경기를 기다려요"}
+              </span>
+              <span>총 {stats.overall.total}경기</span>
+            </span>
+          </Link>
+        ) : null}
+        {FEATURES.ranking && stats ? (
           <section className="card home-ranking">
             <SectionHeading
               title="코트 위의 주인공들"
@@ -529,7 +534,14 @@ function NextGatheringTile({
     </section>
   );
 }
-function CourtTile({ next }: { next: GatheringDetail | null }) {
+function CourtTile({
+  next,
+  wide = false,
+}: {
+  next: GatheringDetail | null;
+  /** 옆의 MY RECORD 카드가 없을 때(관리자 외) 그 자리까지 넓게 */
+  wide?: boolean;
+}) {
   const labels = next?.court_numbers
     ? next.court_numbers
         .split(",")
@@ -537,7 +549,7 @@ function CourtTile({ next }: { next: GatheringDetail | null }) {
         .filter(Boolean)
     : Array.from({ length: next?.court_count ?? 0 }, () => "");
   return (
-    <section className="tile-blue home-court">
+    <section className={`tile-blue home-court ${wide ? "home-court-wide" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <Eyebrow>OUR COURT</Eyebrow>
         {next && (
@@ -550,7 +562,11 @@ function CourtTile({ next }: { next: GatheringDetail | null }) {
         <>
           <div
             className={`my-6 grid gap-2.5 ${
-              labels.length > 1 ? "grid-cols-2" : "grid-cols-1"
+              labels.length > 1
+                ? wide
+                  ? "grid-cols-2 sm:grid-cols-3"
+                  : "grid-cols-2"
+                : "grid-cols-1"
             }`}
           >
             {labels.slice(0, 6).map((label, i) => (

@@ -26,7 +26,7 @@ import {
 import { MemberAvatar } from "~/components/Club";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
-import { FEATURES } from "~/lib/features";
+import { FEATURES, canSeeRecords } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
 import type { Me } from "~/lib/types";
@@ -100,9 +100,6 @@ const allNavItems: NavItem[] = [
     color: "ball",
   },
 ];
-const navItems = allNavItems.filter(
-  (item) => FEATURES.ranking || item.to !== "/app/ranking"
-);
 const adminItem: NavItem = {
   to: "/app/admin",
   label: "클럽 관리",
@@ -116,6 +113,11 @@ export default function AppLayout() {
   const rootData = useRouteLoaderData("root") as { theme?: string } | undefined;
   const theme = rootData?.theme === "dark" ? "dark" : "light";
   const location = useLocation();
+  // 랭킹은 꺼져 있고(FEATURES), 켜더라도 승률을 볼 수 있는 사람(관리자)에게만
+  const navItems = allNavItems.filter(
+    (item) =>
+      item.to !== "/app/ranking" || (FEATURES.ranking && canSeeRecords(user))
+  );
   const items = user.is_admin ? [...navItems, adminItem] : navItems;
   const inCalendar = /^\/app\/(gatherings|day)\//.test(location.pathname);
   const isCurrent = (to: string, isActive: boolean) =>

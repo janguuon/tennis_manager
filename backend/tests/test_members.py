@@ -129,3 +129,26 @@ def test_cannot_delete_self_and_members_cannot_delete(club):
     r = club.c.delete(f"/admin/users/{me}", headers=club.headers["amy"])
     assert r.status_code == 403
     assert club.c.delete("/admin/users/9999", headers=club.admin).status_code == 404
+
+
+def test_records_are_admin_only(club):
+    """승률·전적은 당분간 관리자만: 임원진·정회원은 자기 전적도 못 본다."""
+    club.add_members("amy", "ben", "cal", "dan")
+    club.set_type("amy", "officer")
+    _doubles(club, ["amy", "ben"], ["cal", "dan"], 6, 3)
+    match_id = club.c.get("/matches", headers=club.admin).json()[0]["id"]
+    for who in ("amy", "ben"):
+        h = club.headers[who]
+        me = club.ids[who]
+        for path in (
+            f"/stats/users/{me}",
+            f"/stats/users/{me}/partners",
+            f"/stats/users/{me}/opponents",
+            "/stats/ranking",
+            "/matches",
+            f"/matches/{match_id}",
+        ):
+            assert club.c.get(path, headers=h).status_code == 403, (who, path)
+        # 프로필은 그대로 볼 수 있다
+        assert club.c.get(f"/users/{club.ids['cal']}", headers=h).status_code == 200
+    assert _stats(club, "amy")["overall"]["wins"] == 1

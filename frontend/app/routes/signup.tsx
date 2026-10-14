@@ -90,6 +90,10 @@ export default function SignupPage() {
                 id="username"
                 name="username"
                 className="input"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
                 minLength={3}
                 placeholder="영문/숫자 3자 이상"

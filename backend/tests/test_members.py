@@ -152,3 +152,30 @@ def test_records_are_admin_only(club):
         # 프로필은 그대로 볼 수 있다
         assert club.c.get(f"/users/{club.ids['cal']}", headers=h).status_code == 200
     assert _stats(club, "amy")["overall"]["wins"] == 1
+
+
+def test_username_nickname_duplicates_ignore_case_and_spaces(club):
+    c = club.c
+    r = c.post("/auth/signup", json={"username": "Tesik", "password": "1234", "name": "테식", "nickname": "테식이"})
+    assert r.status_code == 201 and r.json()["user"]["username"] == "tesik"  # 소문자로 저장
+    # 대소문자만 다른 아이디, 공백만 다른 닉네임은 중복
+    r = c.post("/auth/signup", json={"username": "tesik", "password": "1234", "name": "다른"})
+    assert r.status_code == 409 and "아이디" in r.json()["detail"]
+    r = c.post("/auth/signup", json={"username": "other", "password": "1234", "name": "다른", "nickname": " 테식이 "})
+    assert r.status_code == 409 and "닉네임" in r.json()["detail"]
+    r = c.post("/auth/signup", json={"username": "other2", "password": "1234", "name": "또", "nickname": "ABC"})
+    assert r.status_code == 201
+    r = c.post("/auth/signup", json={"username": "other3", "password": "1234", "name": "또또", "nickname": "abc"})
+    assert r.status_code == 409
+
+    for p in c.get("/admin/signups/pending", headers=club.admin).json():
+        c.post(f"/admin/signups/{p['id']}/approve", headers=club.admin)
+    # 휴대폰이 첫 글자를 대문자로 바꿔도 로그인된다
+    for typed in ("tesik", "Tesik", "TESIK", " tesik"):
+        assert c.post("/auth/login", data={"username": typed, "password": "1234"}).status_code == 200, typed
+
+    # 프로필 닉네임 변경도 같은 규칙, 내 닉네임은 그대로 저장 가능, 빈 칸이면 지우기
+    h = club._login("tesik")
+    assert c.patch("/users/me", json={"nickname": "abc "}, headers=h).status_code == 409
+    assert c.patch("/users/me", json={"nickname": "테식이"}, headers=h).status_code == 200
+    assert c.patch("/users/me", json={"nickname": ""}, headers=h).json()["nickname"] is None

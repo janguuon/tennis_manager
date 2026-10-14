@@ -10,6 +10,7 @@ from ..deps import get_current_user
 from ..models import ApprovalStatus, User
 from ..schemas import PasswordUpdate, UserMe, UserRead, UserUpdate
 from ..security import hash_password
+from .auth import nickname_taken
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -29,11 +30,11 @@ def update_my_profile(
     """프로필 수정: 전달된 필드만 부분 갱신한다."""
     data = payload.model_dump(exclude_unset=True)
 
-    # 닉네임 변경 시 중복 검사
-    new_nick = data.get("nickname")
-    if new_nick and new_nick != current_user.nickname:
-        taken = db.scalar(select(User).where(User.nickname == new_nick))
-        if taken:
+    # 닉네임 변경 시 중복 검사 (앞뒤 공백·대소문자 무시, 빈 칸이면 닉네임 지우기)
+    if "nickname" in data:
+        new_nick = (data["nickname"] or "").strip() or None
+        data["nickname"] = new_nick
+        if new_nick and nickname_taken(db, new_nick, exclude_id=current_user.id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="이미 사용 중인 닉네임입니다."
             )

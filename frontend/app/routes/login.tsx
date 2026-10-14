@@ -82,6 +82,9 @@ export default function LoginPage() {
             name="username"
             className="input"
             autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             required
           />
         </div>

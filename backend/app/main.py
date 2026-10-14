@@ -12,7 +12,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  (모델 등록을 위해 import 필요)
 from .database import Base, engine, run_lightweight_migrations
-from .routers import admin, auth, court_bookings, draws, gatherings, matches, stats, users
+from .routers import (
+    admin,
+    auth,
+    court_bookings,
+    draws,
+    gatherings,
+    matches,
+    ratings,
+    stats,
+    users,
+)
 
 
 @asynccontextmanager
@@ -53,6 +63,7 @@ app.include_router(stats.router)
 app.include_router(gatherings.router)
 app.include_router(draws.router)
 app.include_router(court_bookings.router)
+app.include_router(ratings.router)
 
 
 @app.get("/")

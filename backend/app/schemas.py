@@ -463,8 +463,20 @@ class MyPaymentDue(BaseModel):
 # --- 대진표 (Draw) ----------------------------------------------------------
 class DrawGenerateRequest(BaseModel):
     match_type: MatchType
-    method: Literal["random", "skill"] = "random"
+    # random = 다양하게, balanced = 실력 밸런스 (skill 은 예전 이름 → balanced 로 저장)
+    method: Literal["random", "balanced", "skill"] = "random"
+    # 라운드 수. 없으면 모두가 한 경기 이상 뛰도록 정한다.
+    rounds: int | None = Field(None, ge=1, le=12)
     name: str | None = Field(None, max_length=100)
+
+
+class DrawBalance(BaseModel):
+    """관리자 전용: 두 팀 레이팅과 팀1 기대 득점률. 이미 친 경기는 경기 직전 값."""
+
+    team1_rating: int
+    team2_rating: int
+    expected_team1: float
+    tiers: dict[int, str]
 
 
 class DrawMatchRead(BaseModel):
@@ -475,6 +487,9 @@ class DrawMatchRead(BaseModel):
     team1: list[UserBrief] = []
     team2: list[UserBrief] = []
     result_match_id: int | None = None
+    team1_score: int | None = None
+    team2_score: int | None = None
+    balance: DrawBalance | None = None
 
 
 class DrawRead(BaseModel):
@@ -524,3 +539,57 @@ class DrawMatchResultInput(BaseModel):
     played_at: date | None = None
     location: str | None = None
     note: str | None = None
+
+
+# --- 내부 레이팅 · 티어 (관리자 전용) ---------------------------------------
+class RatingRow(BaseModel):
+    user: UserBrief
+    rating: int
+    tier: str
+    games: int
+    wins: int
+    losses: int
+    draws: int
+    provisional: bool  # 배치 경기 중
+    placement_left: int
+    peak: int
+    last_played: date | None = None
+    last_change: int  # 마지막으로 뛴 모임에서 오르내린 값
+
+
+class RatingConfig(BaseModel):
+    base: int
+    k_placement: int
+    k_regular: int
+    placement_games: int
+    hysteresis: int
+    tier_floors: dict[str, int]
+
+
+class RatingBoard(BaseModel):
+    rows: list[RatingRow]
+    counted_matches: int
+    tier_counts: dict[str, int]
+    config: RatingConfig
+
+
+class RatingEventRead(BaseModel):
+    match_id: int
+    played_at: date
+    gathering_id: int | None = None
+    gathering_title: str | None = None
+    partners: list[UserBrief]
+    opponents: list[UserBrief]
+    games_for: int
+    games_against: int
+    outcome: Literal["win", "loss", "draw"]
+    expected: float
+    actual: float
+    delta: float
+    rating_after: int
+    tier_after: str
+
+
+class RatingHistory(BaseModel):
+    row: RatingRow
+    events: list[RatingEventRead]  # 최근 경기부터

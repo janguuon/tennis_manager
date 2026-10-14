@@ -4,8 +4,18 @@ import type {
   MetaFunction,
 } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useOutletContext } from "@remix-run/react";
-import { KeyRound, RotateCcw, Search, Trash2, UserCheck, UserMinus, UserX } from "lucide-react";
+import { Form, Link, useActionData, useLoaderData, useOutletContext } from "@remix-run/react";
+import {
+  ArrowUpRight,
+  BarChart3,
+  KeyRound,
+  RotateCcw,
+  Search,
+  Trash2,
+  UserCheck,
+  UserMinus,
+  UserX,
+} from "lucide-react";
 import { useState } from "react";
 
 import { MemberAvatar } from "~/components/Club";
@@ -207,6 +217,20 @@ export default function AdminPage() {
           </ul>
         )}
       </section>
+
+      {/* 내부 티어 */}
+      <Link to="/app/admin/tiers" className="card-link flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="section-title flex items-center gap-2">
+            <BarChart3 size={16} className="text-slate-400" />
+            내부 티어
+          </h2>
+          <p className="mt-1 text-[13px] font-medium text-slate-500">
+            오테식 모임 대진 결과로 매긴 A~E 티어와 경기별 레이팅 변화를 봐요. 관리자만 볼 수 있어요.
+          </p>
+        </div>
+        <ArrowUpRight size={18} className="shrink-0" />
+      </Link>
 
       {/* 회원 삭제 */}
       <section className="card">

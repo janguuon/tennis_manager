@@ -18,7 +18,6 @@ import {
 import {
   Check,
   CircleAlert,
-  Dices,
   Landmark,
   Lock,
   MapPin,
@@ -27,6 +26,7 @@ import {
   Scale,
   Send,
   Share2,
+  Shuffle,
   Trash2,
   Undo2,
 } from "lucide-react";
@@ -45,6 +45,7 @@ import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao } from "~/lib/kakao";
 import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
+import { DRAW_METHOD_LABEL, TIER_CLASS, expectedSplit } from "~/lib/tier";
 import {
   MATCH_TYPE_LABEL,
   type AttendanceStatus,
@@ -132,6 +133,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         body: {
           match_type: formData.get("match_type"),
           method: formData.get("method"),
+          rounds: Number(formData.get("rounds")) || null,
         },
       });
     } else if (intent === "toggle_payment") {
@@ -944,28 +946,47 @@ export default function GatheringDetailPage() {
 
           {/* 대진 만들기 (주최자/관리자) */}
           {isOrganizer ? (
-            <Form method="post" className="grid grid-cols-2 gap-2 sm:max-w-md">
+            <Form method="post" className="space-y-2 sm:max-w-md">
               <input type="hidden" name="intent" value="generate" />
-              <select
-                name="match_type"
-                aria-label="종목"
-                className="input col-span-2"
-                defaultValue="mens_doubles"
-              >
-                {Object.entries(MATCH_TYPE_LABEL).map(([v, label]) => (
-                  <option key={v} value={v}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <button name="method" value="random" className="btn-ghost">
-                <Dices size={16} />
-                랜덤
-              </button>
-              <button name="method" value="skill" className="btn-primary">
-                <Scale size={16} />
-                실력 균형
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  name="match_type"
+                  aria-label="종목"
+                  className="input"
+                  defaultValue="mens_doubles"
+                >
+                  {Object.entries(MATCH_TYPE_LABEL).map(([v, label]) => (
+                    <option key={v} value={v}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  name="rounds"
+                  aria-label="라운드 수"
+                  className="input"
+                  defaultValue=""
+                >
+                  <option value="">모두 한 경기씩</option>
+                  {[2, 3, 4, 5, 6, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n}라운드
+                    </option>
+                  ))}
+                </select>
+                <button name="method" value="random" className="btn-ghost">
+                  <Shuffle size={16} />
+                  다양하게
+                </button>
+                <button name="method" value="balanced" className="btn-primary">
+                  <Scale size={16} />
+                  실력 밸런스
+                </button>
+              </div>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                다양하게는 덜 만난 사람끼리, 실력 밸런스는 오테식 모임 경기 기록으로 코트마다 접전이 되게 짜요. 코트보다 사람이
+                많으면 덜 뛴 사람부터 들어가요.
+              </p>
             </Form>
           ) : null}
 
@@ -975,11 +996,12 @@ export default function GatheringDetailPage() {
               <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
                 <p className="text-[15px] font-extrabold">
                   대진표 ·{" "}
-                  {draw.generation_method === "skill"
-                    ? "실력 균형"
-                    : draw.generation_method === "random"
-                    ? "랜덤"
-                    : "수동"}
+                  {DRAW_METHOD_LABEL[draw.generation_method] ?? "수동"}
+                  {user.is_admin && !club ? (
+                    <span className="ml-2 align-middle text-xs font-semibold text-slate-500">
+                      일반 벙개라 티어에 반영되지 않아요
+                    </span>
+                  ) : null}
                 </p>
                 {isOrganizer ? (
                   <Form method="post">
@@ -1002,6 +1024,7 @@ export default function GatheringDetailPage() {
                     match={m}
                     canRecord={isOrganizer}
                     courtLabels={courtLabels}
+                    club={club}
                   />
                 ))}
               </div>
@@ -1424,10 +1447,12 @@ function DrawMatchRow({
   match,
   canRecord,
   courtLabels,
+  club,
 }: {
   match: DrawMatch;
   canRecord: boolean;
   courtLabels: string[];
+  club: boolean;
 }) {
   const navigation = useNavigation();
   const recorded = match.result_match_id !== null;
@@ -1438,82 +1463,96 @@ function DrawMatchRow({
     match.court_number != null && courtLabels[match.court_number - 1]
       ? courtLabels[match.court_number - 1]
       : match.court_number ?? "—";
+  // 관리자에게만 온다
+  const balance = match.balance;
+  const team = (players: UserBrief[]) => (
+    <div className="space-y-3">
+      {players.map((p) => (
+        <Link key={p.id} to={`/app/members/${p.id}`} className="draw-player">
+          <MemberAvatar user={p} className="!h-8 !w-8 shrink-0 !text-xs" />
+          <span className="truncate">{p.name}</span>
+          {balance?.tiers[p.id] ? (
+            <span
+              className={`${TIER_CLASS[balance.tiers[p.id]]} !h-5 !w-5 !rounded-md !text-[11px]`}
+              title="내부 티어 (관리자만 보여요)"
+            >
+              {balance.tiers[p.id]}
+            </span>
+          ) : null}
+        </Link>
+      ))}
+    </div>
+  );
   return (
     <div className="draw-card">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="badge-gray">
           COURT {courtLabel} · {match.round_number ?? 1}R
         </span>
-        <span className="text-xs text-slate-500 dark:text-slate-400">
+        <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          {balance ? (
+            <span
+              className="balance-chip"
+              title={`팀 레이팅 ${balance.team1_rating} : ${balance.team2_rating} · ${
+                recorded ? "경기 직전 예상 득점률" : "예상 득점률"
+              } (관리자만 보여요)`}
+            >
+              예상 {expectedSplit(balance.expected_team1)}
+            </span>
+          ) : null}
           {MATCH_TYPE_LABEL[match.match_type]}
         </span>
       </div>
       <div className="draw-teams">
-        {[match.team1, match.team2].map((team, i) => (
-          <div key={i} className={i ? "contents" : "space-y-3"}>
-            {i === 1 && (
-              <span className="text-center font-display text-xs text-slate-400">
-                VS
-              </span>
-            )}
-            {i === 1 ? (
-              <div className="space-y-3">
-                {team.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/app/members/${p.id}`}
-                    className="draw-player"
-                  >
-                    <MemberAvatar user={p} className="!h-8 !w-8 !text-xs" />
-                    <span className="truncate">{p.name}</span>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              team.map((p) => (
-                <Link
-                  key={p.id}
-                  to={`/app/members/${p.id}`}
-                  className="draw-player"
-                >
-                  <MemberAvatar user={p} className="!h-8 !w-8 !text-xs" />
-                  <span className="truncate">{p.name}</span>
-                </Link>
-              ))
-            )}
-          </div>
-        ))}
+        {team(match.team1)}
+        <span className="text-center font-display text-xs text-slate-400">
+          VS
+        </span>
+        {team(match.team2)}
       </div>
       <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
         {recorded ? (
           <span className="badge-gray">
             <Check size={13} />
-            결과 기록 완료
+            {match.team1_score !== null && match.team2_score !== null
+              ? `결과 ${match.team1_score}:${match.team2_score}`
+              : "결과 기록 완료"}
           </span>
         ) : canRecord ? (
-          <Form method="post" className="flex flex-wrap items-center gap-2">
+          <Form method="post" className="space-y-2">
             <input type="hidden" name="intent" value="result" />
             <input type="hidden" name="draw_match_id" value={match.id} />
-            <input
-              name="team1_score"
-              type="number"
-              min="0"
-              className="input !w-16 !px-2 !py-2 text-center"
-              placeholder="0"
-              aria-label="팀1 점수"
-            />
-            <span className="text-slate-400">:</span>
-            <input
-              name="team2_score"
-              type="number"
-              min="0"
-              className="input !w-16 !px-2 !py-2 text-center"
-              placeholder="0"
-              aria-label="팀2 점수"
-            />
-            <button className="btn-primary btn-sm ml-auto" disabled={busy}>
-              {busy ? "저장 중…" : "결과 기록"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                name="team1_score"
+                type="number"
+                min="0"
+                max="99"
+                className="input !w-16 !px-2 !py-2 text-center"
+                placeholder="0"
+                aria-label="팀1 게임 수"
+                required={club}
+              />
+              <span className="text-slate-400">:</span>
+              <input
+                name="team2_score"
+                type="number"
+                min="0"
+                max="99"
+                className="input !w-16 !px-2 !py-2 text-center"
+                placeholder="0"
+                aria-label="팀2 게임 수"
+                required={club}
+              />
+              <button className="btn-primary btn-sm ml-auto" disabled={busy}>
+                {busy ? "저장 중…" : "결과 기록"}
+              </button>
+            </div>
+            {club ? (
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                게임 수로 적어 주세요. 5:5 해피게임은 5:5, 타이브레이크는 7:6.
+              </p>
+            ) : null}
           </Form>
         ) : (
           <p className="text-center text-xs text-slate-500 dark:text-slate-400">

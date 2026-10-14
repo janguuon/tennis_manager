@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import matchmaking, visibility
+from .. import matchmaking, rating, visibility
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import (
@@ -29,6 +29,7 @@ from ..models import (
     User,
 )
 from ..schemas import (
+    DrawBalance,
     DrawCreate,
     DrawGenerateRequest,
     DrawMatchCreate,
@@ -56,41 +57,88 @@ def _draw_match_player_ids(dm: DrawMatch) -> list[int]:
     ]
 
 
-def _build_draw_read(draw: Draw, db: Session) -> DrawRead:
-    # 대진에 등장하는 모든 회원을 한 번에 로드
+def _balance(
+    dm: DrawMatch, book: rating.RatingBook | None
+) -> DrawBalance | None:
+    """관리자에게만 보여 주는 예상 밸런스. 결과가 있으면 그 경기 직전 값."""
+    if book is None:
+        return None
+    t1 = [p for p in (dm.team1_player1_id, dm.team1_player2_id) if p is not None]
+    t2 = [p for p in (dm.team2_player1_id, dm.team2_player2_id) if p is not None]
+    if not t1 or not t2:
+        return None
+    tiers = {uid: book.get(uid).tier for uid in t1 + t2}
+    pre = book.pre_match.get(dm.result_match_id) if dm.result_match_id else None
+    if pre is not None:
+        r1, r2, e1 = pre.team1_rating, pre.team2_rating, pre.expected_team1
+    else:
+        r1 = sum(book.rating(u) for u in t1) / len(t1)
+        r2 = sum(book.rating(u) for u in t2) / len(t2)
+        e1 = rating.expected(r1, r2)
+    return DrawBalance(
+        team1_rating=round(r1), team2_rating=round(r2), expected_team1=round(e1, 3), tiers=tiers
+    )
+
+
+def _draw_match_reads(
+    dms: list[DrawMatch], db: Session, book: rating.RatingBook | None = None
+) -> list[DrawMatchRead]:
+    # 대진에 등장하는 모든 회원과 입력된 결과를 한 번에 로드
     ids: set[int] = set()
-    for dm in draw.draw_matches:
+    for dm in dms:
         ids.update(_draw_match_player_ids(dm))
     users = {
         u.id: UserBrief.model_validate(u)
         for u in (db.scalars(select(User).where(User.id.in_(ids))).all() if ids else [])
     }
+    result_ids = [dm.result_match_id for dm in dms if dm.result_match_id is not None]
+    results = {
+        m.id: m
+        for m in (
+            db.scalars(select(Match).where(Match.id.in_(result_ids))).all() if result_ids else []
+        )
+    }
 
     def briefs(*pids):
         return [users[p] for p in pids if p is not None and p in users]
 
-    matches = [
-        DrawMatchRead(
-            id=dm.id,
-            court_number=dm.court_number,
-            round_number=dm.round_number,
-            match_type=dm.match_type,
-            team1=briefs(dm.team1_player1_id, dm.team1_player2_id),
-            team2=briefs(dm.team2_player1_id, dm.team2_player2_id),
-            result_match_id=dm.result_match_id,
+    reads = []
+    for dm in dms:
+        result = results.get(dm.result_match_id) if dm.result_match_id else None
+        reads.append(
+            DrawMatchRead(
+                id=dm.id,
+                court_number=dm.court_number,
+                round_number=dm.round_number,
+                match_type=dm.match_type,
+                team1=briefs(dm.team1_player1_id, dm.team1_player2_id),
+                team2=briefs(dm.team2_player1_id, dm.team2_player2_id),
+                result_match_id=dm.result_match_id,
+                team1_score=result.team1_score if result else None,
+                team2_score=result.team2_score if result else None,
+                balance=_balance(dm, book),
+            )
         )
-        for dm in sorted(
-            draw.draw_matches, key=lambda d: ((d.round_number or 0), (d.court_number or 0))
-        )
-    ]
+    return reads
+
+
+def _build_draw_read(draw: Draw, db: Session, book: rating.RatingBook | None = None) -> DrawRead:
+    ordered = sorted(
+        draw.draw_matches, key=lambda d: ((d.round_number or 0), (d.court_number or 0))
+    )
     return DrawRead(
         id=draw.id,
         gathering_id=draw.gathering_id,
         name=draw.name,
         generation_method=draw.generation_method,
         created_at=draw.created_at,
-        matches=matches,
+        matches=_draw_match_reads(ordered, db, book),
     )
+
+
+def _book_for(db: Session, user: User) -> rating.RatingBook | None:
+    """티어·레이팅은 관리자만 본다."""
+    return rating.load(db) if user.is_admin else None
 
 
 def _load_draw(db: Session, draw_id: int) -> Draw:
@@ -106,9 +154,10 @@ def _require_organizer(db: Session, gathering_id: int, user: User) -> Gathering:
     g = db.get(Gathering, gathering_id)
     if not g:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
-    if g.created_by != user.id and not user.is_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
-    return g
+    # 모임 관리 권한과 같다: 오테식 모임은 클럽 일정이라 임원진도 대진을 짜고 결과를 입력한다
+    if g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff):
+        return g
+    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
 
 
 # --- 자동 생성 --------------------------------------------------------------
@@ -142,14 +191,40 @@ def generate_draw(
             detail=f"대진을 만들기엔 참석 인원이 부족합니다. (필요 {need}명, 현재 {len(attendees)}명)",
         )
 
-    generated = matchmaking.generate(
-        list(attendees), gathering.court_count, payload.match_type, payload.method
+    method = "balanced" if payload.method in ("balanced", "skill") else "random"
+    book = rating.load(db)
+    partners, opponents = matchmaking.recent_meetings(book.games, gathering.event_date)
+    earlier = db.scalars(
+        select(DrawMatch).join(Draw).where(Draw.gathering_id == gathering_id)
+    ).all()
+    context = matchmaking.MatchContext(
+        ratings={uid: p.rating for uid, p in book.players.items()},
+        partners=partners,
+        opponents=opponents,
+        earlier=[
+            (
+                [p for p in (dm.team1_player1_id, dm.team1_player2_id) if p is not None],
+                [p for p in (dm.team2_player1_id, dm.team2_player2_id) if p is not None],
+            )
+            for dm in earlier
+        ],
     )
+    try:
+        generated = matchmaking.generate(
+            list(attendees),
+            gathering.court_count,
+            payload.match_type,
+            method,
+            rounds=payload.rounds,
+            context=context,
+        )
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     draw = Draw(
         gathering_id=gathering_id,
         name=payload.name,
-        generation_method=payload.method,
+        generation_method=method,
         draw_matches=[
             DrawMatch(
                 court_number=g["court_number"],
@@ -165,7 +240,7 @@ def generate_draw(
     )
     db.add(draw)
     db.commit()
-    return _build_draw_read(_load_draw(db, draw.id), db)
+    return _build_draw_read(_load_draw(db, draw.id), db, book if current_user.is_admin else None)
 
 
 # --- 수동 생성/편집 ---------------------------------------------------------
@@ -207,16 +282,17 @@ def list_draws(
         .options(selectinload(Draw.draw_matches))
         .order_by(Draw.created_at)
     ).all()
-    return [_build_draw_read(d, db) for d in draws]
+    book = _book_for(db, current_user) if draws else None
+    return [_build_draw_read(d, db, book) for d in draws]
 
 
 @router.get("/draws/{draw_id}", response_model=DrawRead)
 def get_draw(
     draw_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    return _build_draw_read(_load_draw(db, draw_id), db)
+    return _build_draw_read(_load_draw(db, draw_id), db, _book_for(db, current_user))
 
 
 @router.delete("/draws/{draw_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -315,6 +391,13 @@ def record_draw_match_result(
             status.HTTP_400_BAD_REQUEST, detail="대진의 선수 구성이 완전하지 않습니다."
         )
 
+    if gathering.is_club and payload.team1_score + payload.team2_score == 0:
+        # 오테식 모임 대진은 게임 수로 레이팅을 매기므로 점수가 꼭 필요하다.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="점수를 게임 수로 입력해 주세요. (5:5 무승부, 타이브레이크는 7:6)",
+        )
+
     winner = payload.winner_team
     if winner is None:
         if payload.team1_score > payload.team2_score:
@@ -347,21 +430,4 @@ def record_draw_match_result(
 
 # --- 단건 직렬화 ------------------------------------------------------------
 def _single_draw_match_read(dm: DrawMatch, db: Session) -> DrawMatchRead:
-    ids = _draw_match_player_ids(dm)
-    users = {
-        u.id: UserBrief.model_validate(u)
-        for u in (db.scalars(select(User).where(User.id.in_(ids))).all() if ids else [])
-    }
-
-    def briefs(*pids):
-        return [users[p] for p in pids if p is not None and p in users]
-
-    return DrawMatchRead(
-        id=dm.id,
-        court_number=dm.court_number,
-        round_number=dm.round_number,
-        match_type=dm.match_type,
-        team1=briefs(dm.team1_player1_id, dm.team1_player2_id),
-        team2=briefs(dm.team2_player1_id, dm.team2_player2_id),
-        result_match_id=dm.result_match_id,
-    )
+    return _draw_match_reads([dm], db)[0]

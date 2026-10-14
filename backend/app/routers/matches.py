@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import Gathering, Match, MatchPlayer, MatchType, TeamSide, User
+from ..models import DrawMatch, Gathering, Match, MatchPlayer, MatchType, TeamSide, User
 from ..schemas import MatchCreate, MatchRead, MatchUpdate
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -158,5 +158,8 @@ def delete_match(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="경기를 찾을 수 없습니다.")
     if match.recorded_by not in (None, current_user.id) and not current_user.is_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="삭제 권한이 없습니다.")
+    # 대진에서 입력한 결과였다면 대진을 '경기 예정'으로 되돌려 다시 입력할 수 있게 한다
+    for dm in db.scalars(select(DrawMatch).where(DrawMatch.result_match_id == match_id)):
+        dm.result_match_id = None
     db.delete(match)
     db.commit()

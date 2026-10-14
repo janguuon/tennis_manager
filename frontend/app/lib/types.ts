@@ -246,6 +246,71 @@ export interface DrawMatch {
   team1: UserBrief[];
   team2: UserBrief[];
   result_match_id: number | null;
+  team1_score: number | null;
+  team2_score: number | null;
+  /** 관리자에게만 온다: 두 팀 레이팅과 팀1 기대 득점률(친 경기는 경기 직전 값) */
+  balance: DrawBalance | null;
+}
+
+export type Tier = "A" | "B" | "C" | "D" | "E";
+
+export interface DrawBalance {
+  team1_rating: number;
+  team2_rating: number;
+  expected_team1: number;
+  tiers: Record<string, Tier>;
+}
+
+/** 내부 레이팅 · 티어 (관리자 전용) */
+export interface RatingRow {
+  user: UserBrief;
+  rating: number;
+  tier: Tier;
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  provisional: boolean;
+  placement_left: number;
+  peak: number;
+  last_played: string | null;
+  last_change: number;
+}
+
+export interface RatingBoard {
+  rows: RatingRow[];
+  counted_matches: number;
+  tier_counts: Record<Tier, number>;
+  config: {
+    base: number;
+    k_placement: number;
+    k_regular: number;
+    placement_games: number;
+    hysteresis: number;
+    tier_floors: Record<string, number>;
+  };
+}
+
+export interface RatingEvent {
+  match_id: number;
+  played_at: string;
+  gathering_id: number | null;
+  gathering_title: string | null;
+  partners: UserBrief[];
+  opponents: UserBrief[];
+  games_for: number;
+  games_against: number;
+  outcome: "win" | "loss" | "draw";
+  expected: number;
+  actual: number;
+  delta: number;
+  rating_after: number;
+  tier_after: Tier;
+}
+
+export interface RatingHistory {
+  row: RatingRow;
+  events: RatingEvent[];
 }
 
 export interface Draw {

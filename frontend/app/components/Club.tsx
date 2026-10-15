@@ -39,7 +39,7 @@ const STAR_STEP = 24;
 
 /**
  * 축구 엠블럼 위 별처럼 동그라미 위쪽에 별을 둥글게 둘러 놓는다.
- * 12시를 가운데로 좌우 대칭이 되게 펼치고, 가운데부터 금 → 은 → 동 순서로 채운다.
+ * 12시를 가운데로 좌우 대칭이 되게 펼치고, 왼쪽부터 금별들 → 은별들 → 동별들 순서로 놓는다.
  */
 function crestStars(u: AwardCounts) {
   const stars = [
@@ -48,12 +48,9 @@ function crestStars(u: AwardCounts) {
     ...Array<string>(u.award_bronze ?? 0).fill(STAR_CLASS[2]),
   ];
   const n = stars.length;
-  // 가운데에 가까운 자리부터 (같으면 오른쪽 먼저)
-  const angles = Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * STAR_STEP).sort(
-    (a, b) => Math.abs(a) - Math.abs(b) || b - a
-  );
   return stars.map((cls, k) => {
-    const rad = (angles[k] * Math.PI) / 180;
+    // 왼쪽(음수)에서 오른쪽(양수)으로, 12시 기준 대칭
+    const rad = (((k - (n - 1) / 2) * STAR_STEP) * Math.PI) / 180;
     return {
       cls,
       left: `${50 + STAR_RADIUS * Math.sin(rad)}%`,

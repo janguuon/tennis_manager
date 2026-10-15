@@ -134,7 +134,7 @@ export default function MemberDetailPage() {
           <section className="card lg:col-span-2">
             <h2 className="text-[15px] font-extrabold">대회 입상 별</h2>
             <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-              테니스 대회 입상 횟수만큼 프로필 동그라미 위에 별이 둘러져요(가운데부터 금 → 은 → 동). 종류별
+              테니스 대회 입상 횟수만큼 프로필 동그라미 위에 별이 둘러져요(왼쪽부터 금 → 은 → 동). 종류별
               5개, 모두 합쳐 9개까지 · 모두 0이면 지워져요. 관리자만 정할 수 있어요.
             </p>
             <Form method="post" className="mt-3 flex flex-wrap items-center gap-2">

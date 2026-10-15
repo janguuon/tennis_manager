@@ -429,8 +429,9 @@ function NextGatheringTile({
       ? "waiting"
       : pending ?? myVote;
   const locked = daysLeft <= ATTENDANCE_LOCK_DAYS;
-  // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터
-  const guestVoteLocked = !me.is_admin && me.member_type === "guest" && !next.guest_vote_open;
+  // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터 (직접 만든 일정은 바로)
+  const guestVoteLocked =
+    !me.is_admin && me.member_type === "guest" && !next.guest_vote_open && next.created_by !== me.id;
   const href = `/app/gatherings/${next.id}?from=${next.event_date}`;
   return (
     <section className="tile-orange home-next">

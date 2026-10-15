@@ -60,13 +60,17 @@ def vote_open_at_for(user: User, event_date: date) -> datetime | None:
 
 
 def is_open_for(user: User, gathering: Gathering, now: datetime | None = None) -> bool:
-    """일정이 보이는지 (목록·상세·명단·대진표)."""
+    """일정이 보이는지 (목록·상세·명단·대진표). 직접 만든 일정은 늘 보인다."""
+    if gathering.created_by == user.id:
+        return True
     opens = view_open_at_for(user, gathering.event_date)
     return opens is None or (now or now_kst()) >= opens
 
 
 def can_vote(user: User, gathering: Gathering, now: datetime | None = None) -> bool:
-    """참석 투표를 할 수 있는지."""
+    """참석 투표를 할 수 있는지. 직접 만든 일정(일반 벙개 등)은 만든 사람이 바로 투표할 수 있다."""
+    if gathering.created_by == user.id:
+        return True
     opens = vote_open_at_for(user, gathering.event_date)
     return opens is None or (now or now_kst()) >= opens
 

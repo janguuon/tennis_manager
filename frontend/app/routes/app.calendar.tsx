@@ -22,26 +22,19 @@ import {
   FileSpreadsheet,
   List,
   Plus,
-  Share2,
   Upload,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { CopyButton } from "~/components/CopyButton";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
+import { ScheduleShare } from "~/components/ScheduleShare";
 import { ApiError, api } from "~/lib/api.server";
 import { KIND_LABEL, KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
-import { KAKAO_TEXT_LIMIT, shareTextToKakao } from "~/lib/kakao";
-import {
-  scheduleNoticePath,
-  scheduleNoticeShort,
-  scheduleNoticeText,
-  type NewSchedule,
-} from "~/lib/schedule-notice";
+import type { NewSchedule } from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
 import {
   GATHERING_STATUS_CHIP,
@@ -148,12 +141,34 @@ export async function action({ request }: ActionFunctionArgs) {
   if (body.kind === "flash") body.court_bookings = [];
 
   try {
-    await api("/gatherings", { method: "POST", token, body });
-    return json({ ok: true, error: null as string | null });
+    const g = await api<Gathering>("/gatherings", {
+      method: "POST",
+      token,
+      body,
+    });
+    // 등록 뒤 단톡방 알림 창에 쓸 내용 (공개·투표 시각 포함)
+    const created: NewSchedule = {
+      id: g.id,
+      title: g.title,
+      kind: g.kind,
+      event_date: g.event_date,
+      start_time: g.start_time,
+      end_time: g.end_time,
+      location: g.location,
+      court_numbers: g.court_numbers,
+      member_open_at: g.member_open_at,
+      guest_vote_open_at: g.guest_vote_open_at,
+      open_to_members: g.open_to_members,
+      guest_vote_open: g.guest_vote_open,
+    };
+    return json({ ok: true, error: null as string | null, created });
   } catch (err) {
     const message =
       err instanceof ApiError ? err.message : "모임 생성에 실패했습니다.";
-    return json({ ok: false, error: message }, { status: 400 });
+    return json(
+      { ok: false, error: message, created: null as NewSchedule | null },
+      { status: 400 }
+    );
   }
 }
 
@@ -187,6 +202,8 @@ export default function CalendarPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
   const [showCreate, setShowCreate] = useState(false);
+  // 방금 올린 일정: 단톡방 알림 창
+  const [created, setCreated] = useState<NewSchedule | null>(null);
   const [importing, setImporting] = useState(false);
   const [fileName, setFileName] = useState("");
   const importFetcher = useFetcher<{
@@ -204,9 +221,12 @@ export default function CalendarPage() {
   const [endTime, setEndTime] = useState("");
   const [endEdited, setEndEdited] = useState(false);
 
-  // 모임 생성 성공 시 모달 닫기
+  // 모임 생성 성공 시 등록 창을 닫고 단톡방 알림 창을 띄운다
   useEffect(() => {
-    if (actionData?.ok) setShowCreate(false);
+    if (actionData?.ok) {
+      setShowCreate(false);
+      setCreated(actionData.created);
+    }
   }, [actionData]);
 
   // 엑셀 창을 열 때마다 고른 파일 초기화
@@ -746,6 +766,34 @@ export default function CalendarPage() {
         </Modal>
       ) : null}
 
+      {/* 일정을 올린 뒤: 단톡방에 알리기 */}
+      {created ? (
+        <Modal title="일정을 올렸어요" onClose={() => setCreated(null)}>
+          <div className="space-y-5">
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+              단톡방에 새 일정을 알려 주세요. 카톡방을 고르면 아래 문구가
+              보내져요.
+            </p>
+            <ScheduleShare items={[created]} preview />
+            <div className="flex gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <Link
+                to={`/app/gatherings/${created.id}`}
+                className="btn-ghost flex-1"
+              >
+                모임 보기
+              </Link>
+              <button
+                type="button"
+                className="btn-secondary flex-1"
+                onClick={() => setCreated(null)}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
       {/* 엑셀 일괄 등록 */}
       {importing ? (
         <Modal title="엑셀로 일정 등록" onClose={() => setImporting(false)}>
@@ -841,7 +889,12 @@ export default function CalendarPage() {
                       : ""}
                   </p>
                   {importFetcher.data.items?.length ? (
-                    <ImportNotice items={importFetcher.data.items} />
+                    <div className="space-y-2 border-t border-ink/10 pt-2.5 dark:border-white/10">
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        단톡방에 새 일정을 알려 주세요.
+                      </p>
+                      <ScheduleShare items={importFetcher.data.items} />
+                    </div>
                   ) : null}
                   {importFetcher.data.skips &&
                   importFetcher.data.skips.length > 0 ? (
@@ -872,42 +925,6 @@ export default function CalendarPage() {
         </Modal>
       ) : null}
     </>
-  );
-}
-
-/** 엑셀로 새로 올린 일정을 단톡방에 알리기: 카톡 공유(200자 안으로 줄임) · 전체 문구 복사 */
-function ImportNotice({ items }: { items: NewSchedule[] }) {
-  const path = scheduleNoticePath(items);
-  const [fullText, setFullText] = useState("");
-  // 복사 문구의 링크는 지금 접속한 주소 기준 (브라우저에서만 알 수 있다)
-  useEffect(() => {
-    setFullText(
-      scheduleNoticeText(items, `${window.location.origin}${path}`)
-    );
-  }, [items, path]);
-  return (
-    <div className="space-y-2 border-t border-ink/10 pt-2.5 dark:border-white/10">
-      <p className="text-xs text-slate-600 dark:text-slate-300">
-        단톡방에 새 일정을 알려 주세요.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="btn-accent btn-sm"
-          onClick={() =>
-            shareTextToKakao({
-              text: scheduleNoticeShort(items, KAKAO_TEXT_LIMIT),
-              path,
-              buttonTitle: "일정 보기",
-            })
-          }
-        >
-          <Share2 size={14} />
-          카톡방에 알리기
-        </button>
-        <CopyButton text={fullText} label="문구 복사" />
-      </div>
-    </div>
   );
 }
 

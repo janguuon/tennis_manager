@@ -125,3 +125,31 @@ def test_open_time_text():
     assert format_open_at(datetime(2026, 10, 16, 10, 0)) == "10월 16일(금) 오전 10시"
     assert format_open_at(datetime(2026, 10, 13, 0, 0)) == "10월 13일(화) 0시"
     assert format_open_at(datetime(2026, 10, 13, 15, 30)) == "10월 13일(화) 오후 3시 30분"
+
+
+def test_creator_always_sees_own_gathering(club, fixed_now):
+    """정회원·게스트가 만든 일반 벙개는 공개 시각 전이라도 만든 사람에게 보이고 바로 투표할 수 있다."""
+    club.add_members("amy", "cal", "gus")
+    club.set_type("gus", "guest")
+    r = club.c.post(
+        "/gatherings",
+        json={"title": "다음 주 벙개", "kind": "flash", "event_date": NEXT_WED},
+        headers=club.headers["amy"],
+    )
+    assert r.status_code == 201
+    wed = r.json()["id"]
+    assert NEXT_WED in _visible(club, "amy")
+    assert club.c.get(f"/gatherings/{wed}", headers=club.headers["amy"]).status_code == 200
+    assert club.vote(wed, "amy").status_code == 200
+    # 다른 정회원에게는 그대로 금요일 오전 10시에 공개
+    assert NEXT_WED not in _visible(club, "cal")
+    assert club.c.get(f"/gatherings/{wed}", headers=club.headers["cal"]).status_code == 403
+
+    # 게스트가 만든 이번 주 벙개: 3일 전이 아니어도 만든 게스트는 투표할 수 있다
+    fri = club.c.post(
+        "/gatherings",
+        json={"title": "게스트 벙개", "kind": "flash", "event_date": THIS_FRI},
+        headers=club.headers["gus"],
+    ).json()["id"]
+    assert club.vote(fri, "gus").status_code == 200
+    assert club.vote(fri, "cal").status_code == 200

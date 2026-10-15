@@ -52,7 +52,7 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           {g.status !== "planned" ? (
             <span className={GATHERING_STATUS_BADGE[g.status]}>{GATHERING_STATUS_LABEL[g.status]}</span>
           ) : null}
-          {/* 임원진·관리자에게만 보이는, 아직 정회원에게 공개 전인 일정 */}
+          {/* 아직 정회원에게 공개 전인 일정 (임원진·관리자, 직접 만든 사람에게만 보인다) */}
           {!g.open_to_members ? (
             <span className="badge-gray shrink-0">
               <Lock size={11} />

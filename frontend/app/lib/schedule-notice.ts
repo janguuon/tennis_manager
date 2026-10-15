@@ -1,9 +1,9 @@
-// 엑셀로 새 일정을 올린 뒤 단톡방에 알릴 문구 (카톡 공유 · 복사)
+// 새 일정을 올린 뒤(한 건 등록 · 엑셀 등록) 단톡방에 알릴 문구 (카톡 공유 · 복사)
 import { KIND_LABEL } from "~/lib/club";
-import { WEEKDAYS } from "~/lib/status";
+import { WEEKDAYS, formatOpenAt } from "~/lib/status";
 import type { GatheringKind } from "~/lib/types";
 
-/** 백엔드 /gatherings/import 결과의 items 한 건 */
+/** 새로 올린 일정 한 건 (엑셀 등록 결과 items, 또는 한 건 등록 응답) */
 export type NewSchedule = {
   id: number;
   title: string;
@@ -13,6 +13,11 @@ export type NewSchedule = {
   end_time: string | null;
   location: string | null;
   court_numbers: string | null;
+  // 한 건 등록 응답에만 있다: 이 일정이 언제 공개되고 투표가 열리는지
+  member_open_at?: string | null;
+  guest_vote_open_at?: string | null;
+  open_to_members?: boolean;
+  guest_vote_open?: boolean;
 };
 
 /** 단톡방 문구의 종류 이름: 정모만 줄이고, 벙개는 오테식/일반을 구분해 그대로 */
@@ -22,9 +27,24 @@ const NOTICE_NAME: Record<GatheringKind, string> = {
   flash: "일반 벙개",
 };
 
-const header = (n: number) => `🎾 새 코트 일정 ${n}건이 올라왔어요`;
+const header = (n: number) =>
+  n === 1 ? "🎾 새 코트 일정이 올라왔어요" : `🎾 새 코트 일정 ${n}건이 올라왔어요`;
 const FOOTER =
   "정회원 참석 투표는 전주 금요일 오전 10시부터, 게스트 투표는 모임 3일 전 0시부터 열려요.";
+
+/** 한 건이면 그 일정의 공개·투표 시각으로, 여러 건이면 공통 규칙으로 */
+function footer(items: NewSchedule[]): string {
+  const g = items.length === 1 ? items[0] : null;
+  if (!g?.member_open_at || !g.guest_vote_open_at) return FOOTER;
+  const member = formatOpenAt(g.member_open_at);
+  const guest = formatOpenAt(g.guest_vote_open_at);
+  if (g.open_to_members && g.guest_vote_open)
+    return "지금 바로 참석 투표할 수 있어요.";
+  if (g.open_to_members)
+    return `정회원은 지금 바로, 게스트는 ${guest}부터 참석 투표할 수 있어요.`;
+  if (member === guest) return `${member}에 공개되고 참석 투표가 열려요.`;
+  return `${member}에 공개돼요. 게스트 투표는 ${guest}부터 열려요.`;
+}
 
 /** "3, 5" → "3·5번". 숫자가 아닌 이름이 섞이면 그대로 둔다. */
 function courtText(raw: string | null): string {
@@ -59,7 +79,7 @@ export function scheduleNoticeText(items: NewSchedule[], url: string): string {
     header(items.length),
     ...items.map(scheduleLine),
     "",
-    FOOTER,
+    footer(items),
     `👉 일정 보기: ${url}`,
   ].join("\n");
 }
@@ -79,7 +99,7 @@ export function scheduleNoticeShort(
       ...lines.slice(0, k),
       ...(k < lines.length ? [`외 ${lines.length - k}건`] : []),
       "",
-      FOOTER,
+      footer(items),
     ].join("\n");
   let shown = lines.length;
   while (shown > 0 && build(shown).length > limit) shown--;
@@ -87,8 +107,9 @@ export function scheduleNoticeShort(
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 }
 
-/** 공유 버튼이 여는 캘린더: 가장 빠른 일정의 달 */
+/** 공유 버튼이 여는 화면: 한 건이면 그 모임, 여러 건이면 가장 빠른 일정의 달 */
 export function scheduleNoticePath(items: NewSchedule[]): string {
+  if (items.length === 1) return `/app/gatherings/${items[0].id}`;
   return items.length
     ? `/app/calendar?month=${items[0].event_date.slice(0, 7)}`
     : "/app/calendar";

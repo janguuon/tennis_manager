@@ -326,9 +326,12 @@ export default function GatheringDetailPage() {
   const full = isFull(gathering, attendees.length);
   const myRank = waiting.findIndex((p) => p.user.id === user.id) + 1;
   const absentLocked = attendanceLocked && myAttending;
-  // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터
+  // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터 (직접 만든 일정은 바로)
   const guestVoteLocked =
-    !user.is_admin && user.member_type === "guest" && !gathering.guest_vote_open;
+    !user.is_admin &&
+    user.member_type === "guest" &&
+    !gathering.guest_vote_open &&
+    gathering.created_by !== user.id;
   const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
   const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
   // 낼 돈이 있는 참석자: 일반 벙개는 전원, 오테식 모임은 게스트(이미 입금 기록이 있는 사람 포함)
@@ -494,7 +497,7 @@ export default function GatheringDetailPage() {
         <p className="flex items-start gap-2 rounded-2xl bg-house-lav/30 px-4 py-3 text-sm font-semibold">
           <Lock size={16} className="mt-0.5 shrink-0" />
           {!gathering.open_to_members
-            ? `아직 임원진만 보는 일정이에요. 정회원·게스트에게는 ${formatOpenAt(gathering.member_open_at)}에 공개되고, 게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요.`
+            ? `${staff ? "아직 임원진만 보는 일정이에요." : "직접 만든 일정이라 먼저 보여요."} 정회원·게스트에게는 ${formatOpenAt(gathering.member_open_at)}에 공개되고, 게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요.`
             : `게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.`}
         </p>
       ) : null}

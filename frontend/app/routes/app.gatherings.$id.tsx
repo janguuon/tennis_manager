@@ -258,6 +258,8 @@ export default function GatheringDetailPage() {
   // 주최자·관리자. 오테식 모임은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
   const isOrganizer =
     gathering.created_by === user.id || user.is_admin || (club && staff);
+  // 참석 취소 대신 해 주기(3일 전 마감 뒤 요청 처리): 주최자, 그리고 관리자·임원진·총무는 모든 모임에서
+  const canManageAttendance = isOrganizer || staff;
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
   const settle = canSettle(user);
   const canPay = settle || (!club && gathering.created_by === user.id);
@@ -326,7 +328,8 @@ export default function GatheringDetailPage() {
   const waiting = waitingList(gathering.participants);
   const full = isFull(gathering, attendees.length);
   const myRank = waiting.findIndex((p) => p.user.id === user.id) + 1;
-  const absentLocked = attendanceLocked && myAttending;
+  // 관리자·임원진·총무는 마감 뒤에도 본인 참석을 직접 취소할 수 있다 (서버와 같음)
+  const absentLocked = attendanceLocked && myAttending && !staff;
   // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터 (직접 만든 일정은 바로)
   const guestVoteLocked =
     !user.is_admin &&
@@ -676,6 +679,13 @@ export default function GatheringDetailPage() {
               ? `${attendees.length}명이 함께해요`
               : "아직 참석자가 없어요"}
           </p>
+          {canManageAttendance && attendanceLocked && attendees.length ? (
+            <p className="mt-3 flex items-start gap-1.5 rounded-2xl bg-house-yellow/25 px-3.5 py-2.5 text-xs font-semibold leading-relaxed">
+              <Lock size={12} className="mt-0.5 shrink-0" />
+              모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 회원이 직접 취소할 수 없어요.
+              취소 요청을 받으면 이름 아래 ‘참석 취소’를 눌러 주세요.
+            </p>
+          ) : null}
           {!gathering.participants.length ? (
             <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
               아직 투표한 사람이 없어요.
@@ -729,18 +739,20 @@ export default function GatheringDetailPage() {
                                 : "NTRP 미입력"}
                             </span>
                           </Link>
-                          {isOrganizer &&
+                          {canManageAttendance &&
                           (status === "attending" || status === "waiting") ? (
                             <Form
                               method="post"
                               onSubmit={(e) => {
                                 if (
                                   !confirm(
-                                    `${p.user.name}님을 불참으로 바꿀까요?${
-                                      status === "attending" && waiting.length
-                                        ? "\n대기 1번이 참석으로 올라가요."
-                                        : ""
-                                    }`
+                                    status === "attending"
+                                      ? `${p.user.name}님의 참석을 취소할까요? 불참으로 바뀌어요.${
+                                          waiting.length
+                                            ? `\n대기 1번 ${waiting[0].user.name}님이 참석으로 올라가요.`
+                                            : ""
+                                        }`
+                                      : `${p.user.name}님의 대기를 취소할까요?`
                                   )
                                 )
                                   e.preventDefault();
@@ -749,8 +761,11 @@ export default function GatheringDetailPage() {
                               <input type="hidden" name="intent" value="set_attendance" />
                               <input type="hidden" name="user_id" value={p.user.id} />
                               <input type="hidden" name="status" value="absent" />
-                              <button className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-slate-500 underline-offset-2 hover:underline dark:text-slate-400">
-                                불참 처리
+                              <button
+                                className="rounded-full border border-slate-300 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition-colors hover:border-[#C2361F] hover:text-[#C2361F] dark:border-slate-600 dark:text-slate-300"
+                                aria-label={`${p.user.name} ${status === "attending" ? "참석" : "대기"} 취소`}
+                              >
+                                {status === "attending" ? "참석 취소" : "대기 취소"}
                               </button>
                             </Form>
                           ) : null}

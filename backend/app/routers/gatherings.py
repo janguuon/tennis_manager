@@ -1040,12 +1040,13 @@ def vote_attendance(
         )
     )
 
-    # 마감 제한: 모임 3일 전부터는 참석자가 불참으로 바꿀 수 없음(관리자·운영진에게 요청). 대기 취소는 언제든.
+    # 마감 제한: 모임 3일 전부터는 참석자가 불참으로 바꿀 수 없음(운영진에게 요청). 대기 취소는 언제든.
+    # 관리자·임원진·총무는 회원 참석도 취소해 주므로 본인 것도 막지 않는다.
     if (
         payload.status == "absent"
         and participant is not None
         and participant.status == AttendanceStatus.ATTENDING
-        and not current_user.is_admin
+        and not current_user.is_staff
         and _attendance_locked(gathering)
     ):
         raise HTTPException(
@@ -1067,11 +1068,13 @@ def set_member_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """운영진이 회원의 참석을 바꾼다(마감 이후 불참 요청 처리 등). 불참이 되면 대기자가 올라간다."""
+    """운영진이 회원의 참석을 바꾼다(3일 전 마감 뒤 참석 취소 요청 처리 등). 불참이 되면 대기자가 올라간다.
+    관리자·임원진·총무는 모든 모임에서, 그 밖에는 모임을 만든 사람(벙주)만."""
     gathering = db.get(Gathering, gathering_id)
     if not gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
-    _require_organizer(gathering, current_user)
+    if not current_user.is_staff:
+        _require_organizer(gathering, current_user)
     participant = db.scalar(
         select(Participant).where(Participant.gathering_id == gathering_id, Participant.user_id == user_id)
     )
@@ -1104,8 +1107,8 @@ def cancel_attendance(
     if participant is None:
         return
     was_attending = participant.status == AttendanceStatus.ATTENDING
-    # 마감 제한: 참석 취소(=사실상 불참)는 3일 전부터 일반 회원 불가. 대기 취소는 언제든.
-    if was_attending and not current_user.is_admin and _attendance_locked(gathering):
+    # 마감 제한: 참석 취소(=사실상 불참)는 3일 전부터 일반 회원 불가(운영진은 가능). 대기 취소는 언제든.
+    if was_attending and not current_user.is_staff and _attendance_locked(gathering):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없습니다. 운영진에게 문의하세요.",

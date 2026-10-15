@@ -71,6 +71,39 @@ def test_lock_blocks_attendee_leaving_but_waiting_can_leave(club):
     assert r.status_code == 403
 
 
+def test_staff_can_cancel_anyone_after_lock(club):
+    """3일 전 마감 뒤에는 임원진·총무가 대신 참석을 취소해 준다 (남이 만든 일반 벙개 포함)."""
+    club.add_members("amy", "ben", "cal", "off", "tre")
+    club.set_type("off", "officer")
+    club.set_type("tre", "treasurer")
+    soon = (date.today() + timedelta(days=1)).isoformat()
+    # 정회원 amy 가 만든 일반 벙개, 정원 2명
+    gid = club.create(as_="amy", kind="flash", event_date=soon, max_participants=2).json()["id"]
+    for n in ("ben", "cal", "off"):
+        club.vote(gid, n)
+    assert status_of(club, gid, "off") == "waiting"
+    assert club.vote(gid, "ben", "absent").status_code == 403  # 본인은 못 바꾼다
+
+    # 임원진이 ben 의 참석을 취소 → 대기 1번(off)이 참석으로
+    r = club.c.put(f"/gatherings/{gid}/participants/{club.ids['ben']}/attendance",
+                   json={"status": "absent"}, headers=club.headers["off"])
+    assert r.status_code == 200 and r.json()["status"] == "absent"
+    assert status_of(club, gid, "off") == "attending"
+    # 총무도 가능
+    r = club.c.put(f"/gatherings/{gid}/participants/{club.ids['cal']}/attendance",
+                   json={"status": "absent"}, headers=club.headers["tre"])
+    assert r.status_code == 200
+    # 임원진은 마감 뒤 본인 참석도 직접 취소할 수 있다
+    assert club.vote(gid, "off", "absent").status_code == 200
+    # 일반 회원은 여전히 남의 참석을 바꿀 수 없다 (만든 사람 amy 는 자기 벙개라 가능)
+    club.vote(gid, "off")
+    r = club.c.put(f"/gatherings/{gid}/participants/{club.ids['off']}/attendance",
+                   json={"status": "absent"}, headers=club.headers["cal"])
+    assert r.status_code == 403
+    r = club.c.put(f"/gatherings/{gid}/participants/{club.ids['off']}/attendance",
+                   json={"status": "absent"}, headers=club.headers["amy"])
+    assert r.status_code == 200
+
 def test_waiting_members_are_not_charged_until_promoted(club):
     club.add_members("amy", "ben", "cal")
     gid = club.create(kind="flash", court_fee=30000, max_participants=2).json()["id"]

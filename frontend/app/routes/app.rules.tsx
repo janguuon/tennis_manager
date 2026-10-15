@@ -14,6 +14,8 @@ import { PageBody, PageHeader } from "~/components/Page";
 import { requireMember } from "~/lib/guard.server";
 import {
   NOTICE_ITEMS,
+  articleId,
+  articleLabel,
   RULE_CHAPTERS,
   RULES_HIGHLIGHTS,
   RULES_HISTORY,
@@ -49,7 +51,11 @@ const INDEX_CLASS: Record<RuleColor, string> = {
 const RULES_TEXT = rulesPlainText();
 
 /** 회칙 구성: 장·조 수 */
-const ARTICLE_COUNT = RULE_CHAPTERS.reduce((n, c) => n + c.articles.length, 0);
+// 가지 조(제11조의2 등)는 조 수에 세지 않는다 → "6장 22조"
+const ARTICLE_COUNT = RULE_CHAPTERS.reduce(
+  (n, c) => n + c.articles.filter((a) => !a.branch).length,
+  0
+);
 
 /** 목차: 장 → 부칙 → 부록 */
 const TOC: { id: string; index: string; label: string; color: RuleColor }[] = [
@@ -94,14 +100,14 @@ function RuleText({ text }: { text: string }) {
 function ArticleCard({ article }: { article: RuleArticle }) {
   return (
     <article
-      id={article.no ? `art-${article.no}` : undefined}
+      id={articleId(article)}
       tabIndex={-1}
       className="card rules-article"
     >
       <h3 className="text-[17px] font-bold leading-snug tracking-[-0.03em]">
         {article.no ? (
           <span className="mr-2 font-display text-[13px] font-extrabold text-slate-500 dark:text-slate-400">
-            제{article.no}조
+            {articleLabel(article)}
           </span>
         ) : null}
         {article.title}
@@ -110,7 +116,7 @@ function ArticleCard({ article }: { article: RuleArticle }) {
         {article.clauses.map((clause, i) => (
           <li key={i}>
             <span aria-hidden="true">{i + 1}</span>
-            <p>
+            <p className="whitespace-pre-line">
               <RuleText text={clause} />
             </p>
           </li>
@@ -470,7 +476,7 @@ export default function RulesPage() {
               />
               <div className="space-y-3">
                 {chapter.articles.map((article) => (
-                  <ArticleCard key={article.no} article={article} />
+                  <ArticleCard key={articleId(article)} article={article} />
                 ))}
               </div>
             </section>

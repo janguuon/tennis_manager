@@ -1,7 +1,8 @@
 import { Link } from "@remix-run/react";
 import { ArrowUpRight, Lock, Users } from "lucide-react";
 
-import { KIND_BADGE, KIND_LABEL, isClubKind } from "~/lib/club";
+import { MyVotePill } from "~/components/MyVote";
+import { KIND_BADGE, KIND_DOT, KIND_LABEL, isClubKind } from "~/lib/club";
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
 import type { Gathering } from "~/lib/types";
@@ -27,8 +28,13 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
   return (
     <Link
       to={to}
-      className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white dark:hover:bg-slate-800/60 sm:px-6"
+      className="group relative flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white dark:hover:bg-slate-800/60 sm:px-6"
     >
+      {/* 종류 색 띠: 오테식 정모 초록 · 오테식 벙개 보라 · 일반 벙개 주황 */}
+      <span
+        aria-hidden="true"
+        className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${KIND_DOT[g.kind]} ${muted ? "opacity-40" : ""}`}
+      />
       <div className="w-12 shrink-0">
         <div
           className={`font-display text-[17px] font-extrabold tracking-[-0.03em] ${
@@ -62,10 +68,13 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
         </div>
         <p className="mt-0.5 truncate text-[13px] font-medium text-slate-500 dark:text-slate-400">{meta.join(" · ")}</p>
       </div>
-      <span className="badge-line shrink-0">
-        <Users size={12} />
-        {g.attendance?.attending ?? 0}
-        {g.max_participants ? `/${g.max_participants}` : ""}
+      <span className="flex shrink-0 flex-col items-end gap-1">
+        <MyVotePill g={g} />
+        <span className="badge-line">
+          <Users size={12} />
+          {g.attendance?.attending ?? 0}
+          {g.max_participants ? `/${g.max_participants}` : ""}
+        </span>
       </span>
       <ArrowUpRight size={16} className="hidden shrink-0 text-slate-400 transition-colors group-hover:text-ink dark:group-hover:text-white sm:block" />
     </Link>

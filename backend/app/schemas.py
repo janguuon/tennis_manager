@@ -501,6 +501,8 @@ class GatheringRead(GatheringBase):
     guest_vote_open_at: datetime | None = None
     open_to_members: bool = True
     guest_vote_open: bool = True
+    # 보고 있는 회원의 참석 투표 (참석·대기·불참). 투표하지 않았으면 None
+    my_status: AttendanceStatus | None = None
     # 오테식 모임: 코트 예약 금액 합 (회비 지출)
     court_total: int = 0
 

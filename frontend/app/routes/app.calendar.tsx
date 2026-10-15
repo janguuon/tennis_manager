@@ -28,20 +28,23 @@ import { useEffect, useState } from "react";
 
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
+import { CalendarLegend, KindVoteDot, MyVoteChip } from "~/components/MyVote";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ScheduleShare } from "~/components/ScheduleShare";
 import { ApiError, api } from "~/lib/api.server";
 import { membersOrEmpty } from "~/lib/guard.server";
-import { KIND_LABEL, KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
+import {
+  KIND_CHIP,
+  KIND_LABEL,
+  KIND_SHORT,
+  isClubKind,
+  isStaff,
+} from "~/lib/club";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import type { NewSchedule } from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
-import {
-  GATHERING_STATUS_CHIP,
-  GATHERING_STATUS_DOT,
-  WEEKDAYS,
-} from "~/lib/status";
+import { WEEKDAYS } from "~/lib/status";
 import type {
   ClubAccount,
   Gathering,
@@ -373,6 +376,7 @@ export default function CalendarPage() {
             </button>
           </div>
         </div>
+        <CalendarLegend />
         {view === "calendar" ? (
           /* 달력 그리드 */
           <div className="card overflow-hidden !p-0">
@@ -428,15 +432,10 @@ export default function CalendarPage() {
                       {day}
                     </span>
 
-                    {/* 모바일: 상태 점 (최대 3개) */}
-                    <div className="mt-1 flex justify-center gap-1 sm:hidden">
+                    {/* 모바일: 종류 색 동그라미 + 내 투표 아이콘 (최대 3개) */}
+                    <div className="mt-1 flex flex-wrap justify-center gap-0.5 sm:hidden">
                       {dayGatherings.slice(0, 3).map((g) => (
-                        <span
-                          key={g.id}
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            GATHERING_STATUS_DOT[g.status]
-                          } ${g.open_to_members ? "" : "opacity-40"}`}
-                        />
+                        <KindVoteDot key={g.id} g={g} />
                       ))}
                     </div>
 
@@ -446,19 +445,28 @@ export default function CalendarPage() {
                         <div
                           key={g.id}
                           className={`rounded-lg px-2 py-2 text-[11px] font-semibold leading-relaxed ${
-                            GATHERING_STATUS_CHIP[g.status]
+                            KIND_CHIP[g.kind]
+                          } ${
+                            g.status === "canceled"
+                              ? "line-through opacity-50"
+                              : g.status === "completed"
+                              ? "opacity-50"
+                              : ""
                           } ${g.open_to_members ? "" : "opacity-60 outline-dashed outline-1 outline-offset-[-3px]"}`}
                           title={g.open_to_members ? g.title : `${g.title} (아직 정회원에게 공개 전)`}
                         >
-                          <span className="mr-1 opacity-60">
-                            {g.start_time
-                              ? `${g.start_time.slice(0, 5)} · `
-                              : ""}
-                            {KIND_SHORT[g.kind]}
+                          <span className="flex items-center justify-between gap-1">
+                            <span className="truncate opacity-70">
+                              {g.start_time
+                                ? `${g.start_time.slice(0, 5)} · `
+                                : ""}
+                              {KIND_SHORT[g.kind]}
+                            </span>
+                            <MyVoteChip g={g} />
                           </span>
                           <span className="block truncate">{g.title}</span>
                           <span className="mt-1 block truncate text-[10px] opacity-70">
-                            {g.open_to_members ? g.location : "공개 전 · 임원진만"}
+                            {g.open_to_members ? g.location : "공개 전"}
                           </span>
                         </div>
                       ))}

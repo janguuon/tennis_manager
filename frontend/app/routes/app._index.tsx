@@ -19,10 +19,11 @@ import {
   TennisCourt,
 } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
+import { MyVotePill } from "~/components/MyVote";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
-import { isGuest, isStaff } from "~/lib/club";
+import { KIND_DOT, isGuest, isStaff } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -276,8 +277,12 @@ export default function HomePage() {
                       </small>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <strong className="block truncate text-sm">
-                        {g.title}
+                      <strong className="flex items-center gap-1.5 text-sm">
+                        <i
+                          aria-hidden="true"
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${KIND_DOT[g.kind]}`}
+                        />
+                        <span className="truncate">{g.title}</span>
                       </strong>
                       <span className="mt-1.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                         {g.start_time?.slice(0, 5) ?? "시간 미정"}
@@ -286,9 +291,12 @@ export default function HomePage() {
                           : ""} · {g.location ?? "장소 미정"}
                       </span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                      <Users size={13} />
-                      {g.attendance?.attending ?? 0}
+                    <span className="flex shrink-0 flex-col items-end gap-1.5">
+                      <MyVotePill g={g} />
+                      <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                        <Users size={13} />
+                        {g.attendance?.attending ?? 0}
+                      </span>
                     </span>
                   </Link>
                 </li>

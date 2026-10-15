@@ -131,6 +131,12 @@ def _to_read(gathering: Gathering) -> GatheringRead:
     return _with_open_times(read, gathering)
 
 
+def _with_my_status(read: GatheringRead, gathering: Gathering, user: User) -> GatheringRead:
+    """보고 있는 회원이 이 모임에 참석·대기·불참 중 무엇을 눌렀는지 (안 눌렀으면 None)."""
+    read.my_status = next((p.status for p in gathering.participants if p.user_id == user.id), None)
+    return read
+
+
 def _require_open(gathering: Gathering, user: User) -> None:
     """아직 이 회원에게 공개되지 않은 일정이면 보기·투표를 막는다."""
     if not visibility.is_open_for(user, gathering):
@@ -927,7 +933,11 @@ def list_gatherings(
     stmt = stmt.order_by(Gathering.event_date, Gathering.start_time)
 
     now = visibility.now_kst()
-    return [_to_read(g) for g in db.scalars(stmt).all() if visibility.is_open_for(current_user, g, now)]
+    return [
+        _with_my_status(_to_read(g), g, current_user)
+        for g in db.scalars(stmt).all()
+        if visibility.is_open_for(current_user, g, now)
+    ]
 
 
 @router.get("/{gathering_id}", response_model=GatheringDetail)
@@ -939,7 +949,7 @@ def get_gathering(
     """모임 상세 (참여자 명단, 정산, 코트 예약 내역 포함)."""
     g = _load_gathering(db, gathering_id)
     _require_open(g, current_user)
-    detail = GatheringDetail.model_validate(_to_read(g).model_dump())
+    detail = GatheringDetail.model_validate(_with_my_status(_to_read(g), g, current_user).model_dump())
     detail.participants = [ParticipantRead.model_validate(p) for p in g.participants]
     detail.payment = _payment_summary(g) if _has_payment(g) else None
     detail.court_bookings = [court_booking_read(b, current_user) for b in g.court_bookings]

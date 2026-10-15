@@ -137,3 +137,23 @@ def test_deleted_or_withdrawn_member_frees_seat(club):
     club.c.post("/matches", json=match, headers=club.admin)
     assert club.c.delete(f"/admin/users/{club.ids['cal']}", headers=club.admin).json()["result"] == "deactivated"
     assert status_of(club, g2, "dan") == "attending"
+
+
+def test_my_status_in_calendar_list(club):
+    """캘린더 목록·모임 상세에 내 투표(참석·대기·불참·안 함)가 보인다."""
+    from conftest import FAR_DATE, FAR_MONTH
+
+    club.add_members("amy", "ben", "cal", "dan")
+    gid = club.gathering(fee=0, max_participants=1)
+    club.vote(gid, "amy")
+    club.vote(gid, "ben")
+    club.vote(gid, "cal", "absent")
+
+    def mine(name):
+        rows = club.c.get(f"/gatherings?date_from={FAR_MONTH}-01&date_to={FAR_MONTH}-31",
+                          headers=club.headers[name]).json()
+        return next(g["my_status"] for g in rows if g["id"] == gid)
+
+    assert [mine(n) for n in ("amy", "ben", "cal", "dan")] == ["attending", "waiting", "absent", None]
+    assert club.c.get(f"/gatherings/{gid}", headers=club.headers["ben"]).json()["my_status"] == "waiting"
+    assert FAR_DATE.startswith(FAR_MONTH)

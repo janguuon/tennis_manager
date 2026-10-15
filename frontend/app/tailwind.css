@@ -144,6 +144,9 @@
   .badge-orange {
     @apply badge bg-house-orange text-ink;
   }
+  .badge-orange-soft {
+    @apply badge bg-house-orange/30 text-[#8A3A12] dark:bg-house-orange/20 dark:text-orange-200;
+  }
   .badge-red {
     @apply badge bg-house-red/15 text-[#B42318] dark:text-red-300;
   }

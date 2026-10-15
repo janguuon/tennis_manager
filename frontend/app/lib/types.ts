@@ -125,6 +125,8 @@ export interface Gathering {
   open_to_members: boolean;
   /** 게스트가 지금 참석 투표를 할 수 있는지 */
   guest_vote_open: boolean;
+  /** 내가 누른 참석 투표 (참석·대기·불참). 안 눌렀으면 null */
+  my_status?: AttendanceStatus | null;
   /** 오테식 모임: 코트 예약 금액 합 (회비 지출) */
   court_total: number;
 }

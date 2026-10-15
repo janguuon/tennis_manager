@@ -14,18 +14,30 @@ export const KIND_SHORT: Record<GatheringKind, string> = {
   flash: "벙개",
 };
 
+/*
+ * 일정 종류 색: 오테식 정모 = 초록, 오테식 벙개 = 보라, 일반 벙개 = 주황.
+ * 캘린더 칩·점, 목록 띠, 배지, 종류 고르기에서 같은 색을 쓴다. (클래스 이름을 그대로 써야 빌드에 남는다)
+ */
+
 /** 종류 배지 (중립 바탕용) */
 export const KIND_BADGE: Record<GatheringKind, string> = {
   club_regular: "badge-green",
   club_flash: "badge-lav",
-  flash: "badge-line",
+  flash: "badge-orange-soft",
 };
 
-/** 종류 선택 버튼의 색 점 (클래스 이름을 그대로 써야 빌드에 남는다) */
+/** 종류 색 점·띠 (원색) */
 export const KIND_DOT: Record<GatheringKind, string> = {
   club_regular: "bg-house-green",
   club_flash: "bg-house-lav",
-  flash: "bg-house-yellow",
+  flash: "bg-house-orange",
+};
+
+/** 캘린더 칸 안의 일정 칩 */
+export const KIND_CHIP: Record<GatheringKind, string> = {
+  club_regular: "bg-house-green text-ink",
+  club_flash: "bg-house-lav text-ink",
+  flash: "bg-house-orange text-ink",
 };
 
 /** 종류 선택 버튼에 붙는 한 줄 설명 */

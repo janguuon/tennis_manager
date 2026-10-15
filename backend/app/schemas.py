@@ -312,6 +312,9 @@ class GatheringBase(BaseModel):
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
     court_fairy: str | None = Field(None, max_length=200, description="코트요정(코트를 잡아 준 사람) 이름")
+    court_reservers: str | None = Field(
+        None, max_length=300, description="예약자명: 코트에서 말할 예약 이름 (예: '3·5번 장미주, 2번 김다빈')"
+    )
     max_participants: int | None = Field(None, ge=1)
     kind: GatheringKind = Field(GatheringKind.FLASH, description="오테식 정모 / 오테식 벙개 / 일반 벙개")
     fee: int = Field(0, ge=0, description="일반 벙개: n빵할 총액. 코트비·캔볼값을 넣으면 둘의 합.")
@@ -461,6 +464,7 @@ class GatheringUpdate(BaseModel):
     court_count: int | None = Field(None, ge=1)
     court_numbers: str | None = Field(None, max_length=200)
     court_fairy: str | None = Field(None, max_length=200)
+    court_reservers: str | None = Field(None, max_length=300)
     max_participants: int | None = Field(None, ge=1)
     kind: GatheringKind | None = None
     fee: int | None = Field(None, ge=0)

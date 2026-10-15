@@ -221,6 +221,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           ...(formData.has("court_fairy")
             ? { court_fairy: get("court_fairy") || null }
             : {}),
+          court_reservers: get("court_reservers") || null,
           court_count: courtNumbers
             ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
             : Number(get("court_count") || 1),
@@ -531,6 +532,9 @@ export default function GatheringDetailPage() {
                 : `코트 ${gathering.court_count}면`}{" "}
               · 총 {gathering.court_count}면
             </p>
+            {gathering.court_reservers ? (
+              <p className="pl-6">예약자명 {gathering.court_reservers}</p>
+            ) : null}
             {gathering.court_fairy ? (
               <p className="pl-6">코트요정 {gathering.court_fairy}</p>
             ) : null}
@@ -1342,6 +1346,25 @@ export default function GatheringDetailPage() {
                         />
                       </div>
                     )}
+                    <div>
+                      <label className="label" htmlFor="e_reservers">
+                        예약자명{" "}
+                        <span className="font-medium text-slate-400">
+                          (선택)
+                        </span>
+                      </label>
+                      <input
+                        id="e_reservers"
+                        name="court_reservers"
+                        className="input"
+                        placeholder="예: 3·5번 장미주, 2번 김다빈"
+                        maxLength={300}
+                        defaultValue={gathering.court_reservers ?? ""}
+                      />
+                      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        코트에서 말할 예약 이름이에요. 모임 화면에 함께 보여요.
+                      </p>
+                    </div>
                   </FieldGroup>
                 </>
               )}

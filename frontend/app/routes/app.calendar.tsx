@@ -129,6 +129,7 @@ export async function action({ request }: ActionFunctionArgs) {
     location: get("location") || null,
     court_numbers: courtNumbers || null,
     court_fairy: get("court_fairy") || null,
+    court_reservers: get("court_reservers") || null,
     // 코트 번호를 적었으면 면수는 자동(백엔드 계산), 아니면 직접 입력값 사용
     court_count: courtNumbers
       ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
@@ -733,6 +734,24 @@ export default function CalendarPage() {
                         />
                       </div>
                     )}
+                    <div>
+                      <label className="label" htmlFor="court_reservers">
+                        예약자명{" "}
+                        <span className="font-medium text-slate-400">
+                          (선택)
+                        </span>
+                      </label>
+                      <input
+                        id="court_reservers"
+                        name="court_reservers"
+                        className="input"
+                        placeholder="예: 3·5번 장미주, 2번 김다빈"
+                        maxLength={300}
+                      />
+                      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        코트에서 말할 예약 이름이에요. 모임 화면에 함께 보여요.
+                      </p>
+                    </div>
                   </FieldGroup>
                 </>
               )}

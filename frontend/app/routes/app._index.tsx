@@ -466,6 +466,9 @@ function NextGatheringTile({
         <span>
           {next.location ?? "장소 미정"}
           {next.court_numbers ? ` · ${next.court_numbers}번 코트` : ""}
+          {next.court_reservers ? (
+            <span className="block">예약자명 {next.court_reservers}</span>
+          ) : null}
         </span>
       </p>
       <div className="relative z-10 mt-auto pt-6">

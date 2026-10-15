@@ -66,6 +66,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("participants", "waiting_since", "waiting_since DATETIME"),
     # 회원이 아닌 코트요정 이름 (엑셀 일정 등록)
     ("court_bookings", "booker_name", "booker_name VARCHAR(50)"),
+    # 코트 예약자명 (코트에서 말할 예약 이름)
+    ("gatherings", "court_reservers", "court_reservers VARCHAR(300)"),
 ]
 
 

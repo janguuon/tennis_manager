@@ -128,6 +128,9 @@ def test_court_sheet_import_end_to_end(club):
     assert (club_g["event_date"], club_g["start_time"][:5], club_g["end_time"][:5]) == ("2099-01-17", "10:00", "12:00")
     assert (club_g["court_numbers"], club_g["court_count"], club_g["location"]) == ("3, 5", 2, "시민 테니스장")
     assert club_g["court_fairy"] == "서승우, 오장원"
+    # 예약자명은 코트와 함께 모임에 남아 회원 모두가 본다
+    assert club_g["court_reservers"] == "3번 장미주, 5번 김다빈"
+    assert named["court_reservers"] == "4번 목록에없는예약자"
     assert (club_g["max_participants"], club_g["guest_fee"], club_g["description"]) == (16, 5000, "주차 2시간")
     # 코트비는 코트요정 앞으로 지급 대기, 예약자명은 코트 칸에
     detail = club.c.get(f"/gatherings/{club_g['id']}", headers=club.admin).json()
@@ -140,8 +143,11 @@ def test_court_sheet_import_end_to_end(club):
     assert (flash["kind"], flash["court_fee"], flash["ball_fee"], flash["fee"]) == ("flash", 20000, 6000, 26000)
     assert flash["created_by"] == club.ids["ohj"]
     assert (flash["bank"], flash["account_number"]) == ("카카오", "3333-01")
-    # 일반 벙개에 적은 최대 인원은 그대로
+    # 일반 벙개에 적은 최대 인원은 그대로, 예약자명도 남는다
     assert flash["max_participants"] == 8
+    assert flash["court_reservers"] == "2번 김다빈"
+    member_view = club.c.get(f"/gatherings/{club_g['id']}", headers=club.h("seo")).json()
+    assert member_view["court_reservers"] == "3번 장미주, 5번 김다빈"
 
     # 같은 파일을 다시 올리면 이미 등록된 일정은 건너뛴다
     again = _upload(club, _sheet(rows))
@@ -271,3 +277,20 @@ def test_migration_relaxes_old_court_booker(tmp_path):
             (7, 2, None, 24000, "3번"),
         ]
         conn.execute(text("INSERT INTO court_bookings (gathering_id, booker_name, amount) VALUES (1, '새요정', 1000)"))
+
+
+def test_reservers_text_groups_courts_by_name(club):
+    """같은 사람이 잡은 코트는 묶고, 직접 등록·수정에서도 예약자명을 적을 수 있다."""
+    from types import SimpleNamespace
+
+    from app.routers.gatherings import _reservers_text
+
+    rows = [SimpleNamespace(booker=b, court=c) for b, c in (("장미주", "3"), ("김다빈", "2"), ("장미주 ", "5"), ("이민석", "A코트"))]
+    assert _reservers_text(rows) == "3·5번 장미주, 2번 김다빈, A코트 이민석"
+
+    gid = club.create(kind="flash", court_reservers="3번 장미주").json()["id"]
+    assert club.detail(gid)["court_reservers"] == "3번 장미주"
+    r = club.c.patch(f"/gatherings/{gid}", json={"court_reservers": "3번 김수현"}, headers=club.admin)
+    assert r.json()["court_reservers"] == "3번 김수현"
+    r = club.c.patch(f"/gatherings/{gid}", json={"court_reservers": None}, headers=club.admin)
+    assert r.json()["court_reservers"] is None

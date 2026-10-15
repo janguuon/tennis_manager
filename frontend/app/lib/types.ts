@@ -99,6 +99,8 @@ export interface Gathering {
   court_numbers: string | null;
   /** 코트요정: 코트를 잡아 준 사람(들) 이름 */
   court_fairy: string | null;
+  /** 예약자명: 코트에서 말할 예약 이름 (예: "3·5번 장미주, 2번 김다빈") */
+  court_reservers: string | null;
   max_participants: number | null;
   kind: GatheringKind;
   /** 일반 벙개: n빵할 총액 (= 코트비 + 캔볼값). 오테식 모임은 0. */

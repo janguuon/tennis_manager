@@ -255,6 +255,8 @@ class Gathering(Base):
     court_numbers: Mapped[str | None] = mapped_column(String(200))
     # 코트요정: 코트를 잡아 준 사람(들) 이름. 엑셀 일정 등록에서 채운다 (예: "서승우, 김하린")
     court_fairy: Mapped[str | None] = mapped_column(String(200))
+    # 예약자명: 코트에서 말할 예약 이름(빌린 아이디일 수 있다). 예: "3·5번 장미주, 2번 김다빈"
+    court_reservers: Mapped[str | None] = mapped_column(String(300))
     max_participants: Mapped[int | None] = mapped_column(Integer)
 
     kind: Mapped[GatheringKind] = mapped_column(

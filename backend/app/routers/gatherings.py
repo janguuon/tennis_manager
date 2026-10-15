@@ -741,6 +741,18 @@ def _court_label(court: str) -> str:
     return f"{court}번" if court.isdigit() else court
 
 
+def _reservers_text(rows: list[sheet.SheetRow]) -> str | None:
+    """예약자명을 코트와 함께: 같은 사람이 잡은 코트는 묶는다 — "3·5번 장미주, 2번 김다빈"."""
+    courts_by: dict[str, list[str]] = {}
+    for r in rows:
+        courts_by.setdefault(" ".join(r.booker.split()), []).extend(r.court.split(", "))
+    parts = []
+    for name, courts in courts_by.items():
+        where = "·".join(courts) + "번" if all(c.isdigit() for c in courts) else ", ".join(map(_court_label, courts))
+        parts.append(f"{where} {name}")
+    return ", ".join(parts)[:300] or None
+
+
 def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) -> GatheringImportResult:
     """코트 예약 시트를 모임으로 등록한다 (schedule_import.py 의 규칙)."""
     cols = sheet.column_map(header)
@@ -844,6 +856,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             court_numbers=", ".join(group.courts),
             court_count=len(group.courts),
             court_fairy=", ".join(group.fairies)[:200],
+            court_reservers=_reservers_text(group.rows),
             max_participants=next((r.max_participants for r in group.rows if r.max_participants), None)
             or (len(group.courts) * sheet.SEATS_PER_COURT if club else None),
             description="\n".join(group.notes) or None,

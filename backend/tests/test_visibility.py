@@ -233,3 +233,28 @@ def test_guest_can_only_view_and_vote(club, fixed_now):
     # 정회원은 그대로 만든다
     assert club.c.post("/gatherings", json={"title": "z", "event_date": THIS_FRI},
                        headers=club.headers["amy"]).status_code == 201
+
+
+def test_finished_gathering_completes_30_minutes_after_end(club, fixed_now):
+    """종료 시각 30분 뒤 '완료' (종료 시간이 없으면 시작+2시간, 시간이 없으면 그날 끝). 취소는 그대로."""
+    timed = club.create(kind="flash", event_date=THIS_FRI, start_time="10:00", end_time="12:00").json()["id"]
+    start_only = club.create(kind="flash", event_date=THIS_FRI, start_time="19:00").json()["id"]
+    all_day = club.create(kind="flash", event_date=THIS_FRI).json()["id"]
+    canceled = club.create(kind="flash", event_date=THIS_FRI, start_time="10:00", end_time="12:00").json()["id"]
+    club.c.patch(f"/gatherings/{canceled}", json={"status": "canceled"}, headers=club.admin)
+
+    def status(gid):
+        return club.detail(gid)["status"]
+
+    fixed_now["now"] = datetime(2099, 1, 16, 12, 29)
+    assert status(timed) == "planned"
+    fixed_now["now"] = datetime(2099, 1, 16, 12, 30)
+    assert status(timed) == "completed"
+    assert status(start_only) == "planned"
+    fixed_now["now"] = datetime(2099, 1, 16, 21, 30)  # 19:00 + 2시간 + 30분
+    listed = {g["id"]: g["status"] for g in club.c.get(
+        "/gatherings?date_from=2099-01-16&date_to=2099-01-16", headers=club.admin).json()}
+    assert listed[start_only] == "completed" and listed[all_day] == "planned"
+    fixed_now["now"] = datetime(2099, 1, 17, 0, 29)  # 그날 끝(23:59) + 30분
+    assert status(all_day) == "completed"
+    assert status(canceled) == "canceled"

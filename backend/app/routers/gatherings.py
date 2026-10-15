@@ -395,6 +395,46 @@ def _fill_club_account(db: Session, g: Gathering) -> None:
         fill_club_account(g, default_club_account(db))
 
 
+# 끝난 모임 자동 완료: 종료 시각에서 이만큼 지나면 '완료'로 바꾼다
+COMPLETE_AFTER = timedelta(minutes=30)
+# 종료 시간이 없으면 시작부터 이만큼을 모임 시간으로 본다
+DEFAULT_LENGTH = timedelta(hours=2)
+
+
+def _ends_at(g: Gathering) -> datetime:
+    """모임이 끝나는 시각(한국 시간): 종료 시간, 없으면 시작+2시간, 시간이 없으면 그날 끝."""
+    if g.end_time:
+        end = datetime.combine(g.event_date, g.end_time)
+        if g.start_time and g.end_time <= g.start_time:
+            end += timedelta(days=1)  # 자정을 넘기는 모임
+        return end
+    if g.start_time:
+        return datetime.combine(g.event_date, g.start_time) + DEFAULT_LENGTH
+    return datetime.combine(g.event_date, time(23, 59))
+
+
+def complete_finished(db: Session) -> None:
+    """끝난 지 30분이 지난 예정·진행 중 모임을 '완료'로 바꾼다 (취소된 모임은 그대로).
+
+    따로 도는 작업 없이 일정·정산을 읽을 때 먼저 부른다 — 화면을 여는 순간 상태가 맞춰진다.
+    """
+    now = visibility.now_kst()
+    finished = [
+        g
+        for g in db.scalars(
+            select(Gathering).where(
+                Gathering.status.in_((GatheringStatus.PLANNED, GatheringStatus.ONGOING)),
+                Gathering.event_date <= now.date(),
+            )
+        )
+        if now >= _ends_at(g) + COMPLETE_AFTER
+    ]
+    for g in finished:
+        g.status = GatheringStatus.COMPLETED
+    if finished:
+        db.commit()
+
+
 def _place(location: str | None) -> str:
     """같은 장소 비교용 (띄어쓰기 무시)."""
     return "".join((location or "").split())
@@ -996,6 +1036,7 @@ def list_gatherings(
     date_to: date | None = Query(None, description="캘린더 조회 종료일"),
 ):
     """캘린더 조회: 기간으로 모임 목록을 가져온다(참석 요약 포함)."""
+    complete_finished(db)
     stmt = select(Gathering).options(*gathering_load_options())
     if date_from is not None:
         stmt = stmt.where(Gathering.event_date >= date_from)
@@ -1018,6 +1059,7 @@ def get_gathering(
     current_user: User = Depends(get_current_user),
 ):
     """모임 상세 (참여자 명단, 정산, 코트 예약 내역 포함)."""
+    complete_finished(db)
     g = _load_gathering(db, gathering_id)
     _require_open(g, current_user)
     detail = GatheringDetail.model_validate(_with_my_status(_to_read(g), g, current_user).model_dump())
@@ -1382,6 +1424,7 @@ def my_payment_dues(
     current_user: User = Depends(get_current_user),
 ):
     """내가 아직 내야 할 참가비 목록(참석한 모임 중 미입금·추가 입금). 날짜순."""
+    complete_finished(db)
     stmt = (
         select(Gathering)
         .join(Participant, Participant.gathering_id == Gathering.id)
@@ -1434,6 +1477,8 @@ def payment_summary(
         last = nxt - timedelta(days=1)
     except (ValueError, TypeError):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="month는 YYYY-MM 형식이어야 합니다.")
+
+    complete_finished(db)
 
     stmt = (
         select(Gathering)

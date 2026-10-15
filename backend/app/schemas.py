@@ -522,6 +522,7 @@ class ParticipantRead(BaseModel):
     paid: bool = False
     paid_at: datetime | None = None
     fee_waived: bool = False  # 게스트비 면제
+    fee_waiver_reason: str | None = None  # 면제 사유 (모임 화면에 보인다)
     paid_amount: int | None = None  # 입금 처리 당시 금액
 
 
@@ -581,9 +582,17 @@ class ParticipantVote(BaseModel):
 
 
 class FeeWaiverUpdate(BaseModel):
-    """게스트비 면제 (관리자·총무). waived=false 면 면제를 취소한다."""
+    """게스트비 면제 (관리자·총무). 면제할 때는 사유를 꼭 적는다. waived=false 면 면제를 취소한다."""
 
     waived: bool
+    reason: str | None = Field(None, max_length=50)
+
+    @model_validator(mode="after")
+    def _reason_required(self):
+        self.reason = " ".join((self.reason or "").split()) or None
+        if self.waived and not self.reason:
+            raise PydanticCustomError("waiver_reason", "면제 사유를 적어 주세요.")
+        return self
 
 
 class PaymentUpdate(BaseModel):

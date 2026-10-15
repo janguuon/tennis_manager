@@ -2,10 +2,10 @@
 from conftest import FAR_MONTH
 
 
-def _waive(club, gid, name, waived=True, as_=None):
+def _waive(club, gid, name, waived=True, as_=None, reason="당일 인원 부족 무료 모집"):
     return club.c.put(
         f"/gatherings/{gid}/participants/{club.ids[name]}/fee-waiver",
-        json={"waived": waived},
+        json={"waived": waived, "reason": reason if waived else None},
         headers=club.h(as_),
     )
 
@@ -26,9 +26,15 @@ def test_waive_guest_fee(club):
         club.vote(gid, n)
     assert _dues(club, gid) == [("gs2", 5000), ("gst", 5000)]
 
-    # 총무가 gst 면제 → 받을 돈에서 빠지고, 명단에 면제 표시
-    r = _waive(club, gid, "gst", as_="tre")
+    # 면제할 때는 사유를 꼭 적는다
+    r = _waive(club, gid, "gst", as_="tre", reason="  ")
+    assert r.status_code == 422 and "사유" in r.json()["detail"][0]["msg"]
+    # 총무가 gst 면제 → 받을 돈에서 빠지고, 명단에 면제 표시와 사유
+    r = _waive(club, gid, "gst", as_="tre", reason="  당일   인원 부족 ")
     assert r.status_code == 200 and r.json()["fee_waived"] is True
+    assert r.json()["fee_waiver_reason"] == "당일 인원 부족"
+    seen = {p["user"]["username"]: p for p in club.c.get(f"/gatherings/{gid}", headers=club.h("kim")).json()["participants"]}
+    assert seen["gst"]["fee_waiver_reason"] == "당일 인원 부족"  # 회원에게도 보인다
     assert _dues(club, gid) == [("gs2", 5000)]
     pay = club.detail(gid)["payment"]
     assert (pay["payer_count"], pay["expected"]) == (1, 5000)
@@ -46,8 +52,9 @@ def test_waive_guest_fee(club):
     refunds = [(x["user"]["username"], x["amount"]) for x in club.detail(gid)["payment"]["refunds"]]
     assert refunds == [("gs2", 5000)]
 
-    # 면제 취소
-    assert _waive(club, gid, "gst", waived=False, as_="tre").json()["fee_waived"] is False
+    # 면제 취소 (사유도 지운다)
+    r = _waive(club, gid, "gst", waived=False, as_="tre").json()
+    assert r["fee_waived"] is False and r["fee_waiver_reason"] is None
     assert _dues(club, gid) == [("gst", 5000)]
 
 

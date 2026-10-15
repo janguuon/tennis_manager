@@ -72,6 +72,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "invited_by_id", "invited_by_id INTEGER REFERENCES users(id)"),
     # 게스트비 면제
     ("participants", "fee_waived", "fee_waived BOOLEAN NOT NULL DEFAULT 0"),
+    ("participants", "fee_waiver_reason", "fee_waiver_reason VARCHAR(100)"),
 ]
 
 

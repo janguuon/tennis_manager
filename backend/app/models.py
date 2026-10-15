@@ -391,6 +391,7 @@ class Participant(Base):
     paid_amount: Mapped[int | None] = mapped_column(Integer)
     # 게스트비 면제 (관리자·총무, 오테식 모임 게스트만). 회칙 제17조 ⑦ 무료 모집 등
     fee_waived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    fee_waiver_reason: Mapped[str | None] = mapped_column(String(100))  # 예: 당일 인원 부족 무료 모집
 
     gathering: Mapped[Gathering] = relationship(back_populates="participants")
     user: Mapped[User] = relationship(back_populates="participations")

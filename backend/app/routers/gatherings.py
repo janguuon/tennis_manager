@@ -1163,6 +1163,7 @@ def set_fee_waiver(
     if participant.user.member_type != MemberType.GUEST:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="게스트만 게스트비를 면제할 수 있어요.")
     participant.fee_waived = payload.waived
+    participant.fee_waiver_reason = payload.reason if payload.waived else None
     db.commit()
     db.refresh(participant)
     return ParticipantRead.model_validate(participant)

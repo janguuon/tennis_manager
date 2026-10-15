@@ -174,7 +174,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         {
           method: "PUT",
           token,
-          body: { waived: formData.get("waived") === "true" },
+          body: {
+            waived: formData.get("waived") === "true",
+            reason: formData.get("reason") || null,
+          },
         }
       );
     } else if (intent === "add_booking") {
@@ -295,6 +298,8 @@ export default function GatheringDetailPage() {
   const [editing, setEditing] = useState(false);
   // 직접 바꾸기 중인 대진표 id
   const [editingDraw, setEditingDraw] = useState<number | null>(null);
+  // 게스트비 면제 사유를 적고 있는 게스트 id (관리자·총무)
+  const [waivingId, setWaivingId] = useState<number | null>(null);
   // 등록된 실제 코트 번호 ("3, 5" → ["3","5"]). 대진의 코트 순번을 실제 번호로 변환하는 데 사용.
   const courtLabels = gathering.court_numbers
     ? gathering.court_numbers
@@ -334,7 +339,10 @@ export default function GatheringDetailPage() {
 
   // 수정 성공 시 모달 닫기
   useEffect(() => {
-    if (actionData?.ok) setEditing(false);
+    if (actionData?.ok) {
+      setEditing(false);
+      setWaivingId(null);
+    }
   }, [actionData]);
 
   // 참가비 정산: 금액은 모두 서버 계산값(1인 금액 = 총액 ÷ 참석 인원, 100원 단위 올림)
@@ -1002,7 +1010,7 @@ export default function GatheringDetailPage() {
                           : null;
                       const badge = p.paid ? "chip-ink" : "chip-line";
                       return (
-                        <li key={p.user.id}>
+                        <li key={p.user.id} className="flex-wrap">
                           <div className="min-w-0">
                             <span className="font-bold">{p.user.name}</span>
                             {p.user.id === user.id ? (
@@ -1017,6 +1025,11 @@ export default function GatheringDetailPage() {
                             ) : null}
                             {note ? (
                               <p className="text-xs font-semibold">{note}</p>
+                            ) : null}
+                            {p.fee_waived && p.fee_waiver_reason ? (
+                              <p className="text-xs font-semibold">
+                                게스트비 면제 · {p.fee_waiver_reason}
+                              </p>
                             ) : null}
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
@@ -1043,35 +1056,38 @@ export default function GatheringDetailPage() {
                             ) : null}
                             {/* 게스트비 면제(관리자·총무): 오테식 모임 게스트 */}
                             {settle && club && p.user.member_type === "guest" ? (
-                              <Form
-                                method="post"
-                                onSubmit={(e) => {
-                                  if (
-                                    !confirm(
-                                      p.fee_waived
-                                        ? `${p.user.name}님 게스트비 면제를 취소할까요? 다시 ${won(gathering.guest_fee)}을 받아요.`
-                                        : `${p.user.name}님 게스트비 ${won(gathering.guest_fee)}을 면제할까요?${
-                                            p.paid ? "\n이미 낸 게스트비는 돌려줄 돈으로 잡혀요." : ""
-                                          }`
+                              p.fee_waived ? (
+                                <Form
+                                  method="post"
+                                  onSubmit={(e) => {
+                                    if (
+                                      !confirm(
+                                        `${p.user.name}님 게스트비 면제를 취소할까요? 다시 ${won(gathering.guest_fee)}을 받아요.`
+                                      )
                                     )
-                                  )
-                                    e.preventDefault();
-                                }}
-                              >
-                                <input type="hidden" name="intent" value="fee_waiver" />
-                                <input type="hidden" name="user_id" value={p.user.id} />
-                                <input
-                                  type="hidden"
-                                  name="waived"
-                                  value={p.fee_waived ? "false" : "true"}
-                                />
+                                      e.preventDefault();
+                                  }}
+                                >
+                                  <input type="hidden" name="intent" value="fee_waiver" />
+                                  <input type="hidden" name="user_id" value={p.user.id} />
+                                  <input type="hidden" name="waived" value="false" />
+                                  <button className="chip-white cursor-pointer transition-opacity hover:opacity-80">
+                                    면제 취소
+                                  </button>
+                                </Form>
+                              ) : (
                                 <button
+                                  type="button"
+                                  aria-expanded={waivingId === p.user.id}
+                                  onClick={() =>
+                                    setWaivingId(waivingId === p.user.id ? null : p.user.id)
+                                  }
                                   className="chip-white cursor-pointer transition-opacity hover:opacity-80"
                                   title="회칙 제17조 ⑦: 당일 인원이 모자라 무료로 모집한 게스트 등"
                                 >
-                                  {p.fee_waived ? "면제 취소" : "면제"}
+                                  면제
                                 </button>
-                              </Form>
+                              )
                             ) : null}
                             {p.fee_waived && !p.paid ? (
                               <span className="chip-ink">면제</span>
@@ -1104,6 +1120,25 @@ export default function GatheringDetailPage() {
                               </span>
                             )}
                           </div>
+                          {waivingId === p.user.id && !p.fee_waived ? (
+                            <Form method="post" className="flex basis-full gap-2">
+                              <input type="hidden" name="intent" value="fee_waiver" />
+                              <input type="hidden" name="user_id" value={p.user.id} />
+                              <input type="hidden" name="waived" value="true" />
+                              <input
+                                name="reason"
+                                required
+                                maxLength={50}
+                                autoFocus
+                                placeholder="면제 사유 (예: 당일 인원 부족 무료 모집)"
+                                aria-label={`${p.user.name} 게스트비 면제 사유`}
+                                className="input h-10 min-w-0 flex-1 !text-[13px]"
+                              />
+                              <button className="btn-ink btn-sm !h-10 shrink-0">
+                                {p.paid ? "면제 · 돌려주기" : "면제"}
+                              </button>
+                            </Form>
+                          ) : null}
                         </li>
                       );
                     })}

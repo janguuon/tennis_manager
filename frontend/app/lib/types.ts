@@ -195,6 +195,8 @@ export interface Participant {
   paid_amount: number | null;
   /** 게스트비 면제 (관리자·총무, 오테식 모임 게스트) */
   fee_waived?: boolean;
+  /** 면제 사유 (모임 화면에 보인다) */
+  fee_waiver_reason?: string | null;
 }
 
 export interface GatheringDetail extends Gathering {

@@ -519,6 +519,7 @@ class ParticipantRead(BaseModel):
     waiting_since: datetime | None = None  # 대기 순서
     paid: bool = False
     paid_at: datetime | None = None
+    fee_waived: bool = False  # 게스트비 면제
     paid_amount: int | None = None  # 입금 처리 당시 금액
 
 
@@ -575,6 +576,12 @@ class ParticipantVote(BaseModel):
     """참석/불참 투표. 정원이 찼으면 '참석'은 대기로 들어간다. (미정은 없어졌다)"""
 
     status: Literal["attending", "absent"]
+
+
+class FeeWaiverUpdate(BaseModel):
+    """게스트비 면제 (관리자·총무). waived=false 면 면제를 취소한다."""
+
+    waived: bool
 
 
 class PaymentUpdate(BaseModel):

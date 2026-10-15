@@ -389,6 +389,8 @@ class Participant(Base):
     # 입금 처리 당시의 1인 금액. 이후 참석 인원이 바뀌어 1인 금액이 달라져도
     # 실제 받은 돈을 기준으로 차액(추가 입금/환불)을 계산하기 위해 저장한다.
     paid_amount: Mapped[int | None] = mapped_column(Integer)
+    # 게스트비 면제 (관리자·총무, 오테식 모임 게스트만). 회칙 제17조 ⑦ 무료 모집 등
+    fee_waived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     gathering: Mapped[Gathering] = relationship(back_populates="participants")
     user: Mapped[User] = relationship(back_populates="participations")

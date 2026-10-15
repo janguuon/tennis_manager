@@ -191,6 +191,8 @@ export interface Participant {
   paid_at: string | null;
   /** 입금 처리 당시 금액 (이전 기록은 null) */
   paid_amount: number | null;
+  /** 게스트비 면제 (관리자·총무, 오테식 모임 게스트) */
+  fee_waived?: boolean;
 }
 
 export interface GatheringDetail extends Gathering {

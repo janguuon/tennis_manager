@@ -28,7 +28,7 @@ from .. import visibility
 from ..club_account import default_club_account, fill_club_account
 from ..database import get_db
 from ..security import hash_password
-from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_user
+from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_settler, get_current_user
 from ..models import (
     CLUB_KINDS,
     ApprovalStatus,
@@ -55,6 +55,7 @@ from ..schemas import (
     GatheringPaymentSummary,
     GatheringRead,
     GatheringUpdate,
+    FeeWaiverUpdate,
     GuestInvite,
     MonthlyPaymentSummary,
     MyPaymentDue,
@@ -211,10 +212,12 @@ def _per_person(gathering: Gathering) -> int:
 
 
 def _nominal_due(gathering: Gathering, p: Participant, per_person: int) -> int:
-    """참석한다면 낼 금액: 일반 벙개는 1인 금액, 오테식 모임은 게스트만 게스트비."""
+    """참석한다면 낼 금액: 일반 벙개는 1인 금액, 오테식 모임은 게스트만 게스트비(면제한 게스트는 0)."""
     if gathering.status == GatheringStatus.CANCELED:
         return 0
     if gathering.is_club:
+        if p.fee_waived:
+            return 0
         return gathering.guest_fee if p.user.member_type == MemberType.GUEST else 0
     return per_person
 
@@ -1135,6 +1138,35 @@ def cancel_attendance(
     db.commit()
 
 
+@router.put("/{gathering_id}/participants/{user_id}/fee-waiver", response_model=ParticipantRead)
+def set_fee_waiver(
+    gathering_id: int,
+    user_id: int,
+    payload: FeeWaiverUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_settler),
+):
+    """게스트비 면제·면제 취소 (관리자·총무). 오테식 모임의 게스트만 (일반 벙개는 참석자끼리 n빵이라 없음).
+
+    회칙 제17조 ⑦: 당일 인원이 모자라 무료로 모집한 게스트 등. 이미 낸 게스트는 면제하면 돌려줄 돈으로 잡힌다.
+    """
+    gathering = _load_gathering(db, gathering_id)
+    if not gathering.is_club:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="게스트비 면제는 오테식 모임에서만 할 수 있어요. (일반 벙개는 참석자끼리 n빵)",
+        )
+    participant = next((p for p in gathering.participants if p.user_id == user_id), None)
+    if participant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="참여자를 찾을 수 없습니다.")
+    if participant.user.member_type != MemberType.GUEST:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="게스트만 게스트비를 면제할 수 있어요.")
+    participant.fee_waived = payload.waived
+    db.commit()
+    db.refresh(participant)
+    return ParticipantRead.model_validate(participant)
+
+
 # --- 이름만 적어 초대하는 게스트 ----------------------------------------------
 @router.post("/{gathering_id}/guests", response_model=ParticipantRead, status_code=status.HTTP_201_CREATED)
 def invite_guest(
@@ -1256,7 +1288,9 @@ def set_payment(
         due = _nominal_due(gathering, participant, _per_person(gathering))
         if due <= 0:
             detail = (
-                "오테식 모임은 회비에서 지출해 게스트만 참가비를 냅니다."
+                "게스트비를 면제한 게스트예요."
+                if participant.fee_waived
+                else "오테식 모임은 회비에서 지출해 게스트만 참가비를 냅니다."
                 if gathering.is_club
                 else "받을 참가비가 없는 모임입니다."
             )

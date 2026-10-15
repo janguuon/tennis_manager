@@ -70,6 +70,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "court_reservers", "court_reservers VARCHAR(300)"),
     # 이름만 적어 초대한 게스트를 데려온 회원
     ("users", "invited_by_id", "invited_by_id INTEGER REFERENCES users(id)"),
+    # 게스트비 면제
+    ("participants", "fee_waived", "fee_waived BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

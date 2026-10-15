@@ -168,6 +168,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
           body: { paid: formData.get("paid") === "true" },
         }
       );
+    } else if (intent === "fee_waiver") {
+      await api(
+        `/gatherings/${id}/participants/${formData.get("user_id")}/fee-waiver`,
+        {
+          method: "PUT",
+          token,
+          body: { waived: formData.get("waived") === "true" },
+        }
+      );
     } else if (intent === "add_booking") {
       await api(`/gatherings/${id}/court-bookings`, {
         method: "POST",
@@ -368,6 +377,8 @@ export default function GatheringDetailPage() {
     gathering.created_by !== user.id;
   const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
   const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
+  // 게스트비를 면제한 참석 게스트 수 (관리자·총무가 면제)
+  const waivedCount = attendees.filter((p) => p.fee_waived).length;
   // 낼 돈이 있는 참석자: 일반 벙개는 전원, 오테식 모임은 게스트(이미 입금 기록이 있는 사람 포함)
   const payers = club
     ? attendees.filter((p) => p.user.member_type === "guest" || p.paid)
@@ -865,8 +876,14 @@ export default function GatheringDetailPage() {
                       {gathering.status === "canceled"
                         ? "취소된 모임이라 받을 돈이 없어요"
                         : club
-                        ? payment.payer_count > 0
-                          ? `게스트 ${payment.payer_count}명 · 회원은 회비로 내요`
+                        ? payment.payer_count > 0 || waivedCount > 0
+                          ? [
+                              payment.payer_count ? `게스트 ${payment.payer_count}명` : "",
+                              waivedCount ? `게스트비 면제 ${waivedCount}명` : "",
+                              "회원은 회비로 내요",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
                           : "참석한 게스트가 없어요"
                         : payment.attending > 0
                         ? `${feeBreakdown} ÷ ${payment.attending}명`
@@ -1024,7 +1041,41 @@ export default function GatheringDetailPage() {
                                 </button>
                               </Form>
                             ) : null}
-                            {canPay ? (
+                            {/* 게스트비 면제(관리자·총무): 오테식 모임 게스트 */}
+                            {settle && club && p.user.member_type === "guest" ? (
+                              <Form
+                                method="post"
+                                onSubmit={(e) => {
+                                  if (
+                                    !confirm(
+                                      p.fee_waived
+                                        ? `${p.user.name}님 게스트비 면제를 취소할까요? 다시 ${won(gathering.guest_fee)}을 받아요.`
+                                        : `${p.user.name}님 게스트비 ${won(gathering.guest_fee)}을 면제할까요?${
+                                            p.paid ? "\n이미 낸 게스트비는 돌려줄 돈으로 잡혀요." : ""
+                                          }`
+                                    )
+                                  )
+                                    e.preventDefault();
+                                }}
+                              >
+                                <input type="hidden" name="intent" value="fee_waiver" />
+                                <input type="hidden" name="user_id" value={p.user.id} />
+                                <input
+                                  type="hidden"
+                                  name="waived"
+                                  value={p.fee_waived ? "false" : "true"}
+                                />
+                                <button
+                                  className="chip-white cursor-pointer transition-opacity hover:opacity-80"
+                                  title="회칙 제17조 ⑦: 당일 인원이 모자라 무료로 모집한 게스트 등"
+                                >
+                                  {p.fee_waived ? "면제 취소" : "면제"}
+                                </button>
+                              </Form>
+                            ) : null}
+                            {p.fee_waived && !p.paid ? (
+                              <span className="chip-ink">면제</span>
+                            ) : canPay ? (
                               <Form method="post">
                                 <input
                                   type="hidden"

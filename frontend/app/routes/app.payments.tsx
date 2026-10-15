@@ -295,7 +295,17 @@ export default function PaymentsPage() {
                         </span>
                         {g.items.length > 1 ? (
                           // 일부만 보냈을 때 한 건씩
-                          <Form method="post">
+                          <Form
+                            method="post"
+                            onSubmit={(e) => {
+                              if (
+                                !confirm(
+                                  `${g.name}님에게 ${shortDate(b.event_date)} ${b.gathering_title} 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                                )
+                              )
+                                e.preventDefault();
+                            }}
+                          >
                             <input type="hidden" name="booking_id" value={b.id} />
                             <input type="hidden" name="reimbursed" value="true" />
                             <button
@@ -315,10 +325,12 @@ export default function PaymentsPage() {
                     method="post"
                     className="mt-3"
                     onSubmit={(e) => {
+                      // 지급은 되돌리기 번거로우니 한 건이어도 한 번 더 묻는다
                       if (
-                        g.items.length > 1 &&
                         !confirm(
-                          `${g.name}님에게 코트비 ${g.items.length}건 ${won(g.total)}을 보냈나요?`
+                          `${g.name}님에게 코트비 ${
+                            g.items.length > 1 ? `${g.items.length}건 ` : ""
+                          }${won(g.total)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
                         )
                       )
                         e.preventDefault();

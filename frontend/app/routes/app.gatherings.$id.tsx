@@ -1550,7 +1550,17 @@ function CourtExpenseTile({
                         tone="ink"
                       />
                     ) : null}
-                    <Form method="post">
+                    <Form
+                      method="post"
+                      onSubmit={(e) => {
+                        if (
+                          !confirm(
+                            `${b.booker_name}님에게 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                          )
+                        )
+                          e.preventDefault();
+                      }}
+                    >
                       <input type="hidden" name="intent" value="reimburse" />
                       <input type="hidden" name="booking_id" value={b.id} />
                       <input type="hidden" name="reimbursed" value="true" />
@@ -1584,7 +1594,18 @@ function CourtExpenseTile({
                   </div>
                 </div>
               ) : staff && b.reimbursed ? (
-                <Form method="post" className="mt-2">
+                <Form
+                  method="post"
+                  className="mt-2"
+                  onSubmit={(e) => {
+                    if (
+                      !confirm(
+                        `${b.booker_name}님 코트비 ${won(b.amount)}의 지급 기록을 취소할까요?\n정산 탭 '지급할 코트비'에 다시 올라가요.`
+                      )
+                    )
+                      e.preventDefault();
+                  }}
+                >
                   <input type="hidden" name="intent" value="reimburse" />
                   <input type="hidden" name="booking_id" value={b.id} />
                   <input type="hidden" name="reimbursed" value="false" />

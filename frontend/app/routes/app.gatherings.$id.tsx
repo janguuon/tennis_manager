@@ -237,6 +237,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
           team2_score: Number(formData.get("team2_score") || 0),
         },
       });
+    } else if (intent === "update_result") {
+      await api(`/draw-matches/${formData.get("draw_match_id")}/result`, {
+        method: "PATCH",
+        token,
+        body: {
+          team1_score: Number(formData.get("team1_score") || 0),
+          team2_score: Number(formData.get("team2_score") || 0),
+        },
+      });
+    } else if (intent === "delete_result") {
+      await api(`/draw-matches/${formData.get("draw_match_id")}/result`, {
+        method: "DELETE",
+        token,
+      });
     } else if (intent === "update_gathering") {
       const get = (k: string) => {
         const v = formData.get(k);
@@ -2234,6 +2248,16 @@ function DrawMatchRow({
   const busy =
     navigation.state !== "idle" &&
     navigation.formData?.get("draw_match_id") === String(match.id);
+  // 입력한 결과 고치는 중 (저장이 끝나면 닫는다)
+  const [fixing, setFixing] = useState(false);
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (busy) wasBusy.current = true;
+    else if (wasBusy.current) {
+      wasBusy.current = false;
+      setFixing(false);
+    }
+  }, [busy]);
   const courtLabel =
     match.court_number != null && courtLabels[match.court_number - 1]
       ? courtLabels[match.court_number - 1]
@@ -2352,16 +2376,54 @@ function DrawMatchRow({
         </Form>
       ) : null}
       <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
-        {recorded ? (
-          <span className="badge-gray">
-            <Check size={13} />
-            {match.team1_score !== null && match.team2_score !== null
-              ? `결과 ${match.team1_score}:${match.team2_score}`
-              : "결과 기록 완료"}
-          </span>
+        {recorded && !fixing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="badge-gray">
+              <Check size={13} />
+              {match.team1_score !== null && match.team2_score !== null
+                ? `결과 ${match.team1_score}:${match.team2_score}`
+                : "결과 기록 완료"}
+            </span>
+            {canRecord ? (
+              <span className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  onClick={() => setFixing(true)}
+                >
+                  <Pencil size={13} />
+                  수정
+                </button>
+                <Form
+                  method="post"
+                  onSubmit={(e) => {
+                    if (
+                      !confirm(
+                        "이 경기 결과를 지울까요? 전적에서 빠지고 다시 입력할 수 있어요."
+                      )
+                    )
+                      e.preventDefault();
+                  }}
+                >
+                  <input type="hidden" name="intent" value="delete_result" />
+                  <input type="hidden" name="draw_match_id" value={match.id} />
+                  <button
+                    className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline"
+                    disabled={busy}
+                  >
+                    결과 지우기
+                  </button>
+                </Form>
+              </span>
+            ) : null}
+          </div>
         ) : canRecord ? (
           <Form method="post" className="space-y-2">
-            <input type="hidden" name="intent" value="result" />
+            <input
+              type="hidden"
+              name="intent"
+              value={recorded ? "update_result" : "result"}
+            />
             <input type="hidden" name="draw_match_id" value={match.id} />
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -2373,6 +2435,7 @@ function DrawMatchRow({
                 placeholder="0"
                 aria-label="팀1 게임 수"
                 required={club}
+                defaultValue={recorded ? match.team1_score ?? undefined : undefined}
               />
               <span className="text-slate-400">:</span>
               <input
@@ -2384,9 +2447,22 @@ function DrawMatchRow({
                 placeholder="0"
                 aria-label="팀2 게임 수"
                 required={club}
+                defaultValue={recorded ? match.team2_score ?? undefined : undefined}
               />
-              <button className="btn-primary btn-sm ml-auto" disabled={busy}>
-                {busy ? "저장 중…" : "결과 기록"}
+              {recorded ? (
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm ml-auto"
+                  onClick={() => setFixing(false)}
+                >
+                  취소
+                </button>
+              ) : null}
+              <button
+                className={`btn-primary btn-sm ${recorded ? "" : "ml-auto"}`}
+                disabled={busy}
+              >
+                {busy ? "저장 중…" : recorded ? "고친 결과 저장" : "결과 기록"}
               </button>
             </div>
             {club ? (

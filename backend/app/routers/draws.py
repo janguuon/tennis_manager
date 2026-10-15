@@ -37,6 +37,7 @@ from ..schemas import (
     DrawMatchEdit,
     DrawMatchRead,
     DrawMatchResultInput,
+    DrawMatchResultUpdate,
     DrawRead,
     UserBrief,
 )
@@ -543,6 +544,63 @@ def record_draw_match_result(
     db.add(match)
     db.flush()  # match.id 확보
     dm.result_match_id = match.id
+    db.commit()
+    db.refresh(dm)
+    return _single_draw_match_read(dm, db)
+
+
+def _recorded(db: Session, draw_match_id: int, user: User) -> tuple[DrawMatch, Match, Gathering]:
+    """결과가 입력된 대진 경기와 그 결과, 모임. 결과를 입력할 수 있는 사람(주최자·관리자·오테식 모임 임원진)만."""
+    dm = db.get(DrawMatch, draw_match_id)
+    if not dm:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
+    draw = db.get(Draw, dm.draw_id)
+    gathering = _require_organizer(db, draw.gathering_id, user)
+    match = db.get(Match, dm.result_match_id) if dm.result_match_id else None
+    if match is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="아직 결과가 입력되지 않은 경기예요.")
+    return dm, match, gathering
+
+
+@router.patch("/draw-matches/{draw_match_id}/result", response_model=DrawMatchRead)
+def update_draw_match_result(
+    draw_match_id: int,
+    payload: DrawMatchResultUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """입력한 결과의 점수 고치기. 승패를 다시 판정하고, 전적·랭킹·티어는 볼 때 다시 계산되므로 바로 반영된다."""
+    dm, match, gathering = _recorded(db, draw_match_id, current_user)
+    if gathering.is_club and payload.team1_score + payload.team2_score == 0:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="점수를 게임 수로 입력해 주세요. (5:5 해피게임은 5:5, 타이브레이크는 6:5)",
+        )
+    match.team1_score = payload.team1_score
+    match.team2_score = payload.team2_score
+    match.winner_team = (
+        TeamSide.TEAM_1
+        if payload.team1_score > payload.team2_score
+        else TeamSide.TEAM_2
+        if payload.team2_score > payload.team1_score
+        else None
+    )
+    db.commit()
+    db.refresh(dm)
+    return _single_draw_match_read(dm, db)
+
+
+@router.delete("/draw-matches/{draw_match_id}/result", response_model=DrawMatchRead)
+def delete_draw_match_result(
+    draw_match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """입력한 결과 지우기: 전적에서 빠지고, 대진 경기는 다시 '결과 기록 전'이 된다."""
+    dm, match, _ = _recorded(db, draw_match_id, current_user)
+    dm.result_match_id = None
+    db.flush()
+    db.delete(match)
     db.commit()
     db.refresh(dm)
     return _single_draw_match_read(dm, db)

@@ -764,6 +764,13 @@ class DrawMatchResultInput(BaseModel):
     note: str | None = None
 
 
+class DrawMatchResultUpdate(BaseModel):
+    """대진 결과 점수 고치기 → 승패를 다시 판정하고 전적·티어에 바로 반영된다."""
+
+    team1_score: int = Field(..., ge=0)
+    team2_score: int = Field(..., ge=0)
+
+
 # --- 내부 레이팅 · 티어 (관리자 전용) ---------------------------------------
 class RatingRow(BaseModel):
     user: UserBrief

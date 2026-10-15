@@ -214,6 +214,7 @@ export default function CalendarPage() {
     skipped?: number;
     skips?: { row: number; message: string }[];
     items?: NewSchedule[];
+    notices?: string[];
     error?: string;
   }>();
   // 시간 제어 상태: 시작 선택 시 종료를 +2h 자동 설정하되, 사용자가 종료를 직접 바꾸면 자동 변경 중단
@@ -888,6 +889,13 @@ export default function CalendarPage() {
                       ? ` · ${importFetcher.data.failed}건 실패`
                       : ""}
                   </p>
+                  {importFetcher.data.notices?.length ? (
+                    <ul className="space-y-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      {importFetcher.data.notices.map((n) => (
+                        <li key={n}>· {n}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {importFetcher.data.items?.length ? (
                     <div className="space-y-2 border-t border-ink/10 pt-2.5 dark:border-white/10">
                       <p className="text-xs text-slate-600 dark:text-slate-300">

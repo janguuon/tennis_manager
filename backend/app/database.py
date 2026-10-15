@@ -64,19 +64,44 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "court_fairy", "court_fairy VARCHAR(200)"),
     # 참석 대기열 순서
     ("participants", "waiting_since", "waiting_since DATETIME"),
+    # 회원이 아닌 코트요정 이름 (엑셀 일정 등록)
+    ("court_bookings", "booker_name", "booker_name VARCHAR(50)"),
 ]
 
 
-def run_lightweight_migrations() -> None:
+def run_lightweight_migrations(bind=None) -> None:
     """create_all 이후 호출. 누락된 컬럼이 있으면 ADD COLUMN으로 추가한다."""
-    if engine.dialect.name != "sqlite":
+    bind = bind or engine
+    if bind.dialect.name != "sqlite":
         return
-    inspector = inspect(engine)
+    inspector = inspect(bind)
     existing_tables = set(inspector.get_table_names())
-    with engine.begin() as conn:
+    with bind.begin() as conn:
         for table, column, ddl in _COLUMN_MIGRATIONS:
             if table not in existing_tables:
                 continue  # 신규 환경은 create_all이 이미 최신 스키마로 생성함
             cols = {c["name"] for c in inspector.get_columns(table)}
             if column not in cols:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+        if "court_bookings" in existing_tables:
+            _relax_court_booker(conn)
+
+
+def _relax_court_booker(conn) -> None:
+    """court_bookings.booker_id 의 NOT NULL 을 푼다 (회원이 아닌 코트요정은 이름만 남긴다).
+
+    SQLite 는 컬럼 제약을 바꿀 수 없어, 예전 표의 이름을 바꿔 두고 최신 정의로 새 표를 만든 뒤 옮겨 담는다.
+    """
+    cols = inspect(conn).get_columns("court_bookings")
+    if next(c for c in cols if c["name"] == "booker_id")["nullable"]:
+        return
+    from .models import CourtBooking  # models 가 이 모듈의 Base 를 쓰므로 여기서 불러온다
+
+    names = ", ".join(c["name"] for c in cols)
+    conn.execute(text("ALTER TABLE court_bookings RENAME TO court_bookings_old"))
+    # 인덱스 이름은 표 이름을 바꿔도 그대로라 새 표의 인덱스와 겹치지 않게 지운다
+    for ix in inspect(conn).get_indexes("court_bookings_old"):
+        conn.execute(text(f'DROP INDEX IF EXISTS "{ix["name"]}"'))
+    CourtBooking.__table__.create(conn)
+    conn.execute(text(f"INSERT INTO court_bookings ({names}) SELECT {names} FROM court_bookings_old"))
+    conn.execute(text("DROP TABLE court_bookings_old"))

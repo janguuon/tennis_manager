@@ -1436,8 +1436,8 @@ function CourtExpenseTile({
             <li key={b.id} className="!block">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <span className="font-bold">{b.booker.name}</span>
-                  {b.booker.id === userId ? (
+                  <span className="font-bold">{b.booker_name}</span>
+                  {b.booker?.id === userId ? (
                     <span className="ml-1 text-xs font-semibold">(나)</span>
                   ) : null}
                   {b.court_label ? (
@@ -1501,7 +1501,7 @@ function CourtExpenseTile({
                       method="post"
                       onSubmit={(e) => {
                         if (
-                          !confirm(`${b.booker.name}님의 코트 예약을 지울까요?`)
+                          !confirm(`${b.booker_name}님의 코트 예약을 지울까요?`)
                         )
                           e.preventDefault();
                       }}
@@ -1514,7 +1514,7 @@ function CourtExpenseTile({
                       <input type="hidden" name="booking_id" value={b.id} />
                       <button
                         className="icon-btn !h-8 !w-8 !text-ink hover:!bg-ink/10"
-                        aria-label={`${b.booker.name} 코트 예약 삭제`}
+                        aria-label={`${b.booker_name} 코트 예약 삭제`}
                       >
                         <Trash2 size={15} />
                       </button>

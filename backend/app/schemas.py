@@ -364,7 +364,9 @@ class CourtBookingRead(BaseModel):
     gathering_title: str
     event_date: date
     kind: GatheringKind
-    booker: UserBrief
+    # 코트비를 받을 회원(코트요정). 엑셀로 올린 코트요정이 회원이 아니면 None 이고 이름만 있다
+    booker: UserBrief | None = None
+    booker_name: str
     amount: int
     court_label: str | None = None
     reimbursed: bool
@@ -445,6 +447,8 @@ class GatheringImportResult(BaseModel):
     skipped: int = 0
     skips: list[GatheringImportRowNote] = []
     items: list[GatheringImportItem] = []
+    # 등록은 됐지만 알아 둘 것 (예: 입금 계좌가 비어 있는 일반 벙개)
+    notices: list[str] = []
 
 
 class GatheringUpdate(BaseModel):

@@ -115,20 +115,26 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
-/** 지급할 코트비를 코트요정(받을 사람)별로 묶는다. 모임 날짜가 빠른 사람부터. */
+/**
+ * 지급할 코트비를 코트요정(받을 사람)별로 묶는다. 모임 날짜가 빠른 사람부터.
+ * 회원은 회원별로, 엑셀에 이름만 적은 코트요정은 이름별로 묶는다.
+ */
 function groupByFairy(bookings: CourtBooking[]) {
   const groups = new Map<
-    number,
+    string,
     {
-      booker: CourtBooking["booker"];
+      key: string;
+      name: string;
       account: CourtBooking["account"];
       items: CourtBooking[];
       total: number;
     }
   >();
   for (const b of bookings) {
-    const g = groups.get(b.booker.id) ?? {
-      booker: b.booker,
+    const key = b.booker ? `u${b.booker.id}` : `n${b.booker_name}`;
+    const g = groups.get(key) ?? {
+      key,
+      name: b.booker_name,
       account: b.account,
       items: [],
       total: 0,
@@ -137,7 +143,7 @@ function groupByFairy(bookings: CourtBooking[]) {
     g.total += b.amount;
     if (!g.account?.account_number && b.account?.account_number)
       g.account = b.account;
-    groups.set(b.booker.id, g);
+    groups.set(key, g);
   }
   return [...groups.values()];
 }
@@ -232,11 +238,11 @@ export default function PaymentsPage() {
             {payoutGroups.map((g) => {
               const ids = g.items.map((b) => b.id).join(",");
               return (
-                <li key={g.booker.id} className="payout-group">
+                <li key={g.key} className="payout-group">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[17px] font-extrabold">
-                        {g.booker.name}
+                        {g.name}
                       </p>
                       <p className="text-xs font-semibold">
                         코트 {g.items.length}건
@@ -311,7 +317,7 @@ export default function PaymentsPage() {
                       if (
                         g.items.length > 1 &&
                         !confirm(
-                          `${g.booker.name}님에게 코트비 ${g.items.length}건 ${won(g.total)}을 보냈나요?`
+                          `${g.name}님에게 코트비 ${g.items.length}건 ${won(g.total)}을 보냈나요?`
                         )
                       )
                         e.preventDefault();
@@ -553,7 +559,7 @@ export default function PaymentsPage() {
                     {b.gathering_title}
                   </Link>
                   <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-                    {b.booker.name}
+                    {b.booker_name}
                     {b.court_label ? ` · ${b.court_label}` : ""}
                   </span>
                 </span>

@@ -305,8 +305,10 @@ class CourtBooking(Base):
     """
     오테식 모임의 코트 예약 1건.
 
-    코트를 잡은 회원이 코트비를 먼저 내고, 총무(관리자·임원진)가 회비에서 돌려준다.
+    코트를 잡은 회원(코트요정)이 코트비를 먼저 내고, 총무(관리자·임원진)가 회비에서 돌려준다.
     한 모임에 예약자가 여러 명일 수 있어(코트마다 다른 사람) 모임과 분리했다.
+    엑셀로 올린 코트요정이 아직 회원이 아니면 booker_id 없이 적은 이름(booker_name)만 남기고,
+    그 이름으로 가입이 승인되면 그 회원에게 이어 준다.
     """
 
     __tablename__ = "court_bookings"
@@ -315,7 +317,9 @@ class CourtBooking(Base):
     gathering_id: Mapped[int] = mapped_column(
         ForeignKey("gatherings.id"), nullable=False, index=True
     )
-    booker_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    booker_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    # 회원이 아닌 코트요정의 이름 (엑셀에 적은 그대로). 회원이면 비어 있다
+    booker_name: Mapped[str | None] = mapped_column(String(50))
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     court_label: Mapped[str | None] = mapped_column(String(50))  # 예: "3번 코트"
 
@@ -325,8 +329,13 @@ class CourtBooking(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     gathering: Mapped[Gathering] = relationship(back_populates="court_bookings")
-    booker: Mapped[User] = relationship(foreign_keys=[booker_id])
+    booker: Mapped[User | None] = relationship(foreign_keys=[booker_id])
     reimburser: Mapped[User | None] = relationship(foreign_keys=[reimbursed_by])
+
+    @property
+    def payee_name(self) -> str:
+        """코트비를 받을 사람 이름: 회원이면 회원 이름, 아니면 적은 이름."""
+        return self.booker.name if self.booker else (self.booker_name or "")
 
 
 class Participant(Base):

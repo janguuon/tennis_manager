@@ -93,6 +93,7 @@ def update_court_booking(
             del data[key]
     if "booker_id" in data:
         require_booker(db, data["booker_id"])
+        data["booker_name"] = None  # 이름만 적어 둔 코트요정을 회원으로 바꿨다
     for key, value in data.items():
         setattr(b, key, value)
     db.flush()

@@ -141,7 +141,10 @@ export interface CourtBooking {
   gathering_title: string;
   event_date: string;
   kind: GatheringKind;
-  booker: UserBrief;
+  /** 코트비를 받을 회원(코트요정). 엑셀로 올린 코트요정이 회원이 아니면 null */
+  booker: UserBrief | null;
+  /** 받을 사람 이름: 회원 이름, 또는 엑셀에 적은 이름 */
+  booker_name: string;
   amount: number;
   court_label: string | null;
   reimbursed: boolean;

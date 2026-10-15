@@ -57,9 +57,26 @@ def approve_signup(
     user = _get_user_or_404(db, user_id)
     user.approval_status = ApprovalStatus.APPROVED
     user.member_type = member_type
+    db.flush()
+    _link_court_bookings(db, user)
     db.commit()
     db.refresh(user)
     return user
+
+
+def _link_court_bookings(db: Session, user: User) -> None:
+    """엑셀로 올릴 때 이름만 적어 둔 코트요정의 코트비 내역을, 같은 이름으로 승인된 회원에게 잇는다.
+    같은 이름의 회원이 여럿이면 누구인지 알 수 없어 잇지 않는다."""
+    name = " ".join(user.name.split())
+    approved = db.scalars(
+        select(User).where(User.is_active.is_(True), User.approval_status == ApprovalStatus.APPROVED)
+    )
+    if sum(" ".join(u.name.split()) == name for u in approved) != 1:
+        return
+    for b in db.scalars(select(CourtBooking).where(CourtBooking.booker_id.is_(None))):
+        if " ".join((b.booker_name or "").split()) == name:
+            b.booker_id = user.id
+            b.booker_name = None
 
 
 @router.post("/signups/{user_id}/reject", response_model=UserRead)

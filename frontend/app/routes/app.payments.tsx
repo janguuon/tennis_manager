@@ -293,61 +293,57 @@ export default function PaymentsPage() {
                         <span className="shrink-0 font-bold tabular-nums">
                           {won(b.amount)}
                         </span>
-                        {g.items.length > 1 ? (
-                          // 일부만 보냈을 때 한 건씩
-                          <Form
-                            method="post"
-                            onSubmit={(e) => {
-                              if (
-                                !confirm(
-                                  `${g.name}님에게 ${shortDate(b.event_date)} ${b.gathering_title} 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
-                                )
+                        {/* 한 건씩 지급 (한 건뿐이어도 같은 자리에) */}
+                        <Form
+                          method="post"
+                          onSubmit={(e) => {
+                            if (
+                              !confirm(
+                                `${g.name}님에게 ${shortDate(b.event_date)} ${b.gathering_title} 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
                               )
-                                e.preventDefault();
-                            }}
+                            )
+                              e.preventDefault();
+                          }}
+                        >
+                          <input type="hidden" name="booking_id" value={b.id} />
+                          <input type="hidden" name="reimbursed" value="true" />
+                          <button
+                            className="payout-item-btn"
+                            disabled={submitting("booking_id", String(b.id))}
+                            aria-label={`${shortDate(b.event_date)} ${b.gathering_title} 코트비 지급 완료`}
                           >
-                            <input type="hidden" name="booking_id" value={b.id} />
-                            <input type="hidden" name="reimbursed" value="true" />
-                            <button
-                              className="payout-item-btn"
-                              disabled={submitting("booking_id", String(b.id))}
-                              aria-label={`${shortDate(b.event_date)} ${b.gathering_title} 코트비만 지급 완료`}
-                            >
-                              <Check size={12} />
-                              지급
-                            </button>
-                          </Form>
-                        ) : null}
+                            <Check size={12} />
+                            지급
+                          </button>
+                        </Form>
                       </li>
                     ))}
                   </ul>
-                  <Form
-                    method="post"
-                    className="mt-3"
-                    onSubmit={(e) => {
-                      // 지급은 되돌리기 번거로우니 한 건이어도 한 번 더 묻는다
-                      if (
-                        !confirm(
-                          `${g.name}님에게 코트비 ${
-                            g.items.length > 1 ? `${g.items.length}건 ` : ""
-                          }${won(g.total)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                  {/* 두 건 이상이면 한 번에 지급 */}
+                  {g.items.length > 1 ? (
+                    <Form
+                      method="post"
+                      className="mt-3"
+                      onSubmit={(e) => {
+                        if (
+                          !confirm(
+                            `${g.name}님에게 코트비 ${g.items.length}건 ${won(g.total)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                          )
                         )
-                      )
-                        e.preventDefault();
-                    }}
-                  >
-                    <input type="hidden" name="intent" value="reimburse_many" />
-                    <input type="hidden" name="booking_ids" value={ids} />
-                    <button
-                      className="btn-ink btn-sm w-full sm:w-auto"
-                      disabled={submitting("booking_ids", ids)}
+                          e.preventDefault();
+                      }}
                     >
-                      <Check size={14} />
-                      {g.items.length > 1
-                        ? `${g.items.length}건 ${won(g.total)} 한 번에 지급 완료`
-                        : "지급 완료"}
-                    </button>
-                  </Form>
+                      <input type="hidden" name="intent" value="reimburse_many" />
+                      <input type="hidden" name="booking_ids" value={ids} />
+                      <button
+                        className="btn-ink btn-sm w-full sm:w-auto"
+                        disabled={submitting("booking_ids", ids)}
+                      >
+                        <Check size={14} />
+                        {`${g.items.length}건 ${won(g.total)} 한 번에 지급 완료`}
+                      </button>
+                    </Form>
+                  ) : null}
                 </li>
               );
             })}

@@ -1210,26 +1210,39 @@ export default function GatheringDetailPage() {
                   경기는 바꿀 수 없어요.
                 </p>
               ) : null}
-              <div className="draw-grid">
-                {draw.matches.map((m) => (
-                  <DrawMatchRow
-                    key={m.id}
-                    match={m}
-                    canRecord={isOrganizer}
-                    courtLabels={courtLabels}
-                    club={club}
-                    edit={
-                      editingDraw === draw.id
-                        ? {
-                            attendees: attendees.map((p) => p.user),
-                            seats: roundSeats(draw.matches, m.round_number, courtLabels),
-                            canDelete: isOrganizer,
-                          }
-                        : null
-                    }
+              <DrawGameCounts
+                draw={draw}
+                attendees={attendees.map((p) => p.user)}
+              />
+              {drawRounds(draw.matches).map(({ round, matches }) => (
+                <div key={round ?? "none"} className="mt-5">
+                  <RoundRestLine
+                    round={round}
+                    matches={matches}
+                    attendees={attendees.map((p) => p.user)}
                   />
-                ))}
-              </div>
+                  <div className="draw-grid !mt-2.5">
+                    {matches.map((m) => (
+                      <DrawMatchRow
+                        key={m.id}
+                        match={m}
+                        canRecord={isOrganizer}
+                        courtLabels={courtLabels}
+                        club={club}
+                        edit={
+                          editingDraw === draw.id
+                            ? {
+                                attendees: attendees.map((p) => p.user),
+                                seats: roundSeats(draw.matches, m.round_number, courtLabels),
+                                canDelete: isOrganizer,
+                              }
+                            : null
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </section>
@@ -1956,6 +1969,99 @@ function DrawGenerator({
         </p>
       ) : null}
     </Form>
+  );
+}
+
+/** 대진표 경기를 라운드별로 (코트 순). 라운드가 없는 예전 대진은 한 묶음 */
+function drawRounds(matches: DrawMatch[]) {
+  const byRound = new Map<number | null, DrawMatch[]>();
+  for (const m of matches) {
+    const list = byRound.get(m.round_number) ?? [];
+    list.push(m);
+    byRound.set(m.round_number, list);
+  }
+  return [...byRound.entries()]
+    .sort(([a], [b]) => (a ?? 0) - (b ?? 0))
+    .map(([round, list]) => ({
+      round,
+      matches: list.sort((a, b) => (a.court_number ?? 0) - (b.court_number ?? 0)),
+    }));
+}
+
+const matchPlayers = (m: DrawMatch) => [...m.team1, ...m.team2];
+
+/**
+ * 대진표 위: 한 사람이 몇 게임씩 뛰는지 (게임 수별로 묶어서).
+ * 대진을 만든 뒤 새로 참석한 사람은 0게임으로 보인다.
+ */
+function DrawGameCounts({
+  draw,
+  attendees,
+}: {
+  draw: Draw;
+  attendees: UserBrief[];
+}) {
+  const people = new Map<number, { name: string; games: number }>();
+  for (const u of attendees) people.set(u.id, { name: u.name, games: 0 });
+  for (const m of draw.matches) {
+    for (const u of matchPlayers(m)) {
+      const p = people.get(u.id) ?? { name: u.name, games: 0 };
+      p.games += 1;
+      people.set(u.id, p);
+    }
+  }
+  const groups = new Map<number, string[]>();
+  for (const p of people.values()) {
+    groups.set(p.games, [...(groups.get(p.games) ?? []), p.name]);
+  }
+  const rows = [...groups.entries()].sort(([a], [b]) => b - a);
+  if (!rows.length) return null;
+  return (
+    <div className="mt-3 rounded-2xl bg-slate-100 px-4 py-3 dark:bg-slate-800/60">
+      <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+        1인 게임 수 · {people.size}명
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {rows.map(([games, names]) => (
+          <li key={games} className="flex items-start gap-2.5 text-[13px]">
+            <span
+              className={`${games ? "badge-ink" : "badge-gray"} !h-5 shrink-0 !px-2 !text-[11px]`}
+            >
+              {games}게임
+            </span>
+            <span className="min-w-0 font-semibold leading-relaxed">
+              {names.sort((a, b) => a.localeCompare(b, "ko")).join(" · ")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** 라운드 머리줄: "1라운드 · 휴식 2명 홍길동, 김철수" (지금 참석자 중 이 라운드에 없는 사람) */
+function RoundRestLine({
+  round,
+  matches,
+  attendees,
+}: {
+  round: number | null;
+  matches: DrawMatch[];
+  attendees: UserBrief[];
+}) {
+  const playing = new Set(matches.flatMap((m) => matchPlayers(m).map((u) => u.id)));
+  const resting = attendees.filter((u) => !playing.has(u.id));
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
+      <strong className="font-display text-[15px] font-extrabold tracking-[-0.03em]">
+        {round != null ? `${round}라운드` : "경기"}
+      </strong>
+      <span className="font-semibold text-slate-500 dark:text-slate-400">
+        {resting.length
+          ? `휴식 ${resting.length}명 · ${resting.map((u) => u.name).join(", ")}`
+          : "휴식 없음"}
+      </span>
+    </p>
   );
 }
 

@@ -379,6 +379,8 @@ class CourtBookingRead(BaseModel):
     reimbursed_at: datetime | None = None
     reimbursed_by: UserBrief | None = None
     account: BookerAccount | None = None
+    # 모임이 정회원에게 공개됐는지 (전주 금요일 오전 10시). 정산 탭은 공개된 모임의 코트비만 보여 준다
+    open_to_members: bool = True
 
 
 class GatheringCreate(GatheringBase):

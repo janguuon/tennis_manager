@@ -79,11 +79,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
     api<CourtBooking[]>("/court-bookings/me", { token }),
     api<Me>("/users/me", { token }),
   ]);
-  // 정산 담당(관리자·총무): 달과 상관없이 아직 지급하지 않은 코트비 전체
-  const pendingBookings = canSettle(me)
+  // 정산 담당(관리자·총무): 달과 상관없이 아직 지급하지 않은 코트비.
+  // 공개 전 모임(전주 금요일 오전 10시 전)의 코트비는 공개되면 올라오고, 몇 건인지만 알려 준다
+  const allPending = canSettle(me)
     ? await api<CourtBooking[]>("/court-bookings", { token })
     : [];
-  return json({ month, summary, myDues, myBookings, pendingBookings });
+  const pendingBookings = allPending.filter((b) => b.open_to_members);
+  const unopenedCount = allPending.length - pendingBookings.length;
+  return json({
+    month,
+    summary,
+    myDues,
+    myBookings,
+    pendingBookings,
+    unopenedCount,
+  });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -150,7 +160,7 @@ function groupByFairy(bookings: CourtBooking[]) {
 }
 
 export default function PaymentsPage() {
-  const { month, summary, myDues, myBookings, pendingBookings } =
+  const { month, summary, myDues, myBookings, pendingBookings, unopenedCount } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -348,7 +358,18 @@ export default function PaymentsPage() {
               );
             })}
           </ul>
+          {unopenedCount > 0 ? (
+            <p className="text-xs font-semibold">
+              공개 전 일정의 코트비 {unopenedCount}건은 일정이 공개되면(전주 금요일
+              오전 10시) 여기에 올라와요.
+            </p>
+          ) : null}
         </section>
+      ) : unopenedCount > 0 ? (
+        <p className="rounded-2xl bg-house-green/25 px-4 py-3 text-sm font-semibold">
+          지급할 코트비가 없어요. 공개 전 일정의 코트비 {unopenedCount}건은 일정이
+          공개되면(전주 금요일 오전 10시) 올라와요.
+        </p>
       ) : null}
 
       {/* 내가 코트를 잡아 돌려받을 코트비 */}

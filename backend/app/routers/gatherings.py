@@ -178,6 +178,7 @@ def court_booking_read(b: CourtBooking, viewer: User) -> CourtBookingRead:
         reimbursed=b.reimbursed_at is not None,
         reimbursed_at=b.reimbursed_at,
         reimbursed_by=UserBrief.model_validate(b.reimburser) if b.reimburser else None,
+        open_to_members=visibility.now_kst() >= visibility.member_open_at(b.gathering.event_date),
         account=BookerAccount(
             bank=b.booker.bank,
             account_number=b.booker.account_number,
@@ -1355,7 +1356,7 @@ def payment_summary(
     current_user: User = Depends(get_current_member),
 ):
     """
-    한 달 정산 집계.
+    한 달 정산 집계. 정회원에게 공개된 모임만 (운영진도 같다 — 공개 전 일정은 정산 탭에 올리지 않는다).
     - 참가비: 받을 돈이 있는 모임만, 받을 돈·돌려줄 돈을 사람별로
     - 회비 지출: 오테식 모임 코트비 (예약자별 지급 여부)
     """
@@ -1383,7 +1384,7 @@ def payment_summary(
     now = visibility.now_kst()
     bookings: list[CourtBookingRead] = []
     for g in db.scalars(stmt).all():
-        if not visibility.is_open_for(current_user, g, now):
+        if now < visibility.member_open_at(g.event_date):
             continue
         bookings.extend(court_booking_read(b, current_user) for b in g.court_bookings)
         if not _has_payment(g):

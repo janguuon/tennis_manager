@@ -158,6 +158,8 @@ export interface CourtBooking {
   reimbursed_at: string | null;
   reimbursed_by: UserBrief | null;
   account: BookerAccount | null;
+  /** 모임이 정회원에게 공개됐는지 (공개 전 모임의 코트비는 정산 탭에 올리지 않는다) */
+  open_to_members: boolean;
 }
 
 export interface TypeRecord {

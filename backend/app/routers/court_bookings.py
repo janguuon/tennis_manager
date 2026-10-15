@@ -173,7 +173,8 @@ def list_court_bookings(
     db: Session = Depends(get_db),
     settler: User = Depends(get_current_settler),
 ):
-    """총무용 코트비 지급 목록 (계좌 포함). 모임 날짜순."""
+    """총무용 코트비 지급 목록 (계좌 포함). 모임 날짜순.
+    공개 전 모임의 코트비도 함께 오며(open_to_members=False), 정산 탭은 공개된 것만 보여 준다."""
     stmt = _booking_query().join(Gathering, CourtBooking.gathering_id == Gathering.id)
     if pending:
         stmt = stmt.where(CourtBooking.reimbursed_at.is_(None))
@@ -186,7 +187,7 @@ def my_court_bookings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """내가 받을 코트비 (내가 예약했고 아직 지급받지 않은 것)."""
+    """내가 받을 코트비 (내가 예약했고 아직 지급받지 않은 것). 정회원에게 공개된 모임만."""
     stmt = (
         _booking_query()
         .join(Gathering, CourtBooking.gathering_id == Gathering.id)
@@ -196,4 +197,5 @@ def my_court_bookings(
         )
         .order_by(Gathering.event_date, CourtBooking.id)
     )
-    return [court_booking_read(b, current_user) for b in db.scalars(stmt).all()]
+    rows = [court_booking_read(b, current_user) for b in db.scalars(stmt).all()]
+    return [r for r in rows if r.open_to_members]

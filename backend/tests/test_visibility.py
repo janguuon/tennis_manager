@@ -112,8 +112,35 @@ def test_monthly_summary_hides_unopened(club, fixed_now):
     month = "2099-01"
     amy = club.c.get(f"/gatherings/payments/summary?month={month}", headers=club.headers["amy"]).json()
     ben = club.c.get(f"/gatherings/payments/summary?month={month}", headers=club.headers["ben"]).json()
+    # 정산 탭은 정회원에게 공개된 모임만 — 임원진도 공개 전 모임은 보이지 않는다
     assert [g["id"] for g in amy["gatherings"]] == []
+    assert [g["id"] for g in ben["gatherings"]] == []
+    fixed_now["now"] = datetime(2099, 1, 16, 10, 0)  # 금요일 오전 10시 공개
+    ben = club.c.get(f"/gatherings/payments/summary?month={month}", headers=club.headers["ben"]).json()
     assert [g["id"] for g in ben["gatherings"]] == [wed]
+
+
+def test_unopened_court_fees_hidden_from_settlement(club, fixed_now):
+    """공개 전 모임의 코트비: 정산 목록에는 공개 전 표시로 오고, 월 정산·내 코트비에는 빠진다."""
+    club.add_members("tre", "amy")
+    club.set_type("tre", "treasurer")
+    fri = club.create(kind="club_regular", event_date=THIS_FRI, bank="국민", account_number="1").json()["id"]
+    wed = club.create(kind="club_regular", event_date=NEXT_WED, bank="국민", account_number="1").json()["id"]
+    for gid in (fri, wed):
+        r = club.c.post(f"/gatherings/{gid}/court-bookings",
+                        json={"booker_id": club.ids["amy"], "amount": 20000}, headers=club.admin)
+        assert r.status_code == 201
+
+    pending = club.c.get("/court-bookings", headers=club.headers["tre"]).json()
+    assert {(b["gathering_id"], b["open_to_members"]) for b in pending} == {(fri, True), (wed, False)}
+    mine = club.c.get("/court-bookings/me", headers=club.headers["amy"]).json()
+    assert [b["gathering_id"] for b in mine] == [fri]
+    month = club.c.get("/gatherings/payments/summary?month=2099-01", headers=club.headers["tre"]).json()
+    assert [b["gathering_id"] for b in month["court_bookings"]] == [fri] and month["court_total"] == 20000
+
+    fixed_now["now"] = datetime(2099, 1, 16, 10, 0)
+    mine = club.c.get("/court-bookings/me", headers=club.headers["amy"]).json()
+    assert sorted(b["gathering_id"] for b in mine) == sorted([fri, wed])
 
 
 def test_open_time_text():

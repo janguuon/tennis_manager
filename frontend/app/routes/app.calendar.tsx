@@ -24,7 +24,7 @@ import {
   Plus,
   Upload,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
@@ -214,6 +214,10 @@ export default function CalendarPage() {
   const [created, setCreated] = useState<NewSchedule | null>(null);
   const [importing, setImporting] = useState(false);
   const [fileName, setFileName] = useState("");
+  // 엑셀 파일 끌어다 놓기
+  const [dragging, setDragging] = useState(false);
+  const [dropError, setDropError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const importFetcher = useFetcher<{
     ok: boolean;
     created?: number;
@@ -240,7 +244,25 @@ export default function CalendarPage() {
 
   // 엑셀 창을 열 때마다 고른 파일 초기화
   useEffect(() => {
-    if (importing) setFileName("");
+    if (importing) {
+      setFileName("");
+      setDropError("");
+      setDragging(false);
+    }
+  }, [importing]);
+
+  // 엑셀 창이 열려 있을 때 칸 밖에 파일을 놓아도 브라우저가 그 파일을 열지 않게
+  useEffect(() => {
+    if (!importing) return;
+    const stop = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", stop);
+    window.addEventListener("drop", stop);
+    return () => {
+      window.removeEventListener("dragover", stop);
+      window.removeEventListener("drop", stop);
+    };
   }, [importing]);
 
   // 모달이 열릴 때마다 시간 입력 초기화
@@ -886,25 +908,68 @@ export default function CalendarPage() {
               </li>
             </ol>
 
-            <label className={`file-drop ${fileName ? "has-file" : ""}`}>
+            {/* 눌러서 고르거나, 엑셀 파일을 끌어다 놓는다 */}
+            <label
+              className={`file-drop ${fileName ? "has-file" : ""} ${
+                dragging ? "is-dragging" : ""
+              }`}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+              }}
+              onDragLeave={(e) => {
+                // 칸 안의 아이콘·글자로 옮겨 갈 때는 그대로 둔다
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+                  setDragging(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                if (!/\.xlsx$/i.test(file.name)) {
+                  setDropError("엑셀 파일(.xlsx)만 올릴 수 있어요.");
+                  return;
+                }
+                setDropError("");
+                // 끌어다 놓은 파일을 폼의 파일 칸에 넣어 '올리기'로 그대로 보낸다
+                const files = new DataTransfer();
+                files.items.add(file);
+                if (fileInputRef.current) fileInputRef.current.files = files.files;
+                setFileName(file.name);
+              }}
+            >
               <input
+                ref={fileInputRef}
                 name="file"
                 type="file"
                 accept=".xlsx"
                 className="sr-only"
                 required
-                onChange={(e) =>
-                  setFileName(e.currentTarget.files?.[0]?.name ?? "")
-                }
+                onChange={(e) => {
+                  setDropError("");
+                  setFileName(e.currentTarget.files?.[0]?.name ?? "");
+                }}
               />
               <FileSpreadsheet size={22} className="shrink-0" />
               <span className="min-w-0 flex-1 truncate">
-                {fileName || "엑셀 파일 고르기 (.xlsx)"}
+                {dragging
+                  ? "여기에 놓으세요"
+                  : fileName || "엑셀 파일을 끌어다 놓거나 눌러서 고르기 (.xlsx)"}
               </span>
               <span className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400">
                 {fileName ? "바꾸기" : "선택"}
               </span>
             </label>
+            {dropError ? (
+              <p role="alert" className="alert-error -mt-2">
+                {dropError}
+              </p>
+            ) : null}
 
             <button
               type="submit"

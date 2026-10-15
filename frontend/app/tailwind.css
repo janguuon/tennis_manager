@@ -946,6 +946,10 @@
   .file-drop.has-file {
     @apply border-solid border-ink text-ink dark:border-white dark:text-white;
   }
+  /* 엑셀 파일을 끌어다 칸 위에 올렸을 때 */
+  .file-drop.is-dragging {
+    @apply border-solid border-ink bg-house-yellow/30 text-ink dark:border-white dark:text-white;
+  }
   /* 정산 탭: 코트요정별 지급할 코트비 */
   .payout-group {
     @apply rounded-2xl bg-white/50 p-3.5 sm:p-4;

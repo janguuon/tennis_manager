@@ -60,7 +60,7 @@ export default function MembersPage() {
                   <ArrowUpRight size={16} className="shrink-0 text-slate-400" />
                 </div>
                 <p className="mt-2 min-h-5 truncate text-xs text-slate-500 dark:text-slate-400">
-                  {m.nickname || "오테식 테니스 식구"}
+                  {m.nickname || "오순도순 테니스 식구"}
                 </p>
                 <div className="mt-4 flex flex-wrap justify-between gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-700">
                   <span className="text-slate-500 dark:text-slate-400">

@@ -1,11 +1,22 @@
-import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import type {
+  ActionFunctionArgs,
+  LoaderFunctionArgs,
+  MetaFunction,
+} from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, useLoaderData } from "@remix-run/react";
+import {
+  Form,
+  Link,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "@remix-run/react";
+import { Star } from "lucide-react";
 
-import { Eyebrow, MemberAvatar } from "~/components/Club";
+import { Eyebrow, MemberAvatar, awardText } from "~/components/Club";
 import { BackLink, PageBody } from "~/components/Page";
 
-import { api } from "~/lib/api.server";
+import { ApiError, api } from "~/lib/api.server";
 import { canSeeRecords } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { requireMember } from "~/lib/guard.server";
@@ -29,20 +40,49 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // 승률·전적은 당분간 관리자만 본다 (임원진 포함 다른 회원은 프로필만)
   if (!canSeeRecords(me)) {
     const user = await api<User>(`/users/${id}`, { token });
-    return json({ user, records: null });
+    return json({ user, records: null, isAdmin: me.is_admin });
   }
   const [stats, partners, opponents] = await Promise.all([
     api<PlayerStats>(`/stats/users/${id}`, { token }),
     api<PartnerStat[]>(`/stats/users/${id}/partners`, { token }),
     api<OpponentStat[]>(`/stats/users/${id}/opponents`, { token }),
   ]);
-  return json({ user: stats.user, records: { stats, partners, opponents } });
+  return json({
+    user: stats.user,
+    records: { stats, partners, opponents },
+    isAdmin: me.is_admin,
+  });
+}
+
+// 대회 입상 별 정하기 (관리자)
+export async function action({ request, params }: ActionFunctionArgs) {
+  const { token } = await requireMember(request);
+  const form = await request.formData();
+  const count = (k: string) => Number(form.get(k) || 0);
+  try {
+    await api(`/admin/users/${params.id}/award`, {
+      method: "PUT",
+      token,
+      body: {
+        gold: count("gold"),
+        silver: count("silver"),
+        bronze: count("bronze"),
+        note: String(form.get("note") ?? "") || null,
+      },
+    });
+    return json({ ok: true, error: null as string | null });
+  } catch (err) {
+    const message = err instanceof ApiError ? err.message : "저장하지 못했어요.";
+    return json({ ok: false, error: message }, { status: 400 });
+  }
 }
 
 const GENDER_LABEL = { male: "남", female: "여" } as const;
 
 export default function MemberDetailPage() {
-  const { user: u, records } = useLoaderData<typeof loader>();
+  const { user: u, records, isAdmin } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const saving = useNavigation().state !== "idle";
   const meta = [
     MEMBER_TYPE_LABEL[u.member_type],
     u.gender ? GENDER_LABEL[u.gender] : null,
@@ -79,8 +119,68 @@ export default function MemberDetailPage() {
             {meta.length ? (
               <p className="mt-1 text-[15px] font-bold">{meta.join(" · ")}</p>
             ) : null}
+            {awardText(u) ? (
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[13px] font-bold">
+                <Star size={14} fill="currentColor" className="award-gold shrink-0" />
+                {awardText(u)}
+                {u.award_note ? ` · ${u.award_note}` : ""}
+              </p>
+            ) : null}
           </div>
         </section>
+
+        {/* 대회 입상 별 (관리자만): 프로필 동그라미 위 금·은·동 별 개수 */}
+        {isAdmin ? (
+          <section className="card lg:col-span-2">
+            <h2 className="text-[15px] font-extrabold">대회 입상 별</h2>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+              테니스 대회 입상 횟수만큼 프로필 동그라미 위에 별이 둘러져요(가운데부터 금 → 은 → 동). 종류별
+              5개, 모두 합쳐 9개까지 · 모두 0이면 지워져요. 관리자만 정할 수 있어요.
+            </p>
+            <Form method="post" className="mt-3 flex flex-wrap items-center gap-2">
+              {(
+                [
+                  ["gold", "금 · 우승", "award-gold", u.award_gold],
+                  ["silver", "은 · 준우승", "award-silver", u.award_silver],
+                  ["bronze", "동 · 입상", "award-bronze", u.award_bronze],
+                ] as const
+              ).map(([name, label, cls, value]) => (
+                <label
+                  key={name}
+                  className="flex items-center gap-1.5 text-[13px] font-bold"
+                >
+                  <Star size={15} fill="currentColor" className={`${cls} shrink-0`} />
+                  {label}
+                  <input
+                    name={name}
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={5}
+                    defaultValue={value ?? 0}
+                    className="input h-10 w-16 text-center"
+                  />
+                </label>
+              ))}
+              <input
+                name="note"
+                maxLength={50}
+                defaultValue={u.award_note ?? ""}
+                placeholder="이력 (예: 2026 OO오픈 복식 우승)"
+                aria-label="입상 이력"
+                className="input h-10 min-w-0 flex-1"
+              />
+              <button className="btn-primary btn-sm !h-10" disabled={saving}>
+                {saving ? "저장 중…" : "저장"}
+              </button>
+            </Form>
+            {actionData?.error ? (
+              <p role="alert" className="alert-error mt-2">
+                {actionData.error}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* 종합 전적 (관리자만) */}
         {records ? (

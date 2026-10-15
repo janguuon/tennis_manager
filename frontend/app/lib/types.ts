@@ -33,6 +33,11 @@ export interface User {
   is_admin: boolean;
   member_type: MemberType;
   created_at: string;
+  /** 대회 입상 별 개수 (관리자가 정한다): 금 우승 · 은 준우승 · 동 입상 */
+  award_gold?: number;
+  award_silver?: number;
+  award_bronze?: number;
+  award_note?: string | null;
 }
 
 /** 내 프로필 (/users/me): 본인에게만 보이는 환급 계좌 포함 */
@@ -55,6 +60,11 @@ export interface UserBrief {
   /** 이름만 적어 초대한 게스트면 데려온 회원 (가입한 회원은 null) */
   invited_by_id?: number | null;
   invited_by_name?: string | null;
+  /** 대회 입상 별 개수 (관리자가 정한다): 금 우승 · 은 준우승 · 동 입상 */
+  award_gold?: number;
+  award_silver?: number;
+  award_bronze?: number;
+  award_note?: string | null;
 }
 
 export interface LoginResponse {

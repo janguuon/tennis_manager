@@ -205,6 +205,31 @@
   .avatar {
     @apply inline-flex shrink-0 items-center justify-center rounded-full font-display font-extrabold;
   }
+  /* 대회 입상 별: 동그라미 위쪽에 둥글게 (자리는 MemberAvatar 가 left/top 으로) */
+  .award-star {
+    @apply pointer-events-none absolute;
+    width: 22%;
+    height: 22%;
+    min-width: 7px;
+    min-height: 7px;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.25));
+  }
+  .award-star svg {
+    @apply h-full w-full;
+    stroke: #fff;
+    stroke-width: 1.5px;
+    paint-order: stroke;
+  }
+  .award-gold {
+    color: #f2b705;
+  }
+  .award-silver {
+    color: #a7b1bf;
+  }
+  .award-bronze {
+    color: #c27c3e;
+  }
 
   /* ---- 알림 ---- */
   .alert-error {

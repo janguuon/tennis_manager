@@ -119,6 +119,36 @@ class UserRead(UserBase):
     is_admin: bool
     member_type: MemberType = MemberType.MEMBER
     created_at: datetime
+    # 대회 입상 별 개수 (관리자가 정한다)
+    award_gold: int = 0
+    award_silver: int = 0
+    award_bronze: int = 0
+    award_note: str | None = None
+
+
+# 프로필 동그라미 위에 둘러 놓을 수 있는 별 수
+AWARD_MAX_EACH = 5
+AWARD_MAX_TOTAL = 9
+
+
+class AwardUpdate(BaseModel):
+    """대회 입상 별 개수 (관리자): 금 우승 · 은 준우승 · 동 입상. 모두 0이면 지운다."""
+
+    gold: int = Field(0, ge=0, le=AWARD_MAX_EACH)
+    silver: int = Field(0, ge=0, le=AWARD_MAX_EACH)
+    bronze: int = Field(0, ge=0, le=AWARD_MAX_EACH)
+    note: str | None = Field(None, max_length=50)
+
+    @field_validator("note")
+    @classmethod
+    def _clean_note(cls, v: str | None) -> str | None:
+        return " ".join((v or "").split()) or None
+
+    @model_validator(mode="after")
+    def _total(self):
+        if self.gold + self.silver + self.bronze > AWARD_MAX_TOTAL:
+            raise PydanticCustomError("award_total", f"별은 모두 합쳐 {AWARD_MAX_TOTAL}개까지 달 수 있어요.")
+        return self
 
 
 class MemberTypeUpdate(BaseModel):
@@ -189,6 +219,11 @@ class UserBrief(BaseModel):
     # 이름만 적어 초대한 게스트면 데려온 회원 (가입한 회원은 None)
     invited_by_id: int | None = None
     invited_by_name: str | None = None
+    # 대회 입상 별 개수: 프로필 동그라미 위에 금·은·동 별
+    award_gold: int = 0
+    award_silver: int = 0
+    award_bronze: int = 0
+    award_note: str | None = None
 
 
 # --- 경기 / 전적 ------------------------------------------------------------

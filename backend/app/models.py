@@ -150,6 +150,11 @@ class User(Base):
     )
     # 초대 게스트(approval_status=INVITED)를 데려온 회원
     invited_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    # 대회 입상 별 개수 (관리자만 정한다): 금 우승 · 은 준우승 · 동 입상. 프로필 동그라미 위에 별로 보인다
+    award_gold: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    award_silver: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    award_bronze: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    award_note: Mapped[str | None] = mapped_column(String(100))  # 짧은 이력 (예: "2026 OO오픈 우승")
 
     # 코트비 등을 돌려받을 계좌 (본인과 관리자·임원진에게만 공개)
     bank: Mapped[str | None] = mapped_column(String(50))

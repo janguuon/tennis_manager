@@ -26,6 +26,7 @@ from ..models import (
     User,
 )
 from ..schemas import (
+    AwardUpdate,
     MemberDeleteResult,
     MemberTypeUpdate,
     PasswordUpdate,
@@ -113,6 +114,17 @@ def set_member_type(user_id: int, payload: MemberTypeUpdate, db: Session = Depen
     """회원 구분 변경 (예: 체험을 마친 게스트를 정회원으로)."""
     user = _get_user_or_404(db, user_id)
     user.member_type = payload.member_type
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}/award", response_model=UserRead)
+def set_award(user_id: int, payload: AwardUpdate, db: Session = Depends(get_db)):
+    """대회 입상 별 개수 정하기 (관리자): 금 우승 · 은 준우승 · 동 입상, 짧은 이력. 모두 0이면 이력도 지운다."""
+    user = _get_user_or_404(db, user_id)
+    user.award_gold, user.award_silver, user.award_bronze = payload.gold, payload.silver, payload.bronze
+    user.award_note = payload.note if payload.gold + payload.silver + payload.bronze else None
     db.commit()
     db.refresh(user)
     return user

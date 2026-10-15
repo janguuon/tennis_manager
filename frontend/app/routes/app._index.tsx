@@ -22,7 +22,7 @@ import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
-import { isStaff } from "~/lib/club";
+import { isGuest, isStaff } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -119,6 +119,7 @@ export default function HomePage() {
   const { today, me, next, upcoming, myDues, stats, ranking, pendingCount } =
     useLoaderData<typeof loader>();
   const totalDue = myDues.reduce((sum, due) => sum + due.amount, 0);
+  const guest = isGuest(me);
   const weekCount = upcoming.filter(
     (g) => daysBetween(today, g.event_date) < 7
   ).length;
@@ -229,15 +230,18 @@ export default function HomePage() {
               <p className="border-y border-ink/15 py-4 text-xs leading-relaxed">
                 모임마다 입금 계좌가 달라요.
                 <br />
-                정산 내역에서 확인해 주세요.
+                {guest ? "모임 화면에서 확인해 주세요." : "정산 내역에서 확인해 주세요."}
               </p>
             ) : null}
-            <Link
-              to="/app/payments"
-              className="text-link mt-4 flex w-full justify-between"
-            >
-              정산 내역 보기 <ArrowUpRight size={16} />
-            </Link>
+            {/* 게스트는 정산 탭을 보지 않는다 */}
+            {guest ? null : (
+              <Link
+                to="/app/payments"
+                className="text-link mt-4 flex w-full justify-between"
+              >
+                정산 내역 보기 <ArrowUpRight size={16} />
+              </Link>
+            )}
           </div>
         </section>
         <section className="card home-upcoming">

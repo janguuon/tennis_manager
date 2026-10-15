@@ -8,13 +8,13 @@ import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
 import { FEATURES } from "~/lib/features";
-import { requireToken } from "~/lib/session.server";
+import { requireMember } from "~/lib/guard.server";
 import type { RankingEntry } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "랭킹 · 오테식 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const token = await requireToken(request);
+  const { token } = await requireMember(request);
   // 랭킹은 아직 쓰지 않아 숨겨 둔다 (lib/features.ts)
   if (!FEATURES.ranking) throw redirect("/app");
   try {

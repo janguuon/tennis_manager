@@ -324,6 +324,10 @@ export default function GuidePage() {
             ))}
           </ul>
           <p className="guide-tip">
+            <b>게스트</b> 클럽 홈·캘린더·마이페이지만 보여요. 참가비와 입금
+            계좌는 모임 화면에서 확인해요.
+          </p>
+          <p className="guide-tip">
             <b>앱처럼 쓰기</b> 휴대폰에서 주소를 연 뒤 브라우저 메뉴의{" "}
             <b>‘홈 화면에 추가’</b>를 누르면 아이콘으로 바로 들어갈 수 있어요.
           </p>

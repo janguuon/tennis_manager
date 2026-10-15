@@ -30,7 +30,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
@@ -39,10 +39,11 @@ import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_LABEL, canSettle, isClubKind, isStaff } from "~/lib/club";
+import { KIND_LABEL, canSettle, isClubKind, isGuest, isStaff } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
 import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao } from "~/lib/kakao";
+import { membersOrEmpty } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
 import { ATTENDANCE_LABEL, ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
@@ -74,8 +75,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const [gathering, draws, members] = await Promise.all([
       api<GatheringDetail>(`/gatherings/${id}`, { token }),
       api<Draw[]>(`/gatherings/${id}/draws`, { token }),
-      // 코트 예약자 선택용
-      api<UserBrief[]>("/users", { token }),
+      // 코트 예약자 선택용 (게스트는 빈 목록)
+      membersOrEmpty(token),
     ]);
     return json({ gathering, draws, members });
   } catch (err) {
@@ -712,7 +713,7 @@ export default function GatheringDetailPage() {
                           key={p.user.id}
                           className="flex min-w-0 flex-col items-center gap-1.5"
                         >
-                          <Link to={`/app/members/${p.user.id}`}>
+                          <ProfileLink id={p.user.id}>
                             <MemberAvatar
                               user={p.user}
                               className={
@@ -738,7 +739,7 @@ export default function GatheringDetailPage() {
                                 ? `NTRP ${p.user.ntrp}`
                                 : "NTRP 미입력"}
                             </span>
-                          </Link>
+                          </ProfileLink>
                           {canManageAttendance &&
                           (status === "attending" || status === "waiting") ? (
                             <Form
@@ -1425,6 +1426,26 @@ const NO_ACCOUNT = { bank: null, account_number: null, account_holder: null };
 const shortDate = (iso: string) =>
   `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
 
+/** 회원 프로필로 가는 링크. 게스트는 회원 프로필을 볼 수 없어 링크 없이 보여 준다. */
+function ProfileLink({
+  id,
+  className = "",
+  children,
+}: {
+  id: number;
+  className?: string;
+  children: ReactNode;
+}) {
+  const { user } = useOutletContext<{ user: Me }>();
+  return isGuest(user) ? (
+    <div className={`profile-static ${className}`}>{children}</div>
+  ) : (
+    <Link to={`/app/members/${id}`} className={className}>
+      {children}
+    </Link>
+  );
+}
+
 /**
  * 오테식 모임의 회비 지출: 코트 예약자별 코트비와 지급 여부.
  * 정산 담당(관리자·총무)은 예약자를 추가하고, 계좌를 복사해 송금한 뒤 지급 완료를 누른다.
@@ -1870,7 +1891,7 @@ function DrawMatchRow({
   const team = (players: UserBrief[]) => (
     <div className="space-y-3">
       {players.map((p) => (
-        <Link key={p.id} to={`/app/members/${p.id}`} className="draw-player">
+        <ProfileLink key={p.id} id={p.id} className="draw-player">
           <MemberAvatar user={p} className="!h-8 !w-8 shrink-0 !text-xs" />
           <span className="truncate">{p.name}</span>
           {balance?.tiers[p.id] ? (
@@ -1881,7 +1902,7 @@ function DrawMatchRow({
               {balance.tiers[p.id]}
             </span>
           ) : null}
-        </Link>
+        </ProfileLink>
       ))}
     </div>
   );

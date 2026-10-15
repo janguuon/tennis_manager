@@ -1,4 +1,4 @@
-import type { MetaFunction } from "@remix-run/node";
+import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { ArrowUpRight, Printer } from "lucide-react";
 import {
   useEffect,
@@ -11,6 +11,7 @@ import {
 import { Eyebrow, SectionHeading } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
+import { requireMember } from "~/lib/guard.server";
 import {
   NOTICE_ITEMS,
   RULE_CHAPTERS,
@@ -27,6 +28,12 @@ import {
 } from "~/lib/rules";
 
 export const meta: MetaFunction = () => [{ title: "회칙 · 오테식 매니저" }];
+
+// 게스트는 일정만 본다 → 회칙 화면은 캘린더로
+export async function loader({ request }: LoaderFunctionArgs) {
+  await requireMember(request);
+  return null;
+}
 
 const INDEX_CLASS: Record<RuleColor, string> = {
   blue: "bg-house-blue",

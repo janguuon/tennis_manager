@@ -26,7 +26,7 @@ from .. import schedule_import as sheet
 from .. import visibility
 from ..club_account import default_club_account, fill_club_account
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_member, get_current_user
 from ..models import (
     CLUB_KINDS,
     ApprovalStatus,
@@ -1217,7 +1217,7 @@ def my_payment_dues(
 def payment_summary(
     month: str = Query(..., description="정산할 달 (YYYY-MM)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_member),
 ):
     """
     한 달 정산 집계.

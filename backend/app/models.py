@@ -162,6 +162,11 @@ class User(Base):
     participations: Mapped[list[Participant]] = relationship(back_populates="user")
 
     @property
+    def is_guest(self) -> bool:
+        """게스트(관리자 제외): 일정(캘린더·모임)만 본다. 회원 명단·정산·회칙은 보지 않는다."""
+        return not self.is_admin and self.member_type == MemberType.GUEST
+
+    @property
     def is_staff(self) -> bool:
         """관리자·임원진·총무: 오테식 모임 생성·운영, 대진, 일정 먼저 보기."""
         return self.is_admin or self.member_type in (MemberType.OFFICER, MemberType.TREASURER)

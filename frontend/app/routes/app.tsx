@@ -27,6 +27,7 @@ import { MemberAvatar } from "~/components/Club";
 import { GenderPrompt } from "~/components/GenderPrompt";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
+import { isGuest } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
@@ -101,6 +102,7 @@ const allNavItems: NavItem[] = [
     color: "ball",
   },
 ];
+const GUEST_TABS = ["/app", "/app/calendar"];
 const adminItem: NavItem = {
   to: "/app/admin",
   label: "클럽 관리",
@@ -114,10 +116,14 @@ export default function AppLayout() {
   const rootData = useRouteLoaderData("root") as { theme?: string } | undefined;
   const theme = rootData?.theme === "dark" ? "dark" : "light";
   const location = useLocation();
-  // 랭킹은 꺼져 있고(FEATURES), 켜더라도 승률을 볼 수 있는 사람(관리자)에게만
+  // 랭킹은 꺼져 있고(FEATURES), 켜더라도 승률을 볼 수 있는 사람(관리자)에게만.
+  // 게스트는 일정만: 홈·캘린더 탭만 보인다 (정산·회원·회칙 화면은 들어가도 캘린더로)
+  const guest = isGuest(user);
   const navItems = allNavItems.filter(
     (item) =>
-      item.to !== "/app/ranking" || (FEATURES.ranking && canSeeRecords(user))
+      (item.to !== "/app/ranking" ||
+        (FEATURES.ranking && canSeeRecords(user))) &&
+      (!guest || GUEST_TABS.includes(item.to))
   );
   const items = user.is_admin ? [...navItems, adminItem] : navItems;
   const inCalendar = /^\/app\/(gatherings|day)\//.test(location.pathname);

@@ -43,6 +43,10 @@ export const KIND_ORDER: GatheringKind[] = [
 
 export const isClubKind = (kind: GatheringKind) => kind !== "flash";
 
+/** 게스트(관리자 제외): 일정(홈·캘린더·모임)만 본다. 회원 명단·정산·회칙은 보지 않는다 (서버 User.is_guest) */
+export const isGuest = (u: Pick<User, "is_admin" | "member_type">) =>
+  !u.is_admin && u.member_type === "guest";
+
 /** 관리자·임원진·총무: 오테식 모임 생성·운영, 대진, 일정 먼저 보기 (서버 User.is_staff) */
 export const isStaff = (u: Pick<User, "is_admin" | "member_type">) =>
   u.is_admin || u.member_type === "officer" || u.member_type === "treasurer";

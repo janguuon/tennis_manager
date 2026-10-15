@@ -443,7 +443,8 @@
   .player-grid {
     @apply mt-6 grid grid-cols-3 gap-x-3 gap-y-6 min-[400px]:grid-cols-4;
   }
-  .player-grid a {
+  .player-grid a,
+  .player-grid .profile-static {
     @apply flex min-w-0 flex-col items-center gap-2 text-center;
   }
   .draw-grid {

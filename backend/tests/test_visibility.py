@@ -153,3 +153,21 @@ def test_creator_always_sees_own_gathering(club, fixed_now):
     ).json()["id"]
     assert club.vote(fri, "gus").status_code == 200
     assert club.vote(fri, "cal").status_code == 200
+
+
+def test_guest_sees_only_schedule(club, fixed_now):
+    """게스트는 일정(캘린더·모임)만: 회원 명단·다른 회원 프로필·월 정산은 403, 자기 프로필은 된다."""
+    club.add_members("gus", "amy")
+    club.set_type("gus", "guest")
+    h = club.headers["gus"]
+    assert club.c.get("/users", headers=h).status_code == 403
+    assert club.c.get(f"/users/{club.ids['amy']}", headers=h).status_code == 403
+    assert club.c.get(f"/users/{club.ids['gus']}", headers=h).status_code == 200
+    assert club.c.get("/gatherings/payments/summary?month=2099-01", headers=h).status_code == 403
+    # 일정·모임·내 참가비는 그대로
+    fri = club.gathering(fee=0, date=THIS_FRI)
+    assert THIS_FRI in _visible(club, "gus")
+    assert club.c.get(f"/gatherings/{fri}", headers=h).status_code == 200
+    assert club.c.get("/gatherings/payments/me", headers=h).status_code == 200
+    # 정회원은 그대로 본다
+    assert club.c.get("/users", headers=club.headers["amy"]).status_code == 200

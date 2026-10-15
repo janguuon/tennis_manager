@@ -32,6 +32,7 @@ import { FieldGroup, Modal } from "~/components/Modal";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ScheduleShare } from "~/components/ScheduleShare";
 import { ApiError, api } from "~/lib/api.server";
+import { membersOrEmpty } from "~/lib/guard.server";
 import { KIND_LABEL, KIND_SHORT, isClubKind, isStaff } from "~/lib/club";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import type { NewSchedule } from "~/lib/schedule-notice";
@@ -90,8 +91,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { from, to } = monthRange(month);
   const [gatherings, members, savedClubAccount] = await Promise.all([
     api<Gathering[]>(`/gatherings?date_from=${from}&date_to=${to}`, { token }),
-    // 오테식 모임 등록 시 코트 예약자 선택용
-    api<UserBrief[]>("/users", { token }),
+    // 오테식 모임 등록 시 코트 예약자 선택용 (게스트는 빈 목록)
+    membersOrEmpty(token),
     // 오테식 모임 등록 때 미리 채울 모임 통장
     api<ClubAccount | null>("/club/account", { token }),
   ]);

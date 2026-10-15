@@ -49,6 +49,15 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def get_current_member(current_user: User = Depends(get_current_user)) -> User:
+    """게스트가 아닌 회원 전용: 회원 명단·월 정산처럼 게스트에게 보이지 않는 정보."""
+    if current_user.is_guest:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="게스트는 일정만 볼 수 있어요."
+        )
+    return current_user
+
+
 def get_current_settler(current_user: User = Depends(get_current_user)) -> User:
     """정산 담당(관리자·총무) 전용 의존성: 코트비 지급 처리, 지급 내역, 지급 대기 목록."""
     if not current_user.can_settle:

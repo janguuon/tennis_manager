@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import avatars
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_member, get_current_user
 from ..models import ApprovalStatus, User
 from ..schemas import PasswordUpdate, UserMe, UserRead, UserUpdate
 from ..security import hash_password
@@ -102,9 +102,9 @@ def list_members(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_current_member),
 ):
-    """팀 회원 목록 (승인된 활성 회원만). 이후 랭킹/대진 기능에서 활용."""
+    """팀 회원 목록 (승인된 활성 회원만). 게스트는 볼 수 없다."""
     users = db.scalars(
         select(User)
         .where(
@@ -121,9 +121,11 @@ def list_members(
 def get_member(
     user_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """특정 회원 프로필 조회."""
+    """특정 회원 프로필 조회. 게스트는 자기 프로필만."""
+    if current_user.is_guest and current_user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="게스트는 일정만 볼 수 있어요.")
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="회원을 찾을 수 없습니다.")

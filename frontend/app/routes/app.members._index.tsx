@@ -7,14 +7,14 @@ import { MemberAvatar, memberColor } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
-import { requireToken } from "~/lib/session.server";
+import { requireMember } from "~/lib/guard.server";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import type { User } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "회원 · 오테식 매니저" }];
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const token = await requireToken(request);
+  const { token } = await requireMember(request);
   const members = await api<User[]>("/users", { token });
   return json({ members });
 }

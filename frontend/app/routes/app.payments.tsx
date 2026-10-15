@@ -29,6 +29,7 @@ import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { KIND_BADGE, KIND_LABEL, canSettle, isClubKind } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
+import { requireMember } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
 import type {
   CourtBooking,
@@ -67,7 +68,7 @@ function lineNames(lines: PaymentLine[], perPerson?: number): string {
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const token = await requireToken(request);
+  const { token } = await requireMember(request);
   const url = new URL(request.url);
   const month = url.searchParams.get("month") || currentMonth();
   const [summary, myDues, myBookings, me] = await Promise.all([

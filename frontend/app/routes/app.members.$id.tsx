@@ -8,7 +8,7 @@ import { BackLink, PageBody } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { canSeeRecords } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
-import { requireToken } from "~/lib/session.server";
+import { requireMember } from "~/lib/guard.server";
 import {
   MATCH_TYPE_LABEL,
   type Me,
@@ -24,9 +24,8 @@ export const meta: MetaFunction = () => [
 ];
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const token = await requireToken(request);
+  const { token, me } = await requireMember(request);
   const id = params.id;
-  const me = await api<Me>("/users/me", { token });
   // 승률·전적은 당분간 관리자만 본다 (임원진 포함 다른 회원은 프로필만)
   if (!canSeeRecords(me)) {
     const user = await api<User>(`/users/${id}`, { token });

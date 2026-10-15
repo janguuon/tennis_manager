@@ -224,12 +224,19 @@ def _nominal_due(gathering: Gathering, p: Participant, per_person: int) -> int:
 
 
 def _has_payment(gathering: Gathering) -> bool:
-    """정산할 참가비가 있는지: 일반 벙개는 총액, 오테식 모임은 게스트 또는 입금 기록."""
+    """정산할 참가비가 있는지: 일반 벙개는 총액, 오테식 모임은 참석 중인 게스트 또는 입금 기록.
+
+    불참·대기로 바꾼 게스트는 명단에 남아 있어도 세지 않는다(낼 돈이 없다).
+    이미 낸 사람이 있으면 돌려줄 돈 때문에 남긴다.
+    """
     if not gathering.is_club:
         return gathering.fee > 0
     return any(p.paid for p in gathering.participants) or (
         gathering.guest_fee > 0
-        and any(p.user.member_type == MemberType.GUEST for p in gathering.participants)
+        and any(
+            p.user.member_type == MemberType.GUEST and p.status == AttendanceStatus.ATTENDING
+            for p in gathering.participants
+        )
     )
 
 

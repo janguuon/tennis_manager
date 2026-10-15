@@ -93,6 +93,27 @@ def test_club_without_guests_has_no_payment(club):
     assert club.summary()["gatherings"] == []
 
 
+def test_guest_card_goes_away_when_guests_leave(club):
+    """게스트가 불참·대기로 바뀌어 참석 게스트가 0명이면 게스트비 정산이 사라진다 (낸 사람이 있으면 돌려줄 돈으로 남는다)."""
+    club.add_members("kim", "gst", "gs2")
+    club.set_type("gst", "guest")
+    club.set_type("gs2", "guest")
+    gid = club.create(kind="club_regular", bank="국민", account_number="1").json()["id"]
+    club.vote(gid, "kim")
+    club.vote(gid, "gst")
+    assert club.detail(gid)["payment"]["payer_count"] == 1
+    club.vote(gid, "gst", "absent")
+    assert club.detail(gid)["payment"] is None
+    assert club.summary()["gatherings"] == []
+
+    # 낸 뒤 불참하면 돌려줄 돈 때문에 남는다
+    club.vote(gid, "gs2")
+    assert club.pay(gid, "gs2").status_code == 200
+    club.vote(gid, "gs2", "absent")
+    pay = club.detail(gid)["payment"]
+    assert pay is not None and pay["payer_count"] == 0
+    assert [(x["user"]["username"], x["amount"]) for x in pay["refunds"]] == [("gs2", 5000)]
+
 def test_guest_fee_change_after_payment_creates_due(club):
     club.add_members("gst")
     club.set_type("gst", "guest")

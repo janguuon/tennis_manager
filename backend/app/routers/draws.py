@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import matchmaking, rating, visibility
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_user
 from ..models import (
     AttendanceStatus,
     Draw,
@@ -156,8 +156,9 @@ def _require_organizer(db: Session, gathering_id: int, user: User) -> Gathering:
     g = db.get(Gathering, gathering_id)
     if not g:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
-    # 모임 관리 권한과 같다: 오테식 모임은 클럽 일정이라 임원진도 대진을 짜고 결과를 입력한다
-    if g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff):
+    # 모임 관리 권한과 같다: 오테식 모임은 클럽 일정이라 임원진도 대진을 짜고 결과를 입력한다.
+    # 게스트는 보기와 투표만 한다
+    if not user.is_guest and (g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff)):
         return g
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
 
@@ -166,10 +167,12 @@ _SLOT_COLUMNS = ("team1_player1_id", "team1_player2_id", "team2_player1_id", "te
 
 
 def _require_editor(db: Session, gathering_id: int, user: User) -> Gathering:
-    """대진 자리 바꾸기: 운영진(주최자·관리자·오테식 모임 임원진) 또는 그 모임 참석자."""
+    """대진 자리 바꾸기: 운영진(주최자·관리자·오테식 모임 임원진) 또는 그 모임 참석자. 게스트는 보기만."""
     g = db.get(Gathering, gathering_id)
     if not g:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
+    if user.is_guest:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     if g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff):
         return g
     attending = db.scalar(

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import avatars
 from ..database import get_db
-from ..deps import get_current_member, get_current_user
+from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_user
 from ..models import ApprovalStatus, User
 from ..schemas import PasswordUpdate, UserMe, UserRead, UserUpdate
 from ..security import hash_password
@@ -125,7 +125,7 @@ def get_member(
 ):
     """특정 회원 프로필 조회. 게스트는 자기 프로필만."""
     if current_user.is_guest and current_user.id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="게스트는 일정만 볼 수 있어요.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="회원을 찾을 수 없습니다.")

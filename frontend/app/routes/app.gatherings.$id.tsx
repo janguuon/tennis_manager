@@ -256,14 +256,17 @@ export default function GatheringDetailPage() {
   const { user } = useOutletContext<{ user: Me }>();
   const club = isClubKind(gathering.kind);
   const staff = isStaff(user);
+  // 게스트는 일정 보기와 참석 투표만 한다 (직접 만든 일정이라도 관리하지 않음, 서버와 같음)
+  const guest = isGuest(user);
   // 주최자·관리자. 오테식 모임은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
   const isOrganizer =
-    gathering.created_by === user.id || user.is_admin || (club && staff);
+    !guest &&
+    (gathering.created_by === user.id || user.is_admin || (club && staff));
   // 참석 취소 대신 해 주기(3일 전 마감 뒤 요청 처리): 주최자, 그리고 관리자·임원진·총무는 모든 모임에서
   const canManageAttendance = isOrganizer || staff;
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
   const settle = canSettle(user);
-  const canPay = settle || (!club && gathering.created_by === user.id);
+  const canPay = settle || (!club && !guest && gathering.created_by === user.id);
   const [editing, setEditing] = useState(false);
   // 직접 바꾸기 중인 대진표 id
   const [editingDraw, setEditingDraw] = useState<number | null>(null);
@@ -1098,7 +1101,7 @@ export default function GatheringDetailPage() {
                   ) : null}
                 </p>
                 <div className="flex items-center gap-1">
-                  {(isOrganizer || myAttending) &&
+                  {(isOrganizer || (myAttending && !guest)) &&
                   draw.matches.some((m) => m.result_match_id === null) ? (
                     <button
                       type="button"

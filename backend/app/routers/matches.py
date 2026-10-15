@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..deps import get_current_admin, get_current_user
+from ..deps import get_current_admin, get_current_member, get_current_user
 from ..models import DrawMatch, Gathering, Match, MatchPlayer, MatchType, TeamSide, User
 from ..schemas import MatchCreate, MatchRead, MatchUpdate
 
@@ -45,7 +45,7 @@ def _load_match(db: Session, match_id: int) -> Match:
 def create_match(
     payload: MatchCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_member),
 ):
     """경기 결과 입력 → 참가자 전적에 반영."""
     # 모임 연결 검증
@@ -127,7 +127,7 @@ def update_match(
     match_id: int,
     payload: MatchUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_member),
 ):
     """경기 결과 수정. 기록자 본인 또는 관리자만 가능."""
     match = _load_match(db, match_id)
@@ -150,7 +150,7 @@ def update_match(
 def delete_match(
     match_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_member),
 ):
     """경기 삭제 → 전적에서 제외. 기록자 본인 또는 관리자만 가능."""
     match = db.get(Match, match_id)

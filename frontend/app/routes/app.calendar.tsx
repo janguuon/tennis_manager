@@ -39,6 +39,7 @@ import {
   KIND_LABEL,
   KIND_SHORT,
   isClubKind,
+  isGuest,
   isStaff,
 } from "~/lib/club";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
@@ -197,6 +198,8 @@ export default function CalendarPage() {
   const { month, gatherings, view, members, savedClubAccount } =
     useLoaderData<typeof loader>();
   const { user } = useOutletContext<{ user: Me }>();
+  // 게스트는 일정 보기와 참석 투표만: 일정 등록·엑셀 버튼이 없다
+  const canCreate = !isGuest(user);
   // 오테식 모임 기본 계좌: 모임 통장, 없으면 이 달의 마지막 오테식 모임 계좌
   const clubAccount =
     savedClubAccount ??
@@ -322,22 +325,26 @@ export default function CalendarPage() {
                   리스트
                 </button>
               </div>
-              <button
-                className="btn-ghost btn-sm !h-10"
-                onClick={() => setImporting(true)}
-                title="엑셀로 여러 일정 등록"
-                aria-label="엑셀로 일정 등록"
-              >
-                <Upload size={15} />
-                <span className="hidden sm:inline">엑셀</span>
-              </button>
-              <button
-                className="btn-primary btn-sm !h-10"
-                onClick={() => setShowCreate(true)}
-              >
-                <Plus size={16} />
-                일정 등록
-              </button>
+              {canCreate ? (
+                <>
+                  <button
+                    className="btn-ghost btn-sm !h-10"
+                    onClick={() => setImporting(true)}
+                    title="엑셀로 여러 일정 등록"
+                    aria-label="엑셀로 일정 등록"
+                  >
+                    <Upload size={15} />
+                    <span className="hidden sm:inline">엑셀</span>
+                  </button>
+                  <button
+                    className="btn-primary btn-sm !h-10"
+                    onClick={() => setShowCreate(true)}
+                  >
+                    <Plus size={16} />
+                    일정 등록
+                  </button>
+                </>
+              ) : null}
             </>
           }
         />
@@ -485,13 +492,15 @@ export default function CalendarPage() {
           <EmptyCard
             icon={<CalendarDays size={28} />}
             action={
-              <button
-                className="btn-accent btn-sm"
-                onClick={() => setShowCreate(true)}
-              >
-                <Plus size={16} />
-                일정 등록
-              </button>
+              canCreate ? (
+                <button
+                  className="btn-accent btn-sm"
+                  onClick={() => setShowCreate(true)}
+                >
+                  <Plus size={16} />
+                  일정 등록
+                </button>
+              ) : undefined
             }
           >
             이 달에 등록된 일정이 없어요.

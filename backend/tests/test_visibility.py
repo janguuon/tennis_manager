@@ -128,7 +128,7 @@ def test_open_time_text():
 
 
 def test_creator_always_sees_own_gathering(club, fixed_now):
-    """정회원·게스트가 만든 일반 벙개는 공개 시각 전이라도 만든 사람에게 보이고 바로 투표할 수 있다."""
+    """정회원이 만든 일반 벙개는 공개 시각 전이라도 만든 사람에게 보이고 바로 투표할 수 있다."""
     club.add_members("amy", "cal", "gus")
     club.set_type("gus", "guest")
     r = club.c.post(
@@ -145,14 +145,13 @@ def test_creator_always_sees_own_gathering(club, fixed_now):
     assert NEXT_WED not in _visible(club, "cal")
     assert club.c.get(f"/gatherings/{wed}", headers=club.headers["cal"]).status_code == 403
 
-    # 게스트가 만든 이번 주 벙개: 3일 전이 아니어도 만든 게스트는 투표할 수 있다
-    fri = club.c.post(
+    # 게스트는 일정을 만들 수 없다 (보기와 투표만)
+    r = club.c.post(
         "/gatherings",
         json={"title": "게스트 벙개", "kind": "flash", "event_date": THIS_FRI},
         headers=club.headers["gus"],
-    ).json()["id"]
-    assert club.vote(fri, "gus").status_code == 200
-    assert club.vote(fri, "cal").status_code == 200
+    )
+    assert r.status_code == 403
 
 
 def test_guest_sees_only_schedule(club, fixed_now):
@@ -171,3 +170,39 @@ def test_guest_sees_only_schedule(club, fixed_now):
     assert club.c.get("/gatherings/payments/me", headers=h).status_code == 200
     # 정회원은 그대로 본다
     assert club.c.get("/users", headers=club.headers["amy"]).status_code == 200
+
+
+def test_guest_can_only_view_and_vote(club, fixed_now):
+    """게스트는 일정 보기와 참석 투표만: 만들기·엑셀·고치기·지우기·남의 참석·입금·대진·결과는 403."""
+    from app.database import SessionLocal
+    from app.models import Gathering
+
+    club.add_members("gus", "amy")
+    club.set_type("gus", "guest")
+    h = club.headers["gus"]
+    assert club.c.post("/gatherings", json={"title": "x", "event_date": THIS_FRI}, headers=h).status_code == 403
+    files = {"file": ("s.xlsx", b"x", "application/octet-stream")}
+    assert club.c.post("/gatherings/import", files=files, headers=h).status_code == 403
+    assert club.c.get("/gatherings/import/template", headers=h).status_code == 403
+
+    # 예전에 게스트가 만들어 둔 일반 벙개라도 고치거나 다룰 수 없다
+    gid = club.create(kind="flash", event_date=THIS_FRI, court_fee=20000).json()["id"]
+    with SessionLocal() as db:
+        db.get(Gathering, gid).created_by = club.ids["gus"]
+        db.commit()
+    fixed_now["now"] = datetime(2099, 1, 13, 0, 0)  # 게스트 투표 열림
+    assert club.vote(gid, "gus").status_code == 200  # 투표는 된다
+    assert club.vote(gid, "amy").status_code == 200
+    assert club.c.patch(f"/gatherings/{gid}", json={"title": "y"}, headers=h).status_code == 403
+    assert club.c.delete(f"/gatherings/{gid}", headers=h).status_code == 403
+    r = club.c.put(f"/gatherings/{gid}/participants/{club.ids['amy']}/attendance",
+                   json={"status": "absent"}, headers=h)
+    assert r.status_code == 403
+    r = club.c.put(f"/gatherings/{gid}/participants/{club.ids['amy']}/payment", json={"paid": True}, headers=h)
+    assert r.status_code == 403
+    assert club.c.post(f"/gatherings/{gid}/draws", json={"method": "random"}, headers=h).status_code == 403
+    r = club.c.post("/matches", json={"gathering_id": gid, "players": []}, headers=h)
+    assert r.status_code == 403
+    # 정회원은 그대로 만든다
+    assert club.c.post("/gatherings", json={"title": "z", "event_date": THIS_FRI},
+                       headers=club.headers["amy"]).status_code == 201

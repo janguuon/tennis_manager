@@ -26,7 +26,7 @@ from .. import schedule_import as sheet
 from .. import visibility
 from ..club_account import default_club_account, fill_club_account
 from ..database import get_db
-from ..deps import get_current_member, get_current_user
+from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_user
 from ..models import (
     CLUB_KINDS,
     ApprovalStatus,
@@ -314,7 +314,10 @@ def _load_gathering(db: Session, gathering_id: int) -> Gathering:
 
 
 def _require_organizer(gathering: Gathering, user: User) -> None:
-    """주최자·관리자만. 오테식 모임은 클럽 일정이라 임원진도 관리할 수 있다."""
+    """주최자·관리자만. 오테식 모임은 클럽 일정이라 임원진도 관리할 수 있다.
+    게스트는 보기와 투표만 하므로 직접 만든 일정이라도 관리하지 않는다."""
+    if user.is_guest:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     if gathering.created_by == user.id or user.is_admin:
         return
     if gathering.is_club and user.is_staff:
@@ -485,9 +488,9 @@ def waiting_rank(db: Session, participant: Participant) -> int | None:
 def create_gathering(
     payload: GatheringCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_member),
 ):
-    """모임 생성 (캘린더에 일정 등록). 오테식 정모·벙개는 관리자·임원진만."""
+    """모임 생성 (캘린더에 일정 등록). 오테식 정모·벙개는 관리자·임원진만, 게스트는 만들 수 없다."""
     data = payload.model_dump()
     bookings = data.pop("court_bookings")
     _require_club_creator(data["kind"], current_user)
@@ -552,7 +555,7 @@ def _cell_value(field: str, value) -> str | int:
 async def import_gatherings(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_member),
 ):
     """엑셀(.xlsx)로 일정을 한꺼번에 등록한다. 오류 행은 건너뛰고 보고한다.
 
@@ -642,7 +645,7 @@ def _import_items(made: list[Gathering]) -> list[GatheringImportItem]:
 @router.get("/import/template")
 def import_template(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_current_member),
 ):
     """일정 자동 등록 양식(.xlsx): 코트 예약 시트.
     예약자명은 예약에 쓰는 이름 목록, 코트요정은 회원 이름 목록에서 고른다(목록에 없는 이름도 적을 수 있다)."""
@@ -1149,7 +1152,8 @@ def set_payment(
     - paid=false: 누구든 가능(입금 취소, 환불 완료). 기록을 지운다.
     """
     gathering = _load_gathering(db, gathering_id)
-    if not (current_user.can_settle or (not gathering.is_club and gathering.created_by == current_user.id)):
+    is_host = not gathering.is_club and gathering.created_by == current_user.id and not current_user.is_guest
+    if not (current_user.can_settle or is_host):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="입금 처리는 관리자와 총무만 할 수 있어요. (일반 벙개는 만든 사람도 가능)",

@@ -49,12 +49,14 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+GUEST_ONLY_VIEW_AND_VOTE = "게스트는 일정 보기와 참석 투표만 할 수 있어요."
+
+
 def get_current_member(current_user: User = Depends(get_current_user)) -> User:
-    """게스트가 아닌 회원 전용: 회원 명단·월 정산처럼 게스트에게 보이지 않는 정보."""
+    """게스트가 아닌 회원 전용. 게스트는 일정 보기와 참석 투표만 한다
+    (회원 명단·월 정산을 보거나, 일정을 만들고 고치고, 대진·결과·입금을 다루지 않는다)."""
     if current_user.is_guest:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="게스트는 일정만 볼 수 있어요."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     return current_user
 
 

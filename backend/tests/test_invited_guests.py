@@ -88,3 +88,71 @@ def test_cancel_invite(club):
     # 가입한 회원은 이 경로로 뺄 수 없다
     r = club.c.delete(f"/gatherings/{gid}/guests/{club.ids['cal']}", headers=club.h("off"))
     assert r.status_code == 404
+
+
+
+
+def test_games_with_guests_are_not_counted(club):
+    """초대 게스트가 뛴 경기는 승·패 전적·파트너·상대·랭킹에 누적하지 않는다 (경기 기록은 남는다)."""
+    club.add_members("aaa", "bbb", "ccc", "ddd")
+    gid = club.create(kind="club_regular", court_count=1).json()["id"]
+    for n in ("aaa", "bbb"):
+        club.vote(gid, n)
+    g1, g2 = (
+        club.c.post(f"/gatherings/{gid}/guests", json={"name": n}, headers=club.admin).json()["user"]["id"]
+        for n in ("홍길동", "김철수")
+    )
+    aaa, bbb, ccc, ddd = (club.ids[n] for n in ("aaa", "bbb", "ccc", "ddd"))
+
+    def match(team1, team2, s1, s2):
+        body = {
+            "match_type": "mens_doubles", "played_at": "2099-01-15", "gathering_id": gid,
+            "team1_score": s1, "team2_score": s2,
+            "players": [{"user_id": u, "team": 1} for u in team1] + [{"user_id": u, "team": 2} for u in team2],
+        }
+        r = club.c.post("/matches", json=body, headers=club.admin)
+        assert r.status_code == 201
+        return r.json()["id"]
+
+    match([aaa, bbb], [ccc, ddd], 6, 3)          # 회원끼리 → 누적
+    guest_match = match([aaa, g1], [bbb, g2], 6, 4)  # 게스트가 낀 경기 → 누적하지 않음
+
+    stats = club.c.get(f"/stats/users/{aaa}", headers=club.admin).json()
+    assert (stats["overall"]["total"], stats["overall"]["wins"]) == (1, 1)
+    partners = {r["partner"]["name"] for r in club.c.get(f"/stats/users/{aaa}/partners", headers=club.admin).json()}
+    opponents = {r["opponent"]["name"] for r in club.c.get(f"/stats/users/{aaa}/opponents", headers=club.admin).json()}
+    assert partners == {"bbb"} and opponents == {"ccc", "ddd"}
+    ranking = {r["user"]["name"]: r["record"]["total"] for r in club.c.get("/stats/ranking", headers=club.admin).json()}
+    assert ranking == {"aaa": 1, "bbb": 1, "ccc": 1, "ddd": 1}
+    # 경기 기록 자체는 남아 있다
+    assert club.c.get(f"/matches/{guest_match}", headers=club.admin).status_code == 200
+
+
+def test_games_with_guests_are_not_rated(club):
+    """대진표 결과로 계산하는 레이팅에도 초대 게스트가 뛴 경기는 넣지 않는다."""
+    club.add_members("aaa", "bbb", "ccc", "ddd")
+
+    def play(names, guests):
+        gid = club.create(kind="club_regular", court_count=1).json()["id"]
+        for n in names:
+            club.vote(gid, n)
+        for n in guests:  # 운영진(관리자)은 언제든 초대
+            assert club.c.post(f"/gatherings/{gid}/guests", json={"name": n}, headers=club.admin).status_code == 201
+        draw = club.c.post(f"/gatherings/{gid}/draws/generate",
+                           json={"match_type": "mens_doubles", "rounds": 1}, headers=club.admin).json()
+        dm = draw["matches"][0]
+        assert club.c.post(f"/draw-matches/{dm['id']}/result",
+                           json={"team1_score": 6, "team2_score": 3}, headers=club.admin).status_code == 200
+
+    play(["aaa", "bbb"], ["홍길동", "김철수"])  # 게스트가 낀 대진 → 레이팅에 넣지 않음
+    board = club.c.get("/admin/ratings", headers=club.admin).json()
+    assert board["counted_matches"] == 0
+    assert all(r["games"] == 0 for r in board["rows"])
+    assert not {"홍길동", "김철수"} & {r["user"]["name"] for r in board["rows"]}
+
+    play(["aaa", "bbb", "ccc", "ddd"], [])  # 회원끼리 → 반영
+    board = club.c.get("/admin/ratings", headers=club.admin).json()
+    assert board["counted_matches"] == 1
+    assert {r["user"]["name"]: r["games"] for r in board["rows"] if r["games"]} == {
+        "aaa": 1, "bbb": 1, "ccc": 1, "ddd": 1,
+    }

@@ -6,16 +6,24 @@ Match / MatchPlayer 기록으로부터 개인·페어·상대 전적, 랭킹을 
 
 탈퇴한 회원이 뛴 경기는 집계에서 뺀다(without_withdrawn). 경기 기록 자체는 남아 있어
 회원을 복구하면 다시 반영된다.
+
+이름만 적어 초대한 게스트(가입하지 않은 사람)가 한 명이라도 뛴 경기도 승·패 전적·랭킹·레이팅에
+누적하지 않는다(without_invited_guests). 대진표와 경기 결과는 그대로 남는다.
 """
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from .models import Match, MatchPlayer, MatchType, TeamSide, User
+from .models import ApprovalStatus, Match, MatchPlayer, MatchType, TeamSide, User
 
 
 def without_withdrawn():
     """탈퇴한 회원이 한 명이라도 뛴 경기를 빼는 조건 (select(Match).where(...) 에 붙인다)."""
     return ~Match.players.any(MatchPlayer.user.has(User.is_active.is_(False)))
+
+
+def without_invited_guests():
+    """이름만 적어 초대한 게스트가 한 명이라도 뛴 경기를 빼는 조건 (전적·랭킹·레이팅에 누적하지 않는다)."""
+    return ~Match.players.any(MatchPlayer.user.has(User.approval_status == ApprovalStatus.INVITED))
 
 
 @dataclass

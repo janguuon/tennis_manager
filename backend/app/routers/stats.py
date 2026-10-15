@@ -26,13 +26,14 @@ router = APIRouter(prefix="/stats", tags=["stats"], dependencies=[Depends(get_cu
 
 
 def _load_user_matches(db: Session, user_id: int) -> list[Match]:
-    """해당 회원이 참가한 경기 (탈퇴한 회원과 함께한 경기 제외, 참가자/회원 eager load)."""
+    """해당 회원이 참가한 경기 (탈퇴한 회원·초대 게스트와 함께한 경기 제외, 참가자/회원 eager load)."""
     return list(
         db.scalars(
             select(Match)
             .where(
                 Match.players.any(MatchPlayer.user_id == user_id),
                 stats_svc.without_withdrawn(),
+                stats_svc.without_invited_guests(),
             )
             .options(selectinload(Match.players).selectinload(MatchPlayer.user))
             .order_by(Match.played_at.desc())
@@ -86,11 +87,11 @@ def get_ranking(
     db: Session = Depends(get_db),
     min_games: int = Query(0, ge=0, description="랭킹 포함 최소 경기 수(승+패)"),
 ):
-    """팀 랭킹: 승률 → 승수 순. 탈퇴한 회원과 함께한 경기는 빼고 계산한다."""
+    """팀 랭킹: 승률 → 승수 순. 탈퇴한 회원·초대 게스트와 함께한 경기는 빼고 계산한다."""
     matches = list(
         db.scalars(
             select(Match)
-            .where(stats_svc.without_withdrawn())
+            .where(stats_svc.without_withdrawn(), stats_svc.without_invited_guests())
             .options(selectinload(Match.players).selectinload(MatchPlayer.user))
         ).all()
     )

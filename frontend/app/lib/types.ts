@@ -52,6 +52,9 @@ export interface UserBrief {
   member_type: MemberType;
   /** 프로필 사진 ("/avatars/…", 없으면 이름 첫 글자) */
   avatar_url: string | null;
+  /** 이름만 적어 초대한 게스트면 데려온 회원 (가입한 회원은 null) */
+  invited_by_id?: number | null;
+  invited_by_name?: string | null;
 }
 
 export interface LoginResponse {

@@ -9,6 +9,7 @@ import {
   Link,
   isRouteErrorResponse,
   useActionData,
+  useFetcher,
   useLoaderData,
   useNavigation,
   useOutletContext,
@@ -29,8 +30,9 @@ import {
   Shuffle,
   Trash2,
   Undo2,
+  UserPlus,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
@@ -137,6 +139,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
           method: formData.get("method"),
           rounds: Number(formData.get("rounds")) || null,
         },
+      });
+    } else if (intent === "invite_guest") {
+      await api(`/gatherings/${id}/guests`, {
+        method: "POST",
+        token,
+        body: {
+          name: String(formData.get("name") ?? ""),
+          gender: formData.get("gender") || null,
+        },
+      });
+    } else if (intent === "remove_guest") {
+      await api(`/gatherings/${id}/guests/${formData.get("user_id")}`, {
+        method: "DELETE",
+        token,
       });
     } else if (intent === "set_attendance") {
       await api(
@@ -328,6 +344,16 @@ export default function GatheringDetailPage() {
   );
   const me = gathering.participants.find((p) => p.user.id === user.id);
   const myAttending = me?.status === "attending";
+  // 게스트 초대(이름만): 참석·대기 중인 회원, 벙주, 운영진. 회칙대로 게스트 투표 시각부터(운영진은 언제든)
+  const canInvite =
+    !guest &&
+    (gathering.status === "planned" || gathering.status === "ongoing") &&
+    (staff ||
+      gathering.created_by === user.id ||
+      myAttending ||
+      me?.status === "waiting");
+  const inviteOpensAt =
+    !staff && !gathering.guest_vote_open ? gathering.guest_vote_open_at : null;
   // 대기열: 정원이 차면 참석 신청은 대기, 자리가 나면 순서대로 참석
   const waiting = waitingList(gathering.participants);
   const full = isFull(gathering, attendees.length);
@@ -690,6 +716,7 @@ export default function GatheringDetailPage() {
               취소 요청을 받으면 이름 아래 ‘참석 취소’를 눌러 주세요.
             </p>
           ) : null}
+          {canInvite ? <GuestInviteBox opensAt={inviteOpensAt} /> : null}
           {!gathering.participants.length ? (
             <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
               아직 투표한 사람이 없어요.
@@ -716,7 +743,7 @@ export default function GatheringDetailPage() {
                           key={p.user.id}
                           className="flex min-w-0 flex-col items-center gap-1.5"
                         >
-                          <ProfileLink id={p.user.id}>
+                          <ProfileLink id={p.user.id} invited={!!p.user.invited_by_id}>
                             <MemberAvatar
                               user={p.user}
                               className={
@@ -737,13 +764,43 @@ export default function GatheringDetailPage() {
                               )}
                             </strong>
                             <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                              {p.user.member_type === "guest" ? "게스트 · " : ""}
-                              {p.user.ntrp
-                                ? `NTRP ${p.user.ntrp}`
-                                : "NTRP 미입력"}
+                              {p.user.invited_by_id
+                                ? `게스트 · ${p.user.invited_by_name ?? ""} 초대`
+                                : `${p.user.member_type === "guest" ? "게스트 · " : ""}${
+                                    p.user.ntrp ? `NTRP ${p.user.ntrp}` : "NTRP 미입력"
+                                  }`}
                             </span>
                           </ProfileLink>
-                          {canManageAttendance &&
+                          {p.user.invited_by_id &&
+                          (canManageAttendance || p.user.invited_by_id === user.id) &&
+                          (status === "attending" || status === "waiting") &&
+                          !(status === "attending" && attendanceLocked && !canManageAttendance) ? (
+                            <Form
+                              method="post"
+                              onSubmit={(e) => {
+                                if (
+                                  !confirm(
+                                    `${p.user.name}님 초대를 취소할까요?${
+                                      status === "attending" && waiting.length
+                                        ? `\n대기 1번 ${waiting[0].user.name}님이 참석으로 올라가요.`
+                                        : ""
+                                    }`
+                                  )
+                                )
+                                  e.preventDefault();
+                              }}
+                            >
+                              <input type="hidden" name="intent" value="remove_guest" />
+                              <input type="hidden" name="user_id" value={p.user.id} />
+                              <button
+                                className="rounded-full border border-slate-300 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition-colors hover:border-[#C2361F] hover:text-[#C2361F] dark:border-slate-600 dark:text-slate-300"
+                                aria-label={`${p.user.name} 초대 취소`}
+                              >
+                                초대 취소
+                              </button>
+                            </Form>
+                          ) : !p.user.invited_by_id &&
+                          canManageAttendance &&
                           (status === "attending" || status === "waiting") ? (
                             <Form
                               method="post"
@@ -934,6 +991,11 @@ export default function GatheringDetailPage() {
                             {p.user.id === user.id ? (
                               <span className="ml-1 text-xs font-semibold">
                                 (나)
+                              </span>
+                            ) : null}
+                            {p.user.invited_by_name ? (
+                              <span className="ml-1 text-xs font-semibold">
+                                ({p.user.invited_by_name} 초대)
                               </span>
                             ) : null}
                             {note ? (
@@ -1429,18 +1491,99 @@ const NO_ACCOUNT = { bank: null, account_number: null, account_holder: null };
 const shortDate = (iso: string) =>
   `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
 
+/**
+ * 이름만 적어 게스트 초대 (가입하지 않은 분). 게스트와 똑같이 자리를 쓰고(꽉 차면 대기)
+ * 오테식 모임은 게스트비를 낸다. 게스트 투표 시각 전이면 언제부터인지 안내만 한다.
+ */
+function GuestInviteBox({ opensAt }: { opensAt: string | null }) {
+  const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [open, setOpen] = useState(false);
+  const busy = fetcher.state !== "idle";
+  // 초대가 끝나면 이름 칸을 비워 다음 사람을 바로 적게
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) formRef.current?.reset();
+  }, [fetcher.state, fetcher.data]);
+
+  if (opensAt) {
+    return (
+      <p className="mt-4 flex items-start gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+        <UserPlus size={13} className="mt-px shrink-0" />
+        게스트 초대는 {formatOpenAt(opensAt)}부터 할 수 있어요.
+      </p>
+    );
+  }
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="btn-ghost btn-sm mt-4"
+        onClick={() => setOpen(true)}
+      >
+        <UserPlus size={14} />
+        게스트 초대
+      </button>
+    );
+  }
+  return (
+    <fetcher.Form
+      ref={formRef}
+      method="post"
+      className="mt-4 space-y-2.5 rounded-2xl bg-slate-100 p-3.5 dark:bg-slate-800/60"
+    >
+      <input type="hidden" name="intent" value="invite_guest" />
+      <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+        가입하지 않은 분을 이름으로 초대해요. 게스트와 똑같이 자리를 쓰고(꽉 차면
+        대기), 오테식 모임은 게스트비를 내요.
+      </p>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <input
+          name="name"
+          required
+          maxLength={30}
+          placeholder="게스트 이름"
+          aria-label="게스트 이름"
+          className="input"
+        />
+        <select name="gender" aria-label="게스트 성별" className="input w-24" defaultValue="">
+          <option value="">성별</option>
+          <option value="male">남성</option>
+          <option value="female">여성</option>
+        </select>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          닫기
+        </button>
+        <button className="btn-primary btn-sm" disabled={busy}>
+          <UserPlus size={14} />
+          {busy ? "초대하는 중…" : "초대하기"}
+        </button>
+      </div>
+      {fetcher.state === "idle" && fetcher.data?.error ? (
+        <p role="alert" className="alert-error">
+          {fetcher.data.error}
+        </p>
+      ) : null}
+    </fetcher.Form>
+  );
+}
+
 /** 회원 프로필로 가는 링크. 게스트는 회원 프로필을 볼 수 없어 링크 없이 보여 준다. */
 function ProfileLink({
   id,
+  invited = false,
   className = "",
   children,
 }: {
   id: number;
+  /** 이름만 적어 초대한 게스트: 프로필이 없어 링크 없이 */
+  invited?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const { user } = useOutletContext<{ user: Me }>();
-  return isGuest(user) ? (
+  return isGuest(user) || invited ? (
     <div className={`profile-static ${className}`}>{children}</div>
   ) : (
     <Link to={`/app/members/${id}`} className={className}>
@@ -1915,7 +2058,7 @@ function DrawMatchRow({
   const team = (players: UserBrief[]) => (
     <div className="space-y-3">
       {players.map((p) => (
-        <ProfileLink key={p.id} id={p.id} className="draw-player">
+        <ProfileLink key={p.id} id={p.id} invited={!!p.invited_by_id} className="draw-player">
           <MemberAvatar user={p} className="!h-8 !w-8 shrink-0 !text-xs" />
           <span className="truncate">{p.name}</span>
           {balance?.tiers[p.id] ? (

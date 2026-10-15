@@ -68,6 +68,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("court_bookings", "booker_name", "booker_name VARCHAR(50)"),
     # 코트 예약자명 (코트에서 말할 예약 이름)
     ("gatherings", "court_reservers", "court_reservers VARCHAR(300)"),
+    # 이름만 적어 초대한 게스트를 데려온 회원
+    ("users", "invited_by_id", "invited_by_id INTEGER REFERENCES users(id)"),
 ]
 
 

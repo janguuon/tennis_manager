@@ -107,6 +107,9 @@ def login(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="관리자 승인 대기 중인 계정입니다.")
     if user.approval_status == ApprovalStatus.REJECTED:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="가입이 거절된 계정입니다.")
+    if user.approval_status == ApprovalStatus.INVITED:
+        # 이름만 적어 초대한 게스트는 계정이 아니다 (비밀번호도 무작위라 실제로는 여기까지 오지 않는다)
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="로그인할 수 없는 계정입니다.")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="탈퇴 처리된 계정입니다. 관리자에게 문의하세요.")
 

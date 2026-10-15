@@ -186,6 +186,9 @@ class UserBrief(BaseModel):
     ntrp: float | None = None
     member_type: MemberType = MemberType.MEMBER
     avatar_url: str | None = None
+    # 이름만 적어 초대한 게스트면 데려온 회원 (가입한 회원은 None)
+    invited_by_id: int | None = None
+    invited_by_name: str | None = None
 
 
 # --- 경기 / 전적 ------------------------------------------------------------
@@ -551,6 +554,21 @@ class GatheringDetail(GatheringRead):
     participants: list[ParticipantRead] = []
     payment: GatheringPaymentSummary | None = None  # 받을 돈이 있는 모임만
     court_bookings: list[CourtBookingRead] = []      # 오테식 모임의 코트 예약 내역
+
+
+class GuestInvite(BaseModel):
+    """모임 참석자가 가입하지 않은 게스트를 이름으로 초대한다."""
+
+    name: str = Field(..., max_length=30)
+    gender: Gender | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_rule(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise PydanticCustomError("guest_name", "게스트 이름을 적어 주세요.")
+        return v
 
 
 class ParticipantVote(BaseModel):

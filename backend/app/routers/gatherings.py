@@ -10,6 +10,7 @@
   코트비는 예약자(CourtBooking)에게 총무가 돌려준다 (routers/court_bookings.py).
 """
 import io
+import secrets
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 
@@ -26,6 +27,7 @@ from .. import schedule_import as sheet
 from .. import visibility
 from ..club_account import default_club_account, fill_club_account
 from ..database import get_db
+from ..security import hash_password
 from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_user
 from ..models import (
     CLUB_KINDS,
@@ -53,6 +55,7 @@ from ..schemas import (
     GatheringPaymentSummary,
     GatheringRead,
     GatheringUpdate,
+    GuestInvite,
     MonthlyPaymentSummary,
     MyPaymentDue,
     ParticipantRead,
@@ -1127,6 +1130,90 @@ def cancel_attendance(
             detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없습니다. 운영진에게 문의하세요.",
         )
     db.delete(participant)
+    if was_attending:
+        promote_waiting(db, gathering)
+    db.commit()
+
+
+# --- 이름만 적어 초대하는 게스트 ----------------------------------------------
+@router.post("/{gathering_id}/guests", response_model=ParticipantRead, status_code=status.HTTP_201_CREATED)
+def invite_guest(
+    gathering_id: int,
+    payload: GuestInvite,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """가입하지 않은 게스트를 이름으로 초대한다 (그 모임에 참석·대기 중인 회원, 벙주, 운영진).
+
+    초대 게스트는 게스트와 똑같이 자리를 쓴다: 정원이 찼으면 대기, 오테식 모임은 게스트비.
+    회칙대로 게스트 자리는 게스트 투표 시각(모임 3일 전 0시)부터라 그 전에는 운영진만 초대할 수 있다.
+    """
+    gathering = _load_gathering(db, gathering_id)
+    _require_open(gathering, current_user)
+    if gathering.status not in (GatheringStatus.PLANNED, GatheringStatus.ONGOING):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="끝났거나 취소된 모임에는 게스트를 초대할 수 없어요.")
+    mine = next((p for p in gathering.participants if p.user_id == current_user.id), None)
+    manages = current_user.is_staff or gathering.created_by == current_user.id
+    joined = mine is not None and mine.status in (AttendanceStatus.ATTENDING, AttendanceStatus.WAITING)
+    if not (manages or joined):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="이 모임에 참석(또는 대기)하는 회원만 게스트를 초대할 수 있어요."
+        )
+    opens = visibility.guest_vote_open_at(gathering.event_date)
+    if not current_user.is_staff and visibility.now_kst() < opens:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"게스트 초대는 {visibility.format_open_at(opens)}부터 할 수 있어요. (게스트 투표와 같은 시각)",
+        )
+    guest = User(
+        username=f"guest-{secrets.token_hex(6)}",
+        hashed_password=hash_password(secrets.token_urlsafe(24)),  # 로그인하지 않는다
+        name=payload.name,
+        gender=payload.gender,
+        member_type=MemberType.GUEST,
+        approval_status=ApprovalStatus.INVITED,
+        invited_by_id=current_user.id,
+    )
+    db.add(guest)
+    db.flush()
+    participant = _set_attendance(db, gathering, None, guest.id, "attending")
+    db.commit()
+    db.refresh(participant)
+    return ParticipantRead.model_validate(participant)
+
+
+@router.delete("/{gathering_id}/guests/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_guest(
+    gathering_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """초대 취소: 초대한 회원, 벙주, 운영진. 3일 전부터 참석 중인 게스트는 벙주·운영진만(참석 취소와 같은 규칙)."""
+    gathering = db.get(Gathering, gathering_id)
+    guest = db.get(User, user_id)
+    participant = db.scalar(
+        select(Participant).where(Participant.gathering_id == gathering_id, Participant.user_id == user_id)
+    )
+    if gathering is None or guest is None or not guest.is_invited or participant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="초대한 게스트를 찾을 수 없어요.")
+    manages = current_user.is_staff or gathering.created_by == current_user.id
+    if not (manages or guest.invited_by_id == current_user.id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="게스트를 초대한 회원과 운영진만 초대를 취소할 수 있어요."
+        )
+    if participant.paid:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="입금 기록이 있는 게스트예요. 입금 기록을 먼저 지워 주세요."
+        )
+    was_attending = participant.status == AttendanceStatus.ATTENDING
+    if was_attending and not manages and _attendance_locked(gathering):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 게스트 초대를 취소할 수 없어요. 운영진에게 문의하세요.",
+        )
+    db.delete(participant)
+    db.flush()
     if was_attending:
         promote_waiting(db, gathering)
     db.commit()

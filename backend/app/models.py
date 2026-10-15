@@ -73,6 +73,8 @@ class ApprovalStatus(str, enum.Enum):
     PENDING = "pending"     # 가입 신청 → 승인 대기
     APPROVED = "approved"   # 승인됨 → 로그인 가능
     REJECTED = "rejected"   # 거절됨
+    # 모임 참석자가 이름만 적어 초대한 게스트 (가입·로그인하지 않는다, 회원 명단에 나오지 않는다)
+    INVITED = "invited"
 
 
 class MemberType(str, enum.Enum):
@@ -146,6 +148,8 @@ class User(Base):
     member_type: Mapped[MemberType] = mapped_column(
         Enum(MemberType), default=MemberType.MEMBER, server_default=MemberType.MEMBER.name
     )
+    # 초대 게스트(approval_status=INVITED)를 데려온 회원
+    invited_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
     # 코트비 등을 돌려받을 계좌 (본인과 관리자·임원진에게만 공개)
     bank: Mapped[str | None] = mapped_column(String(50))
@@ -160,6 +164,17 @@ class User(Base):
     # 관계
     match_links: Mapped[list[MatchPlayer]] = relationship(back_populates="user")
     participations: Mapped[list[Participant]] = relationship(back_populates="user")
+    inviter: Mapped["User | None"] = relationship(remote_side="User.id", foreign_keys=[invited_by_id])
+
+    @property
+    def is_invited(self) -> bool:
+        """이름만 적어 초대한 게스트 (가입하지 않은 사람)."""
+        return self.approval_status == ApprovalStatus.INVITED
+
+    @property
+    def invited_by_name(self) -> str | None:
+        """초대 게스트를 데려온 회원 이름 (화면 표시: "게스트 · 김민준 초대")."""
+        return self.inviter.name if self.is_invited and self.inviter else None
 
     @property
     def is_guest(self) -> bool:

@@ -270,6 +270,8 @@ class Gathering(Base):
 
     # 코트/장소
     location: Mapped[str | None] = mapped_column(String(200))
+    # 코트 주소(선택): 지도 버튼이 장소 이름보다 먼저 이 주소로 찾는다. 같은 장소의 다른 일정과 함께 쓴다
+    address: Mapped[str | None] = mapped_column(String(200))
     court_count: Mapped[int] = mapped_column(Integer, default=1)
     # 실제 코트 번호 목록 (쉼표 구분, 예: "3, 5"). 입력 시 court_count는 이 개수로 자동 설정.
     court_numbers: Mapped[str | None] = mapped_column(String(200))

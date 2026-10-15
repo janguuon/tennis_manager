@@ -17,6 +17,7 @@ import {
   useSearchParams,
 } from "@remix-run/react";
 import {
+  ArrowUpRight,
   Check,
   CircleAlert,
   Landmark,
@@ -41,7 +42,14 @@ import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_LABEL, canSettle, isClubKind, isGuest, isStaff } from "~/lib/club";
+import {
+  KIND_LABEL,
+  canSettle,
+  isClubKind,
+  isGuest,
+  isStaff,
+  naverMapUrl,
+} from "~/lib/club";
 import { accountText, won } from "~/lib/format";
 import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao } from "~/lib/kakao";
@@ -245,6 +253,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           start_time: get("start_time") || null,
           end_time: get("end_time") || null,
           location: get("location") || null,
+          address: get("address") || null,
           court_numbers: courtNumbers || null,
           // 오테식 모임은 코트요정 칸이 없다(지급 내역에서 맞춘다) → 보내지 않아 그대로 둔다
           ...(formData.has("court_fairy")
@@ -284,6 +293,8 @@ export default function GatheringDetailPage() {
   const { user } = useOutletContext<{ user: Me }>();
   const club = isClubKind(gathering.kind);
   const staff = isStaff(user);
+  // 지도 버튼: 주소가 있으면 주소로, 없으면 장소 이름으로 네이버 지도 검색
+  const mapUrl = naverMapUrl(gathering);
   // 게스트는 일정 보기와 참석 투표만 한다 (직접 만든 일정이라도 관리하지 않음, 서버와 같음)
   const guest = isGuest(user);
   // 주최자·관리자. 오테식 모임은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
@@ -574,10 +585,25 @@ export default function GatheringDetailPage() {
             {timeText}
           </p>
           <div className="relative z-10 mt-6 max-w-[72%] space-y-2 text-[13px]">
-            <p className="flex items-start gap-2">
-              <MapPin size={16} className="mt-0.5 shrink-0" />
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <MapPin size={16} className="shrink-0" />
               <strong>{gathering.location ?? "장소 미정"}</strong>
+              {mapUrl ? (
+                <a
+                  href={mapUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-0.5 rounded-full border border-ink/30 px-2 py-0.5 text-[11px] font-bold hover:bg-ink/10"
+                  aria-label={`네이버 지도에서 ${gathering.address ?? gathering.location} 보기`}
+                >
+                  지도
+                  <ArrowUpRight size={12} />
+                </a>
+              ) : null}
             </p>
+            {gathering.address ? (
+              <p className="pl-6 text-[12px] opacity-80">{gathering.address}</p>
+            ) : null}
             <p className="pl-6">
               {gathering.court_numbers
                 ? `${gathering.court_numbers}번 코트`
@@ -1454,6 +1480,24 @@ export default function GatheringDetailPage() {
                         className="input"
                         defaultValue={gathering.location ?? ""}
                       />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="e_address">
+                        주소{" "}
+                        <span className="font-medium text-slate-400">(선택)</span>
+                      </label>
+                      <input
+                        id="e_address"
+                        name="address"
+                        className="input"
+                        maxLength={200}
+                        placeholder="예: 경기 안산시 상록구 ○○로 123"
+                        defaultValue={gathering.address ?? ""}
+                      />
+                      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        지도 버튼이 장소 이름 대신 이 주소로 찾아요. 한 번 적으면 같은
+                        장소의 다른 일정에도 들어가요.
+                      </p>
                     </div>
                   </FieldGroup>
 

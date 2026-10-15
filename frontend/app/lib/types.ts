@@ -102,6 +102,8 @@ export interface Gathering {
   court_numbers: string | null;
   /** 코트요정: 코트를 잡아 준 사람(들) 이름 */
   court_fairy: string | null;
+  /** 코트 주소(선택): 지도 버튼이 장소 이름보다 먼저 쓴다 */
+  address: string | null;
   /** 예약자명: 코트에서 말할 예약 이름 (예: "3·5번 장미주, 2번 김다빈") */
   court_reservers: string | null;
   max_participants: number | null;

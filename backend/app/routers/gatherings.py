@@ -76,6 +76,7 @@ IMPORT_HEADER_MAP = {
     "시작시간": "start_time",
     "종료시간": "end_time",
     "장소": "location",
+    "주소": "address",
     "코트번호": "court_numbers",
     "최대인원": "max_participants",
     "코트비": "court_fee",
@@ -394,6 +395,43 @@ def _fill_club_account(db: Session, g: Gathering) -> None:
         fill_club_account(g, default_club_account(db))
 
 
+def _place(location: str | None) -> str:
+    """같은 장소 비교용 (띄어쓰기 무시)."""
+    return "".join((location or "").split())
+
+
+def _clean_address(data: dict) -> None:
+    if "address" in data:
+        data["address"] = " ".join((data["address"] or "").split()) or None
+
+
+def _fill_address(db: Session, g: Gathering) -> None:
+    """주소가 비어 있으면 같은 장소의 가장 최근 주소로 채운다 (매주 다시 적지 않게)."""
+    if g.address or not g.location:
+        return
+    for other in db.scalars(
+        select(Gathering)
+        .where(Gathering.address.is_not(None), Gathering.location.is_not(None))
+        .order_by(Gathering.event_date.desc(), Gathering.id.desc())
+    ):
+        if _place(other.location) == _place(g.location):
+            g.address = other.address
+            return
+
+
+def _share_address(db: Session, g: Gathering) -> None:
+    """주소를 적으면 같은 장소인데 주소가 없는 다른 일정에도 채운다. (flush 뒤에 부른다)"""
+    if not g.address or not g.location:
+        return
+    for other in db.scalars(
+        select(Gathering).where(
+            Gathering.address.is_(None), Gathering.location.is_not(None), Gathering.id != g.id
+        )
+    ):
+        if _place(other.location) == _place(g.location):
+            other.address = g.address
+
+
 def _normalize_courts(data: dict) -> None:
     """court_numbers가 주어지면 정리하고 court_count를 그 개수로 맞춘다."""
     raw = data.get("court_numbers")
@@ -514,9 +552,11 @@ def create_gathering(
             detail="코트 예약 내역은 오테식 정모·벙개에만 등록할 수 있습니다.",
         )
     _normalize_courts(data)
+    _clean_address(data)
     gathering = Gathering(**data, created_by=current_user.id)
     _apply_kind_rules(gathering)
     _fill_club_account(db, gathering)
+    _fill_address(db, gathering)
     fairies = []
     for b in bookings:
         fairies.append(require_booker(db, b["booker_id"]).name)
@@ -525,6 +565,8 @@ def create_gathering(
         # 오테식 모임의 코트요정 = 코트비를 받을 회원
         gathering.court_fairy = court_fairy_text(fairies)
     db.add(gathering)
+    db.flush()
+    _share_address(db, gathering)
     db.commit()
     return _to_read(_load_gathering(db, gathering.id))
 
@@ -629,9 +671,11 @@ async def import_gatherings(
             _normalize_courts(d)
             if payload.kind in CLUB_KINDS and d.get("max_participants") is None:
                 d["max_participants"] = d["court_count"] * sheet.SEATS_PER_COURT  # 회칙 제10조
+            _clean_address(d)
             gathering = Gathering(**d, created_by=current_user.id)
             _apply_kind_rules(gathering)
             _fill_club_account(db, gathering)
+            _fill_address(db, gathering)
             db.add(gathering)
             made.append(gathering)
         except ValidationError as ve:
@@ -644,6 +688,9 @@ async def import_gatherings(
         except Exception as e:
             errors.append(GatheringImportRowError(row=i, error=str(e)))
 
+    db.flush()
+    for g in made:
+        _share_address(db, g)
     db.commit()
     return GatheringImportResult(
         created=len(made), failed=len(errors), errors=errors, items=_import_items(made)
@@ -682,7 +729,7 @@ def import_template(
         cell.font = Font(bold=True)
         if cell.value in required:
             cell.fill = PatternFill("solid", fgColor="F5CD52")
-    widths = [12, 13, 10, 11, 11, 10, 12, 22, 14, 18, 28]
+    widths = [12, 13, 10, 11, 11, 10, 12, 22, 14, 18, 28, 32]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     last = sheet.TEMPLATE_ROWS + 1  # 2행부터 100행
@@ -745,6 +792,8 @@ def import_template(
         "· 오테식 모임의 코트비는 총무가 코트요정에게 정산하므로 '지급할 코트비'에 코트요정 앞으로 올라가요",
         "  (예약자명은 '3번 · 예약 장미주'처럼 코트 칸에 남아요).",
         "· 일반 벙개는 참석자끼리 코트비+캔볼비를 n빵해요. 첫 번째 코트요정이 벙주가 되고 그 환급 계좌가 입금 계좌로 들어가요.",
+        "· 주소(선택)를 적으면 모임 화면의 지도 버튼이 장소 이름 대신 이 주소로 찾아요.",
+        "  한 번 적어 두면 같은 장소의 다른 일정에도 들어가요(다음부터는 비워도 돼요).",
         "· 오테식 모임의 캔볼비는 회비에서 나가므로 반영하지 않아요. 게스트비는 5,000원으로 들어가요.",
         "· 이 '작성 안내' 시트는 올려도 읽지 않아요. '템플릿' 시트에 적어 주세요.",
     ):
@@ -883,8 +932,10 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             max_participants=next((r.max_participants for r in group.rows if r.max_participants), None)
             or (len(group.courts) * sheet.SEATS_PER_COURT if club else None),
             description="\n".join(group.notes) or None,
+            address=next((" ".join(r.address.split()) for r in group.rows if r.address), None),
             created_by=current_user.id,
         )
+        _fill_address(db, gathering)
         if club:
             gathering.guest_fee = GUEST_FEE_DEFAULT
             fill_club_account(gathering, club_account)
@@ -917,6 +968,9 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         db.add(gathering)
         made.append(gathering)
 
+    db.flush()
+    for g in made:
+        _share_address(db, g)
     db.commit()
     notices = (
         [f"일반 벙개({', '.join(no_account)})는 입금 계좌가 비어 있어요. 모임 수정에서 계좌를 적어 주세요."]
@@ -1007,10 +1061,15 @@ def update_gathering(
                 data.setdefault("guest_fee", GUEST_FEE_DEFAULT)
 
     _normalize_courts(data)
+    _clean_address(data)
     for field_name, value in data.items():
         setattr(g, field_name, value)
     _apply_kind_rules(g)
     _fill_club_account(db, g)  # 오테식 모임으로 바꿨거나 계좌를 비우면 모임 통장
+    if "location" in data and "address" not in data and not g.address:
+        _fill_address(db, g)  # 장소를 바꿨으면 그 장소의 주소로
+    db.flush()
+    _share_address(db, g)
     if "max_participants" in data:
         promote_waiting(db, g)  # 정원을 늘리거나 없애면 대기자가 올라간다
     db.commit()

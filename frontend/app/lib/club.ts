@@ -55,6 +55,12 @@ export const KIND_ORDER: GatheringKind[] = [
 
 export const isClubKind = (kind: GatheringKind) => kind !== "flash";
 
+/** 네이버 지도 검색 링크: 주소가 있으면 주소로, 없으면 장소 이름으로. 둘 다 없으면 null */
+export function naverMapUrl(g: { address?: string | null; location?: string | null }) {
+  const query = g.address?.trim() || g.location?.trim();
+  return query ? `https://map.naver.com/p/search/${encodeURIComponent(query)}` : null;
+}
+
 /** 게스트(관리자 제외): 일정(홈·캘린더·모임)만 본다. 회원 명단·정산·회칙은 보지 않는다 (서버 User.is_guest) */
 export const isGuest = (u: Pick<User, "is_admin" | "member_type">) =>
   !u.is_admin && u.member_type === "guest";

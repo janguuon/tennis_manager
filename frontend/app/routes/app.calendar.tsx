@@ -132,6 +132,7 @@ export async function action({ request }: ActionFunctionArgs) {
     start_time: get("start_time") || null,
     end_time: get("end_time") || null,
     location: get("location") || null,
+    address: get("address") || null,
     court_numbers: courtNumbers || null,
     court_fairy: get("court_fairy") || null,
     court_reservers: get("court_reservers") || null,
@@ -696,6 +697,23 @@ export default function CalendarPage() {
                         className="input"
                         placeholder="시민 테니스장"
                       />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="address">
+                        주소{" "}
+                        <span className="font-medium text-slate-400">(선택)</span>
+                      </label>
+                      <input
+                        id="address"
+                        name="address"
+                        className="input"
+                        maxLength={200}
+                        placeholder="예: 경기 안산시 상록구 ○○로 123"
+                      />
+                      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        지도 버튼이 장소 이름 대신 이 주소로 찾아요. 한 번 적으면 같은
+                        장소의 다른 일정에도 들어가요.
+                      </p>
                     </div>
                   </FieldGroup>
 

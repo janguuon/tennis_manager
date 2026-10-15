@@ -39,6 +39,7 @@ COURT_SHEET_HEADERS = {
     "최대인원": "max_participants",
     "장소": "location",
     "비고": "note",
+    "주소": "address",
 }
 REQUIRED = ["event_date", "time_range", "court", "booker", "fairy", "court_fee", "usage", "location"]
 LABEL = {
@@ -53,6 +54,7 @@ LABEL = {
     "max_participants": "최대 인원",
     "location": "장소",
     "note": "비고",
+    "address": "주소",
 }
 
 # 사용 여부 → 모임 종류 (띄어쓰기 무시). 그 밖의 값은 모임이 아니다.
@@ -89,7 +91,7 @@ DATE_MIN_SERIAL = 43831
 DATE_MAX_SERIAL = 73050
 TEMPLATE_HEADERS = [
     "날짜", "시간", "코트 번호", "예약자명", "코트요정", "코트비", "캔볼비(선택)",
-    "사용 여부", "최대 인원(선택)", "장소", "비고",
+    "사용 여부", "최대 인원(선택)", "장소", "비고", "주소(선택)",
 ]
 
 
@@ -185,6 +187,7 @@ class SheetRow:
     location: str
     max_participants: int | None = None
     note: str | None = None
+    address: str | None = None
 
     @property
     def key(self) -> tuple:
@@ -244,7 +247,7 @@ def parse_row(
     attempt("court_fee", lambda v: parse_amount(v, "코트비", positive=True))
     attempt("ball_fee", lambda v: parse_amount(v, "캔볼비", positive=False))
     attempt("max_participants", lambda v: parse_amount(v, "최대 인원", positive=True))
-    for f in ("booker", "fairy", "location", "note", "usage"):
+    for f in ("booker", "fairy", "location", "note", "usage", "address"):
         if f in cols and not _blank(cell.get(f)):
             parsed[f] = _text(cell[f])
 
@@ -270,6 +273,7 @@ def parse_row(
         location=parsed["location"],
         max_participants=parsed.get("max_participants"),
         note=parsed.get("note"),
+        address=parsed.get("address"),
     )
 
 

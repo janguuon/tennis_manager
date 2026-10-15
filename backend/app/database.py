@@ -73,6 +73,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     # 게스트비 면제
     ("participants", "fee_waived", "fee_waived BOOLEAN NOT NULL DEFAULT 0"),
     ("participants", "fee_waiver_reason", "fee_waiver_reason VARCHAR(100)"),
+    # 코트 주소 (지도 버튼)
+    ("gatherings", "address", "address VARCHAR(200)"),
 ]
 
 

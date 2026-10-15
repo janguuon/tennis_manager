@@ -312,6 +312,7 @@ class GatheringBase(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     location: str | None = Field(None, max_length=200)
+    address: str | None = Field(None, max_length=200, description="코트 주소(선택): 지도 버튼이 먼저 이 주소로 찾는다")
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
     court_fairy: str | None = Field(None, max_length=200, description="코트요정(코트를 잡아 준 사람) 이름")
@@ -466,6 +467,7 @@ class GatheringUpdate(BaseModel):
     start_time: time | None = None
     end_time: time | None = None
     location: str | None = Field(None, max_length=200)
+    address: str | None = Field(None, max_length=200)
     court_count: int | None = Field(None, ge=1)
     court_numbers: str | None = Field(None, max_length=200)
     court_fairy: str | None = Field(None, max_length=200)

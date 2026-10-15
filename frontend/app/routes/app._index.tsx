@@ -23,7 +23,7 @@ import { MyVotePill } from "~/components/MyVote";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
-import { KIND_DOT, isGuest, isStaff } from "~/lib/club";
+import { KIND_DOT, isGuest, isStaff, naverMapUrl } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -640,11 +640,9 @@ function CourtTile({
                 {labels.length > 6 ? ` · 외 ${labels.length - 6}면` : ""}
               </p>
             </div>
-            {next.location && (
+            {naverMapUrl(next) && (
               <a
-                href={`https://map.naver.com/p/search/${encodeURIComponent(
-                  next.location
-                )}`}
+                href={naverMapUrl(next) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/40"

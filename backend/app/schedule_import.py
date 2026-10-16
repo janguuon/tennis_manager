@@ -5,6 +5,7 @@
     날짜 | 시간 | 코트 번호 | 예약자명 | 코트요정 | 코트비 | 캔볼비(선택) | 사용 여부 | 최대 인원(선택) | 장소 | 비고
 
 - 필수: 날짜 · 시간 · 코트 번호 · 예약자명 · 코트요정 · 코트비 · 사용 여부 · 장소
+  (코트비는 0원도 된다: 무료 코트. 오테식 모임의 0원 코트는 코트요정에게 보낼 돈이 없어 지급 내역을 만들지 않는다)
 - 사용 여부가 오테식 정모 / 오테식 벙개 / 일반 벙개인 행만 모임이 된다.
   예약대기 · 결재 대기 · 예약취소 · 우천 취소 · 개인 사용 등은 모임이 아니라 건너뛴다.
 - 날짜 · 시간 · 장소 · 사용 여부가 같은 행은 한 모임으로 묶는다(코트 여러 면, 예약자 여러 명).
@@ -230,7 +231,8 @@ def parse_row(
     errors: list[str] = []
     missing = [LABEL[f] for f in REQUIRED if f not in cols or _blank(cell.get(f))]
     if missing:
-        errors.append(f"필수 칸이 비었어요: {', '.join(missing)}")
+        hint = " (코트비가 없으면 0을 적어 주세요)" if LABEL["court_fee"] in missing else ""
+        errors.append(f"필수 칸이 비었어요: {', '.join(missing)}{hint}")
 
     parsed: dict = {}
 
@@ -244,7 +246,7 @@ def parse_row(
     attempt("event_date", parse_date)
     attempt("time_range", parse_time_range)
     attempt("court", parse_court)
-    attempt("court_fee", lambda v: parse_amount(v, "코트비", positive=True))
+    attempt("court_fee", lambda v: parse_amount(v, "코트비", positive=False))  # 무료 코트는 0
     attempt("ball_fee", lambda v: parse_amount(v, "캔볼비", positive=False))
     attempt("max_participants", lambda v: parse_amount(v, "최대 인원", positive=True))
     for f in ("booker", "fairy", "location", "note", "usage", "address"):

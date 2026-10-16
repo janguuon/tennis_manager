@@ -73,6 +73,13 @@ def test_parse_row_cases():
     assert isinstance(bad, S.RowProblem) and "코트요정" in bad.message and bad.key is not None
     wrong = S.parse_row(5, (D, "아침", 3, "장미주", "서승우", "이만원", None, "오테식 정모", None, "시민"), cols)
     assert isinstance(wrong, S.RowProblem) and "시간" in wrong.message and "코트비" in wrong.message
+    # 코트비 0원(무료 코트)은 된다. 비우면 0을 적으라고 안내
+    free = S.parse_row(6, (D, "10:00~12:00", 3, "장미주", "서승우", 0, None, "오테식 정모", None, "시민"), cols)
+    assert isinstance(free, S.SheetRow) and free.court_fee == 0
+    blank = S.parse_row(7, (D, "10:00~12:00", 3, "장미주", "서승우", None, None, "오테식 정모", None, "시민"), cols)
+    assert isinstance(blank, S.RowProblem) and "0을 적어" in blank.message
+    minus = S.parse_row(8, (D, "10:00~12:00", 3, "장미주", "서승우", -1, None, "오테식 정모", None, "시민"), cols)
+    assert isinstance(minus, S.RowProblem) and "0 이상" in minus.message
 
 
 # --- API ----------------------------------------------------------------------
@@ -155,6 +162,25 @@ def test_court_sheet_import_end_to_end(club):
     already = [s for s in again["skips"] if "이미 등록된" in s["message"]]
     assert sorted(s["row"] for s in already) == [2, 4, 7]
     assert len(_month(club)) == 3
+
+
+def test_free_court_zero_fee(club):
+    """코트비 0원: 오테식 모임은 등록되지만 0원 코트는 지급 내역 없음, 일반 벙개는 캔볼비만 n빵."""
+    _people(club, seo="서승우", ohj="오장원")
+    rows = [
+        [D, "10:00~12:00", 3, "장미주", "서승우", 0, None, "오테식 정모", None, "시민 테니스장", None],
+        [D, "10:00~12:00", 5, "김다빈", "오장원", 24000, None, "오테식 정모", None, "시민 테니스장", None],
+        [datetime(2099, 1, 20), "19:00~21:00", 2, "김다빈", "오장원", 0, 6000, "일반 벙개", None, "구립 테니스장", None],
+        [datetime(2099, 1, 21), "19:00~21:00", 2, "김다빈", "오장원", "0원", None, "일반 벙개", None, "구립 테니스장", None],
+    ]
+    r = _upload(club, _sheet(rows))
+    assert (r["created"], r["failed"]) == (3, 0)
+    listed = {g["event_date"]: g for g in _month(club)}
+    club_g = club.c.get(f"/gatherings/{listed['2099-01-17']['id']}", headers=club.admin).json()
+    assert club_g["court_fairy"] == "서승우, 오장원"
+    assert [(b["booker"]["name"], b["amount"]) for b in club_g["court_bookings"]] == [("오장원", 24000)]
+    assert (listed["2099-01-20"]["court_fee"], listed["2099-01-20"]["fee"]) == (0, 6000)
+    assert listed["2099-01-21"]["fee"] == 0  # 무료 벙개
 
 
 def test_blank_capacity_defaults_to_six_per_court(club):

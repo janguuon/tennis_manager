@@ -822,6 +822,7 @@ def import_template(
     guide.append([])
     for line in (
         "· 노란 칸(날짜·시간·코트 번호·예약자명·코트요정·코트비·사용 여부·장소)을 모두 채운 행만 등록돼요.",
+        "· 무료 코트는 코트비에 0을 적어요. 0원 코트는 보낼 코트비가 없어 정산 목록에 올라가지 않아요.",
         "· 날짜 칸은 날짜만 받아요. 구글 시트에서는 칸을 두 번 누르면 달력이 떠요.",
         "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
         "· 사용 여부가 오테식 정모 / 오테식 벙개 / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
@@ -982,6 +983,8 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             # 코트 한 면마다 코트요정에게 줄 코트비. 예약자명(예약에 쓴 이름)은 코트 칸에 남긴다.
             # 회원이 아닌 코트요정은 이름만 남긴다(정산 탭에 이름으로, 가입 승인 때 그 회원에게 이어짐)
             for r, fairy in zip(group.rows, fairies):
+                if r.court_fee <= 0:
+                    continue  # 무료 코트(0원): 보낼 코트비가 없다
                 label = f"{_court_label(r.court)} · 예약 {r.booker}"[:50]
                 gathering.court_bookings.append(
                     CourtBooking(

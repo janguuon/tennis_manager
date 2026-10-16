@@ -422,6 +422,19 @@ class CourtBookingRead(BaseModel):
 class GatheringCreate(GatheringBase):
     # 오테식 모임만: 처음 등록할 때 함께 넣는 코트 예약 내역
     court_bookings: list[CourtBookingInput] = []
+    # 운영진: 정해진 공개 시각(전주 금요일 오전 10시)을 기다리지 않고 바로 공개
+    open_now: bool = False
+
+
+class GatheringOpenRange(BaseModel):
+    """기간 안의 공개 전 일정을 한 번에 미리 공개 (예: 다음 주 월~일)."""
+
+    date_from: date
+    date_to: date
+
+
+class GatheringOpenResult(BaseModel):
+    opened: int
 
 
 class GatheringImportRowError(BaseModel):
@@ -543,6 +556,9 @@ class GatheringRead(GatheringBase):
     guest_vote_open_at: datetime | None = None
     open_to_members: bool = True
     guest_vote_open: bool = True
+    # 정해진 공개 시각(전주 금요일 오전 10시)과, 운영진이 그보다 일찍 공개해 둔 상태인지
+    scheduled_open_at: datetime | None = None
+    opened_early: bool = False
     # 보고 있는 회원의 참석 투표 (참석·대기·불참). 투표하지 않았으면 None
     my_status: AttendanceStatus | None = None
     # 오테식 모임: 코트 예약 금액 합 (회비 지출)

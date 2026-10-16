@@ -18,7 +18,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -50,6 +50,8 @@ from ..schemas import (
     GatheringDetail,
     GatheringImportItem,
     GatheringImportResult,
+    GatheringOpenRange,
+    GatheringOpenResult,
     GatheringImportRowError,
     GatheringImportRowNote,
     GatheringPaymentSummary,
@@ -121,10 +123,12 @@ def _summary(gathering: Gathering) -> AttendanceSummary:
 def _with_open_times(read: GatheringRead, gathering: Gathering) -> GatheringRead:
     """일정 공개 시각·게스트 투표 시각과 지금 열려 있는지 (안내·버튼 잠금용)."""
     now = visibility.now_kst()
-    read.member_open_at = visibility.member_open_at(gathering.event_date)
-    read.guest_vote_open_at = visibility.guest_vote_open_at(gathering.event_date)
+    read.member_open_at = visibility.open_at(gathering)
+    read.guest_vote_open_at = visibility.guest_vote_at(gathering)
     read.open_to_members = now >= read.member_open_at
     read.guest_vote_open = now >= read.guest_vote_open_at
+    read.scheduled_open_at = visibility.member_open_at(gathering.event_date)
+    read.opened_early = visibility.opened_early(gathering, now)
     return read
 
 
@@ -145,7 +149,7 @@ def _with_my_status(read: GatheringRead, gathering: Gathering, user: User) -> Ga
 def _require_open(gathering: Gathering, user: User) -> None:
     """아직 이 회원에게 공개되지 않은 일정이면 보기·투표를 막는다."""
     if not visibility.is_open_for(user, gathering):
-        opens = visibility.view_open_at_for(user, gathering.event_date)
+        opens = visibility.view_open_at_for(user, gathering)
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail=f"아직 공개되지 않은 일정이에요. {visibility.format_open_at(opens)}부터 보고 투표할 수 있어요.",
@@ -155,7 +159,7 @@ def _require_open(gathering: Gathering, user: User) -> None:
 def _require_vote_open(gathering: Gathering, user: User) -> None:
     """일정은 보이지만 아직 투표 전(게스트, 모임 3일 전 0시 전)이면 투표를 막는다."""
     if not visibility.can_vote(user, gathering):
-        opens = visibility.vote_open_at_for(user, gathering.event_date)
+        opens = visibility.vote_open_at_for(user, gathering)
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail=f"게스트 투표는 {visibility.format_open_at(opens)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.",
@@ -179,7 +183,7 @@ def court_booking_read(b: CourtBooking, viewer: User) -> CourtBookingRead:
         reimbursed=b.reimbursed_at is not None,
         reimbursed_at=b.reimbursed_at,
         reimbursed_by=UserBrief.model_validate(b.reimburser) if b.reimburser else None,
-        open_to_members=visibility.now_kst() >= visibility.member_open_at(b.gathering.event_date),
+        open_to_members=visibility.now_kst() >= visibility.open_at(b.gathering),
         account=BookerAccount(
             bank=b.booker.bank,
             account_number=b.booker.account_number,
@@ -585,6 +589,7 @@ def create_gathering(
     """모임 생성 (캘린더에 일정 등록). 오테식 정모·벙개는 관리자·임원진만, 게스트는 만들 수 없다."""
     data = payload.model_dump()
     bookings = data.pop("court_bookings")
+    open_now = data.pop("open_now")
     _require_club_creator(data["kind"], current_user)
     if bookings and data["kind"] not in CLUB_KINDS:
         raise HTTPException(
@@ -604,6 +609,9 @@ def create_gathering(
     if fairies:
         # 오테식 모임의 코트요정 = 코트비를 받을 회원
         gathering.court_fairy = court_fairy_text(fairies)
+    if open_now:
+        _require_opener(current_user)
+        _open_early([gathering])
     db.add(gathering)
     db.flush()
     _share_address(db, gathering)
@@ -650,6 +658,7 @@ def _cell_value(field: str, value) -> str | int:
 @router.post("/import", response_model=GatheringImportResult)
 async def import_gatherings(
     file: UploadFile = File(...),
+    open_now: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_member),
 ):
@@ -674,7 +683,8 @@ async def import_gatherings(
         if first and sheet.is_court_sheet(first):
             rows = candidate.iter_rows(values_only=True)
             header = next(rows)
-            return _import_court_sheet(db, header, rows, current_user)
+            result = _import_court_sheet(db, header, rows, current_user)
+            return _open_imported(db, result, current_user) if open_now else result
 
     # 예전 양식: 한 행 = 한 모임 (제목·종류·시작시간… 열)
     ws = wb.active
@@ -707,7 +717,7 @@ async def import_gatherings(
             payload = GatheringCreate(**data)  # pydantic 검증/타입 변환 재사용
             if payload.kind in CLUB_KINDS and not current_user.is_staff:
                 raise ValueError("오테식 정모·벙개는 관리자와 임원진만 등록할 수 있습니다.")
-            d = payload.model_dump(exclude={"court_bookings"})
+            d = payload.model_dump(exclude={"court_bookings", "open_now"})
             _normalize_courts(d)
             if payload.kind in CLUB_KINDS and d.get("max_participants") is None:
                 d["max_participants"] = d["court_count"] * sheet.SEATS_PER_COURT  # 회칙 제10조
@@ -732,9 +742,85 @@ async def import_gatherings(
     for g in made:
         _share_address(db, g)
     db.commit()
-    return GatheringImportResult(
+    result = GatheringImportResult(
         created=len(made), failed=len(errors), errors=errors, items=_import_items(made)
     )
+    return _open_imported(db, result, current_user) if open_now else result
+
+
+# --- 미리 공개 (운영진) ------------------------------------------------------
+def _require_opener(user: User) -> None:
+    if not user.is_staff:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="일정 미리 공개는 운영진만 할 수 있어요.")
+
+
+def _open_early(gatherings: list[Gathering]) -> int:
+    """아직 공개 전인 모임을 지금 공개한다. 새로 공개한 모임 수 (이미 열린 모임은 그대로)."""
+    now = visibility.now_kst()
+    opened = 0
+    for g in gatherings:
+        if now < visibility.open_at(g):
+            g.opened_at = now
+            opened += 1
+    return opened
+
+
+def _open_imported(db: Session, result: GatheringImportResult, user: User) -> GatheringImportResult:
+    """엑셀로 올린 일정을 바로 공개 (운영진이 '바로 공개'를 고른 경우)."""
+    _require_opener(user)
+    ids = [i.id for i in result.items]
+    if ids:
+        _open_early(list(db.scalars(select(Gathering).where(Gathering.id.in_(ids)))))
+        db.commit()
+    return result
+
+
+@router.post("/open", response_model=GatheringOpenResult)
+def open_range_early(
+    payload: GatheringOpenRange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """기간 안의 공개 전 일정을 지금 공개 (운영진). 예: 다음 주 일정을 금요일 오전 10시 전에."""
+    _require_opener(current_user)
+    gatherings = db.scalars(
+        select(Gathering).where(
+            Gathering.event_date >= payload.date_from,
+            Gathering.event_date <= payload.date_to,
+            Gathering.status != GatheringStatus.CANCELED,
+        )
+    ).all()
+    opened = _open_early(list(gatherings))
+    db.commit()
+    return GatheringOpenResult(opened=opened)
+
+
+@router.post("/{gathering_id}/open", response_model=GatheringRead)
+def open_early(
+    gathering_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """이 모임을 정해진 시각 전에 지금 공개 (운영진)."""
+    _require_opener(current_user)
+    g = _load_gathering(db, gathering_id)
+    _open_early([g])
+    db.commit()
+    return _to_read(_load_gathering(db, gathering_id))
+
+
+@router.delete("/{gathering_id}/open", response_model=GatheringRead)
+def cancel_open_early(
+    gathering_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """미리 공개 취소: 정해진 공개 시각(전주 금요일 오전 10시)으로 되돌린다. 이미 한 투표는 그대로."""
+    _require_opener(current_user)
+    g = _load_gathering(db, gathering_id)
+    g.opened_at = None
+    db.commit()
+    return _to_read(_load_gathering(db, gathering_id))
 
 
 def _import_items(made: list[Gathering]) -> list[GatheringImportItem]:
@@ -1304,7 +1390,7 @@ def invite_guest(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, detail="이 모임에 참석(또는 대기)하는 회원만 게스트를 초대할 수 있어요."
         )
-    opens = visibility.guest_vote_open_at(gathering.event_date)
+    opens = visibility.guest_vote_at(gathering)
     if not current_user.is_staff and visibility.now_kst() < opens:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -1499,7 +1585,7 @@ def payment_summary(
     now = visibility.now_kst()
     bookings: list[CourtBookingRead] = []
     for g in db.scalars(stmt).all():
-        if now < visibility.member_open_at(g.event_date):
+        if now < visibility.open_at(g):
             continue
         bookings.extend(court_booking_read(b, current_user) for b in g.court_bookings)
         if not _has_payment(g):

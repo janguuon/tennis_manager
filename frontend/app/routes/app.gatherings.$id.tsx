@@ -283,6 +283,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
           status: get("status"),
         },
       });
+    } else if (intent === "open_early" || intent === "cancel_open") {
+      // 운영진: 정해진 공개 시각(전주 금요일 오전 10시) 전에 공개 / 되돌리기
+      await api(`/gatherings/${id}/open`, {
+        method: intent === "open_early" ? "POST" : "DELETE",
+        token,
+      });
     } else if (intent === "delete_gathering") {
       await api(`/gatherings/${id}`, { method: "DELETE", token });
       const from = String(formData.get("from") || "");
@@ -571,13 +577,56 @@ export default function GatheringDetailPage() {
       {/* 공개 시점 안내: 임원진에게는 공개 전 상태, 정회원에게는 게스트 투표 시작 시점
           (게스트 본인에게는 아래 참석 카드에서 투표 시작 시점을 알려 준다) */}
       {gathering.member_open_at && gathering.guest_vote_open_at && user.member_type !== "guest" &&
-      (!gathering.open_to_members || !gathering.guest_vote_open) ? (
-        <p className="flex items-start gap-2 rounded-2xl bg-house-lav/30 px-4 py-3 text-sm font-semibold">
-          <Lock size={16} className="mt-0.5 shrink-0" />
-          {!gathering.open_to_members
-            ? `${staff ? "아직 임원진만 보는 일정이에요." : "직접 만든 일정이라 먼저 보여요."} 정회원·게스트에게는 ${formatOpenAt(gathering.member_open_at)}에 공개되고, 게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요.`
-            : `게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.`}
-        </p>
+      (!gathering.open_to_members ||
+        !gathering.guest_vote_open ||
+        (staff && gathering.opened_early)) ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-house-lav/30 px-4 py-3 text-sm font-semibold">
+          <p className="flex min-w-0 flex-1 basis-60 items-start gap-2">
+            <Lock size={16} className="mt-0.5 shrink-0" />
+            <span>
+              {!gathering.open_to_members
+                ? `${staff ? "아직 임원진만 보는 일정이에요." : "직접 만든 일정이라 먼저 보여요."} 정회원·게스트에게는 ${formatOpenAt(gathering.member_open_at)}에 공개되고, 게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요.`
+                : staff && gathering.opened_early
+                ? `미리 공개한 일정이에요${gathering.scheduled_open_at ? ` (원래 ${formatOpenAt(gathering.scheduled_open_at)} 공개)` : ""}.${gathering.guest_vote_open ? "" : ` 게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요.`}`
+                : `게스트 투표는 ${formatOpenAt(gathering.guest_vote_open_at)}부터 열려요. 그 전에는 정회원만 참석 투표를 할 수 있어요.`}
+            </span>
+          </p>
+          {staff && !gathering.open_to_members ? (
+            <Form
+              method="post"
+              onSubmit={(e) => {
+                if (
+                  !confirm(
+                    "지금 정회원·게스트에게 공개할까요? 정회원은 바로 참석 투표를 할 수 있어요. (게스트 투표는 그대로 3일 전부터)"
+                  )
+                )
+                  e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="open_early" />
+              <button type="submit" className="btn-ink btn-sm">
+                지금 공개하기
+              </button>
+            </Form>
+          ) : staff && gathering.opened_early ? (
+            <Form
+              method="post"
+              onSubmit={(e) => {
+                if (
+                  !confirm(
+                    "미리 공개를 취소할까요? 원래 공개 시각까지 다시 임원진만 봐요. (이미 한 투표는 남아요)"
+                  )
+                )
+                  e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="cancel_open" />
+              <button type="submit" className="btn-ghost btn-sm">
+                미리 공개 취소
+              </button>
+            </Form>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="detail-top-grid">

@@ -306,6 +306,9 @@ class Gathering(Base):
         Enum(GatheringStatus), default=GatheringStatus.PLANNED
     )
 
+    # 운영진이 정해진 공개 시각(전주 금요일 오전 10시)보다 일찍 공개한 시각 (한국 시간). 미리 공개하지 않았으면 NULL
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime)
+
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

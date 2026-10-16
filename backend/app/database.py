@@ -75,6 +75,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("participants", "fee_waiver_reason", "fee_waiver_reason VARCHAR(100)"),
     # 코트 주소 (지도 버튼)
     ("gatherings", "address", "address VARCHAR(200)"),
+    # 운영진 미리 공개
+    ("gatherings", "opened_at", "opened_at DATETIME"),
     # 대회 입상 별 개수와 이력
     ("users", "award_gold", "award_gold INTEGER NOT NULL DEFAULT 0"),
     ("users", "award_silver", "award_silver INTEGER NOT NULL DEFAULT 0"),

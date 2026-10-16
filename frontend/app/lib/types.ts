@@ -140,6 +140,10 @@ export interface Gathering {
   open_to_members: boolean;
   /** 게스트가 지금 참석 투표를 할 수 있는지 */
   guest_vote_open: boolean;
+  /** 정해진 공개 시각(전주 금요일 오전 10시) */
+  scheduled_open_at?: string | null;
+  /** 운영진이 정해진 시각보다 미리 공개해 둔 상태 */
+  opened_early?: boolean;
   /** 내가 누른 참석 투표 (참석·대기·불참). 안 눌렀으면 null */
   my_status?: AttendanceStatus | null;
   /** 오테식 모임: 코트 예약 금액 합 (회비 지출) */

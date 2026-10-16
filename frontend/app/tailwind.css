@@ -975,6 +975,10 @@
   .file-drop.is-dragging {
     @apply border-solid border-ink bg-house-yellow/30 text-ink dark:border-white dark:text-white;
   }
+  /* 캘린더: 다음 주 일정 미리 공개 (운영진) */
+  .open-week-bar {
+    @apply flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-house-lav/30 px-4 py-3 text-sm font-semibold;
+  }
   /* 정산 탭: 코트요정별 지급할 코트비 */
   .payout-group {
     @apply rounded-2xl bg-white/50 p-3.5 sm:p-4;

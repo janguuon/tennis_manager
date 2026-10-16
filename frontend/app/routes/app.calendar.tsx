@@ -21,6 +21,7 @@ import {
   Download,
   FileSpreadsheet,
   List,
+  Lock,
   Plus,
   Upload,
 } from "lucide-react";
@@ -45,7 +46,7 @@ import {
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import type { NewSchedule } from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
-import { WEEKDAYS } from "~/lib/status";
+import { WEEKDAYS, formatOpenAt } from "~/lib/status";
 import type {
   ClubAccount,
   Gathering,
@@ -59,6 +60,19 @@ export const meta: MetaFunction = () => [{ title: "캘린더 · 오테식 매니
 function currentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** 다음 주 월~일 (한국 날짜 기준) */
+function nextWeekRange() {
+  const today = new Date(
+    `${new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(
+      new Date()
+    )}T00:00:00Z`
+  );
+  const mondayOffset = 7 - ((today.getUTCDay() + 6) % 7);
+  const iso = (days: number) =>
+    new Date(today.getTime() + days * 86400000).toISOString().slice(0, 10);
+  return { from: iso(mondayOffset), to: iso(mondayOffset + 6) };
 }
 
 function monthRange(month: string) {
@@ -93,13 +107,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const month = url.searchParams.get("month") || currentMonth();
   const { from, to } = monthRange(month);
-  const [gatherings, members, savedClubAccount] = await Promise.all([
+  const week = nextWeekRange();
+  const [gatherings, members, savedClubAccount, nextWeek] = await Promise.all([
     api<Gathering[]>(`/gatherings?date_from=${from}&date_to=${to}`, { token }),
     // 오테식 모임 등록 시 코트 예약자 선택용 (게스트는 빈 목록)
     membersOrEmpty(token),
     // 오테식 모임 등록 때 미리 채울 모임 통장
     api<ClubAccount | null>("/club/account", { token }),
+    // 다음 주 일정 (운영진에게만 공개 전 일정이 보인다 → 미리 공개 안내)
+    api<Gathering[]>(
+      `/gatherings?date_from=${week.from}&date_to=${week.to}`,
+      { token }
+    ),
   ]);
+  const unopened = nextWeek.filter(
+    (g) => !g.open_to_members && g.status !== "canceled"
+  );
+  const nextWeekOpen = unopened.length
+    ? { ...week, count: unopened.length, opensAt: unopened[0].member_open_at }
+    : null;
   // 보기 방식: URL(?view) 우선, 없으면 쿠키(cal_view)로 마지막 선택 기억, 기본 달력
   const urlView = url.searchParams.get("view");
   const savedList = /(?:^|;\s*)cal_view=list/.test(
@@ -113,7 +139,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : savedList
       ? "list"
       : "calendar";
-  return json({ month, gatherings, view, members, savedClubAccount });
+  return json({
+    month,
+    gatherings,
+    view,
+    members,
+    savedClubAccount,
+    nextWeekOpen,
+  });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -123,6 +156,30 @@ export async function action({ request }: ActionFunctionArgs) {
     const v = formData.get(k);
     return v ? String(v) : undefined;
   };
+
+  // 운영진: 다음 주 일정을 금요일 오전 10시 전에 한 번에 공개
+  if (formData.get("intent") === "open_week") {
+    try {
+      const r = await api<{ opened: number }>("/gatherings/open", {
+        method: "POST",
+        token,
+        body: { date_from: get("date_from"), date_to: get("date_to") },
+      });
+      return json({
+        ok: true,
+        error: null as string | null,
+        created: null as NewSchedule | null,
+        notice: `다음 주 일정 ${r.opened}개를 공개했어요.`,
+      });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "공개하지 못했어요.";
+      return json(
+        { ok: false, error: message, created: null as NewSchedule | null },
+        { status: 400 }
+      );
+    }
+  }
 
   const courtNumbers = get("court_numbers");
   const maxParticipants = get("max_participants");
@@ -144,6 +201,8 @@ export async function action({ request }: ActionFunctionArgs) {
     ...feeFieldsFromForm(formData),
     court_bookings: bookingsFromForm(formData),
     description: get("description") || null,
+    // 운영진: 정해진 공개 시각을 기다리지 않고 바로 공개
+    open_now: formData.get("open_now") === "on",
   };
   if (body.kind === "flash") body.court_bookings = [];
 
@@ -196,7 +255,7 @@ function addHours(time: string, hours: number): string {
 }
 
 export default function CalendarPage() {
-  const { month, gatherings, view, members, savedClubAccount } =
+  const { month, gatherings, view, members, savedClubAccount, nextWeekOpen } =
     useLoaderData<typeof loader>();
   const { user } = useOutletContext<{ user: Me }>();
   // 게스트는 일정 보기와 참석 투표만: 일정 등록·엑셀 버튼이 없다
@@ -371,6 +430,43 @@ export default function CalendarPage() {
             </>
           }
         />
+
+        {/* 운영진: 다음 주 일정이 아직 공개 전이면 미리 공개 */}
+        {nextWeekOpen && isStaff(user) ? (
+          <Form
+            method="post"
+            className="open-week-bar"
+            onSubmit={(e) => {
+              if (
+                !confirm(
+                  `다음 주 일정 ${nextWeekOpen.count}개를 지금 정회원·게스트에게 공개할까요? 정회원은 바로 참석 투표를 할 수 있어요.`
+                )
+              )
+                e.preventDefault();
+            }}
+          >
+            <input type="hidden" name="intent" value="open_week" />
+            <input type="hidden" name="date_from" value={nextWeekOpen.from} />
+            <input type="hidden" name="date_to" value={nextWeekOpen.to} />
+            <p className="flex min-w-0 flex-1 basis-56 items-start gap-2">
+              <Lock size={16} className="mt-0.5 shrink-0" />
+              <span>
+                다음 주({shortRange(nextWeekOpen.from, nextWeekOpen.to)}) 일정{" "}
+                {nextWeekOpen.count}개는{" "}
+                {nextWeekOpen.opensAt
+                  ? `${formatOpenAt(nextWeekOpen.opensAt)}에`
+                  : "금요일 오전 10시에"}{" "}
+                공개돼요.
+              </span>
+            </p>
+            <button type="submit" className="btn-ink btn-sm shrink-0">
+              지금 공개하기
+            </button>
+          </Form>
+        ) : null}
+        {actionData && "notice" in actionData && actionData.notice ? (
+          <p className="alert-success">{actionData.notice}</p>
+        ) : null}
 
         <div className="calendar-heading card !py-4">
           <div>
@@ -639,6 +735,21 @@ export default function CalendarPage() {
                         defaultValue={todayStr}
                       />
                     </div>
+                    {isStaff(user) ? (
+                      <label className="flex items-start gap-2 text-[13px] font-medium">
+                        <input
+                          type="checkbox"
+                          name="open_now"
+                          className="mt-0.5 h-4 w-4 accent-ink"
+                        />
+                        <span>
+                          정회원·게스트에게 바로 공개
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">
+                            안 고르면 전주 금요일 오전 10시에 공개돼요.
+                          </span>
+                        </span>
+                      </label>
+                    ) : null}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label" htmlFor="start_time">
@@ -989,6 +1100,21 @@ export default function CalendarPage() {
                 {dropError}
               </p>
             ) : null}
+            {isStaff(user) ? (
+              <label className="flex items-start gap-2 text-[13px] font-medium">
+                <input
+                  type="checkbox"
+                  name="open_now"
+                  className="mt-0.5 h-4 w-4 accent-ink"
+                />
+                <span>
+                  올린 일정을 바로 공개
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    안 고르면 각 일정의 전주 금요일 오전 10시에 공개돼요.
+                  </span>
+                </span>
+              </label>
+            ) : null}
 
             <button
               type="submit"
@@ -1094,4 +1220,10 @@ function KindTitleField({ kind }: { kind: GatheringKind }) {
       />
     </div>
   );
+}
+
+/** "2026-10-19", "2026-10-25" → "10/19~10/25" */
+function shortRange(from: string, to: string): string {
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  return `${md(from)}~${md(to)}`;
 }

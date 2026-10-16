@@ -28,6 +28,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const fd = new FormData();
   fd.append("file", file, file.name);
+  // 운영진: 올린 일정을 금요일 오전 10시 전에 바로 공개
+  if (form.get("open_now") === "on") fd.append("open_now", "true");
 
   try {
     const result = await api<{

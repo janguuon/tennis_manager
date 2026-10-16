@@ -133,11 +133,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   try {
     if (intent === "vote") {
-      await api(`/gatherings/${id}/attendance`, {
-        method: "PUT",
-        token,
-        body: { status: formData.get("status") },
-      });
+      // 참석을 한 번 더 누르면 "cancel": 투표 취소 (마감 제한은 서버가 지킨다)
+      if (formData.get("status") === "cancel") {
+        await api(`/gatherings/${id}/attendance`, { method: "DELETE", token });
+      } else {
+        await api(`/gatherings/${id}/attendance`, {
+          method: "PUT",
+          token,
+          body: { status: formData.get("status") },
+        });
+      }
     } else if (intent === "generate") {
       await api(`/gatherings/${id}/draws/generate`, {
         method: "POST",
@@ -743,13 +748,24 @@ export default function GatheringDetailPage() {
                 ) : (
                   <>
                     <button
+                      // 참석 중에 한 번 더 누르면 참석 취소 (모임 3일 전부터는 눌러도 그대로)
+                      type={myAttending && absentLocked ? "button" : "submit"}
                       name="status"
-                      value="attending"
+                      value={myAttending ? "cancel" : "attending"}
                       disabled={guestVoteLocked || navigation.state !== "idle"}
                       aria-pressed={myAttending}
+                      title={
+                        myAttending
+                          ? absentLocked
+                            ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없어요`
+                            : "한 번 더 누르면 참석 취소"
+                          : undefined
+                      }
                       className={`${
                         myAttending ? "btn-primary" : "btn-ghost"
-                      } h-11 flex-1 px-2 text-sm`}
+                      } h-11 flex-1 px-2 text-sm${
+                        myAttending && absentLocked ? " cursor-default" : ""
+                      }`}
                     >
                       {myAttending ? <Check size={16} /> : null}
                       {full && !myAttending ? "대기 신청" : "참석"}
@@ -792,8 +808,12 @@ export default function GatheringDetailPage() {
               ) : absentLocked ? (
                 <p className="mt-3 flex items-center gap-1.5 text-xs font-bold">
                   <Lock size={12} className="shrink-0" />
-                  모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 불참으로 바꿀 수 없어요.
-                  필요하면 운영진에게 문의하세요.
+                  모임 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소·불참 변경을 할 수
+                  없어요. 필요하면 운영진에게 문의하세요.
+                </p>
+              ) : myAttending ? (
+                <p className="mt-3 text-xs font-bold opacity-70">
+                  참석을 한 번 더 누르면 참석이 취소돼요.
                 </p>
               ) : null}
             </div>

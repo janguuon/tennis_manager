@@ -157,3 +157,20 @@ def test_my_status_in_calendar_list(club):
     assert [mine(n) for n in ("amy", "ben", "cal", "dan")] == ["attending", "waiting", "absent", None]
     assert club.c.get(f"/gatherings/{gid}", headers=club.headers["ben"]).json()["my_status"] == "waiting"
     assert FAR_DATE.startswith(FAR_MONTH)
+
+
+def test_cancel_vote_toggle_keeps_paid_record_for_refund(club):
+    """참석을 한 번 더 누르면 투표 취소. 입금했으면 돌려줄 돈이 남도록 불참으로 남긴다."""
+    club.add_members("amy", "ben")
+    gid = club.gathering(fee=10000)
+    club.vote(gid, "amy")
+    club.vote(gid, "ben")
+    # 입금 전: 명단에서 빠진다(투표 안 한 상태)
+    assert club.c.delete(f"/gatherings/{gid}/attendance", headers=club.headers["amy"]).status_code == 204
+    assert status_of(club, gid, "amy") is None
+    # 입금 후: 불참으로 남고, 낸 돈은 돌려줄 돈으로 잡힌다
+    club.pay(gid, "ben")
+    assert club.c.delete(f"/gatherings/{gid}/attendance", headers=club.headers["ben"]).status_code == 204
+    assert status_of(club, gid, "ben") == "absent"
+    refunds = [x["user"]["username"] for x in club.detail(gid)["payment"]["refunds"]]
+    assert refunds == ["ben"]

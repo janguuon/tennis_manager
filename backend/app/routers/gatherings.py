@@ -1311,7 +1311,10 @@ def cancel_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """투표 취소 (참여자 명단에서 제거). 참석자가 빠지면 대기자가 올라간다."""
+    """투표 취소 (참여자 명단에서 제거). 참석자가 빠지면 대기자가 올라간다.
+
+    참석 버튼을 한 번 더 누를 때 쓴다. 입금 기록이 있으면 돌려줄 돈이 남도록 지우지 않고 불참으로 둔다.
+    """
     gathering = db.get(Gathering, gathering_id)
     if gathering is not None:
         _require_open(gathering, current_user)
@@ -1330,7 +1333,11 @@ def cancel_attendance(
             status.HTTP_403_FORBIDDEN,
             detail=f"모임 시작 {ATTENDANCE_LOCK_DAYS}일 전부터는 참석 취소를 할 수 없습니다. 운영진에게 문의하세요.",
         )
-    db.delete(participant)
+    if participant.paid:
+        participant.status = AttendanceStatus.ABSENT
+        participant.waiting_since = None
+    else:
+        db.delete(participant)
     if was_attending:
         promote_waiting(db, gathering)
     db.commit()

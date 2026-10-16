@@ -436,9 +436,12 @@ function NextGatheringTile({
   const waiting = waitingList(next.participants);
   const myRank = waiting.findIndex((p) => p.user.id === me.id) + 1;
   // 누르는 즉시 보여 줄 상태 (정원이 찼으면 참석 신청은 대기)
-  const pending = fetcher.formData?.get("status") as AttendanceStatus | null;
+  // "cancel": 참석을 한 번 더 눌러 투표 취소
+  const pending = fetcher.formData?.get("status") as AttendanceStatus | "cancel" | null;
   const shownVote =
-    pending === "attending" && full && myVote !== "attending" && myVote !== "waiting"
+    pending === "cancel"
+      ? undefined
+      : pending === "attending" && full && myVote !== "attending" && myVote !== "waiting"
       ? "waiting"
       : pending ?? myVote;
   // 3일 전부터 참석자는 직접 불참 못 함 (관리자·임원진·총무는 가능)
@@ -533,11 +536,22 @@ function NextGatheringTile({
             ) : (
               <>
                 <button
+                  // 참석 중에 한 번 더 누르면 참석 취소 (모임 3일 전부터는 눌러도 그대로)
+                  type={myVote === "attending" && locked ? "button" : "submit"}
                   name="status"
-                  value="attending"
+                  value={myVote === "attending" ? "cancel" : "attending"}
                   disabled={guestVoteLocked || fetcher.state !== "idle"}
                   aria-pressed={shownVote === "attending"}
-                  className={shownVote === "attending" ? "btn-ink" : "btn-line"}
+                  title={
+                    myVote === "attending"
+                      ? locked
+                        ? "모임 3일 전부터는 참석 취소를 할 수 없어요"
+                        : "한 번 더 누르면 참석 취소"
+                      : undefined
+                  }
+                  className={`${shownVote === "attending" ? "btn-ink" : "btn-line"}${
+                    myVote === "attending" && locked ? " cursor-default" : ""
+                  }`}
                 >
                   {shownVote === "attending" && <Check size={15} />}
                   {full && shownVote !== "attending" ? "대기 신청" : "참석할게요"}
@@ -566,7 +580,7 @@ function NextGatheringTile({
             {fetcher.data.error}
           </p>
         )}
-        {(!me.is_admin && (guestVoteLocked || myVote === "waiting" || full || (locked && myVote === "attending"))) ||
+        {(!me.is_admin && (guestVoteLocked || myVote === "waiting" || full || myVote === "attending")) ||
         myDue > 0 ? (
           <div className="mt-3 flex flex-wrap justify-between gap-2 text-[11px]">
             <span>
@@ -577,8 +591,10 @@ function NextGatheringTile({
                 : myVote === "waiting"
                 ? "자리가 나면 순서대로 자동 참석돼요."
                 : locked && myVote === "attending"
-                ? "불참 변경은 운영진에게 문의해 주세요."
-                : full && myVote !== "attending"
+                ? "참석 취소는 운영진에게 문의해 주세요."
+                : myVote === "attending"
+                ? "참석을 한 번 더 누르면 취소돼요."
+                : full
                 ? `정원이 다 찼어요 · 대기 ${waiting.length}명`
                 : ""}
             </span>

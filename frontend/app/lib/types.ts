@@ -381,3 +381,16 @@ export type ClubAccount = {
   account_number: string;
   account_holder: string | null;
 };
+
+/** 클럽 소식 (운영진이 올리는 축하·소식) */
+export type NoticeKind = "celebrate" | "news";
+export interface Notice {
+  id: number;
+  kind: NoticeKind;
+  title: string;
+  body: string | null;
+  show_until: string | null;
+  created_at: string;
+  author_name: string | null;
+  is_new: boolean;
+}

@@ -51,6 +51,11 @@ const MENUS = [
   { to: "/app/members", label: "테니스 식구", desc: "회원 목록과 프로필." },
   { to: "/app/rules", label: "클럽 회칙", desc: "우리 클럽 규칙." },
   {
+    to: "/app/notices",
+    label: "클럽 소식",
+    desc: "대회 입상 축하·클럽 소식. 새 소식은 들어올 때 팝업으로 떠요.",
+  },
+  {
     to: "/app/mypage",
     label: "마이페이지",
     desc: "내 이름(프로필)을 누르면 들어가요. 성별 등 프로필 수정, 비밀번호 변경.",

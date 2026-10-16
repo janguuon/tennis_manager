@@ -77,6 +77,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "address", "address VARCHAR(200)"),
     # 운영진 미리 공개
     ("gatherings", "opened_at", "opened_at DATETIME"),
+    ("users", "notice_seen_at", "notice_seen_at DATETIME"),
     # 대회 입상 별 개수와 이력
     ("users", "award_gold", "award_gold INTEGER NOT NULL DEFAULT 0"),
     ("users", "award_silver", "award_silver INTEGER NOT NULL DEFAULT 0"),

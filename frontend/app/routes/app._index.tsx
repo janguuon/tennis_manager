@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Link, useFetcher, useLoaderData } from "@remix-run/react";
+import { Link, useFetcher, useLoaderData, useRouteLoaderData } from "@remix-run/react";
 import {
   ArrowUpRight,
   Check,
@@ -9,6 +9,7 @@ import {
   Wallet,
   CalendarDays,
   BookOpen,
+  Megaphone,
 } from "lucide-react";
 
 import {
@@ -20,6 +21,7 @@ import {
 } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
 import { MyVotePill } from "~/components/MyVote";
+import { NOTICE_ICON } from "~/components/NoticePopup";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
@@ -33,6 +35,7 @@ import type {
   Gathering,
   GatheringDetail,
   MyPaymentDue,
+  Notice,
   PlayerStats,
   RankingEntry,
   User,
@@ -135,6 +138,10 @@ export default function HomePage() {
       ? myDues[0]
       : null;
   const pct = stats ? Math.round(stats.overall.win_rate * 100) : 0;
+  // 클럽 소식은 레이아웃(routes/app)이 불러 둔 것을 쓴다. 가장 최근 소식을 CLUB NEWS 줄에
+  const notices =
+    useRouteLoaderData<{ notices: Notice[] }>("routes/app")?.notices ?? [];
+  const latestNotice = notices[0] ?? null;
   return (
     <PageBody>
       <PageHeader
@@ -154,6 +161,9 @@ export default function HomePage() {
             <Link to="/guide" className="btn-ghost">
               <BookOpen size={16} /> 이용 안내
             </Link>
+            <Link to="/app/notices" className="btn-ghost">
+              <Megaphone size={16} /> 클럽 소식
+            </Link>
           </div>
         }
       />
@@ -165,6 +175,8 @@ export default function HomePage() {
         <p>
           {me.is_admin && pendingCount
             ? `새로운 식구 ${pendingCount}명이 가입 승인을 기다려요.`
+            : latestNotice
+            ? `${NOTICE_ICON[latestNotice.kind]} ${latestNotice.title}`
             : next
             ? `${shortDay(next.event_date)} ${next.title} · ${
                 next.attendance?.attending ?? 0
@@ -175,13 +187,19 @@ export default function HomePage() {
           to={
             me.is_admin && pendingCount
               ? "/app/admin"
+              : latestNotice
+              ? "/app/notices"
               : next
               ? `/app/gatherings/${next.id}`
               : "/app/calendar"
           }
           className="text-link"
           aria-label={
-            me.is_admin && pendingCount ? "가입 신청 확인" : "모임 확인"
+            me.is_admin && pendingCount
+              ? "가입 신청 확인"
+              : latestNotice
+              ? "클럽 소식 보기"
+              : "모임 확인"
           }
         >
           <ArrowUpRight size={17} />

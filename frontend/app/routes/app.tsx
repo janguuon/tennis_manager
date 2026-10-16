@@ -25,19 +25,24 @@ import {
 
 import { MemberAvatar } from "~/components/Club";
 import { GenderPrompt } from "~/components/GenderPrompt";
+import { NoticePopup } from "~/components/NoticePopup";
 import { Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
 import { isGuest } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
-import type { Me } from "~/lib/types";
+import type { Me, Notice } from "~/lib/types";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   try {
-    const user = await api<Me>("/users/me", { token });
-    return json({ user });
+    // 클럽 소식은 못 불러와도 화면은 뜨게 (팝업만 안 뜬다)
+    const [user, notices] = await Promise.all([
+      api<Me>("/users/me", { token }),
+      api<Notice[]>("/notices", { token }).catch(() => [] as Notice[]),
+    ]);
+    return json({ user, notices });
   } catch (err) {
     // 토큰 만료/무효 → 세션을 지우고 로그인으로(다시 로그인하면 보던 페이지로 복귀).
     // GET /logout 은 쿠키를 지우지 않아 /login ↔ /app 무한 리다이렉트가 났으므로 여기서 직접 정리한다.
@@ -112,7 +117,7 @@ const adminItem: NavItem = {
 };
 
 export default function AppLayout() {
-  const { user } = useLoaderData<typeof loader>();
+  const { user, notices } = useLoaderData<typeof loader>();
   const rootData = useRouteLoaderData("root") as { theme?: string } | undefined;
   const theme = rootData?.theme === "dark" ? "dark" : "light";
   const location = useLocation();
@@ -268,6 +273,8 @@ export default function AppLayout() {
         </footer>
       </main>
       <GenderPrompt user={user} />
+      {/* 성별을 먼저 묻고, 그다음 들어올 때부터 새 소식을 띄운다 (팝업 두 개가 겹치지 않게) */}
+      {user.gender ? <NoticePopup notices={notices} /> : null}
       <nav className="club-bottom-nav" aria-label="모바일 주 메뉴">
         {items.map(({ to, short, icon: Icon, end }) => (
           <NavLink

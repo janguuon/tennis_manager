@@ -13,6 +13,7 @@ from .. import avatars
 from ..database import get_db
 from ..deps import get_current_admin
 from ..models import (
+    Notice,
     ApprovalStatus,
     AttendanceStatus,
     CourtBooking,
@@ -273,6 +274,8 @@ def _purge(db: Session, user: User, admin: User) -> PurgePreview:
         b.reimbursed_by = None
     for g in db.scalars(select(Gathering).where(Gathering.created_by == uid)):
         g.created_by = admin.id
+    for n in db.scalars(select(Notice).where(Notice.created_by == uid)):
+        n.created_by = None
     db.flush()
     for g in freed:
         promote_waiting(db, g)

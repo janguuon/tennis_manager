@@ -155,6 +155,8 @@ class User(Base):
     award_silver: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     award_bronze: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     award_note: Mapped[str | None] = mapped_column(String(100))  # 짧은 이력 (예: "2026 OO오픈 우승")
+    # 클럽 소식 팝업을 마지막으로 확인한 시각. 이보다 나중에 올라온 소식이 "새 소식"이다
+    notice_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # 코트비 등을 돌려받을 계좌 (본인과 관리자·임원진에게만 공개)
     bank: Mapped[str | None] = mapped_column(String(50))
@@ -474,3 +476,20 @@ class ClubSetting(Base):
 
     key: Mapped[str] = mapped_column(String(50), primary_key=True)
     value: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
+class Notice(Base):
+    """클럽 소식: 운영진이 올리는 축하(대회 입상 등)·소식. 회원이 들어오면 안 본 소식이 팝업으로 뜬다."""
+
+    __tablename__ = "notices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), default="news")  # celebrate(축하) | news(소식)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text)
+    show_until: Mapped[date | None] = mapped_column(Date)  # 이 날까지 보인다 (비우면 지울 때까지)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    # 회원의 notice_seen_at과 비교하므로 같은 시계(파이썬 현지 시각)로 적는다
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    author: Mapped[User | None] = relationship()

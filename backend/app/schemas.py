@@ -839,3 +839,31 @@ class RatingEventRead(BaseModel):
 class RatingHistory(BaseModel):
     row: RatingRow
     events: list[RatingEventRead]  # 최근 경기부터
+
+
+class NoticeCreate(BaseModel):
+    kind: Literal["celebrate", "news"] = "news"
+    title: str = Field(min_length=1, max_length=100)
+    body: str | None = Field(default=None, max_length=1000)
+    show_until: date | None = None
+
+    @field_validator("title", "body", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("body")
+    @classmethod
+    def _empty_body(cls, v):
+        return v or None
+
+
+class NoticeRead(BaseModel):
+    id: int
+    kind: str
+    title: str
+    body: str | None
+    show_until: date | None
+    created_at: datetime
+    author_name: str | None = None
+    is_new: bool = False  # 이 회원이 아직 팝업에서 확인하지 않은 소식

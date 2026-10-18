@@ -16,6 +16,7 @@ import {
 } from "@remix-run/react";
 import {
   CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -139,10 +140,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : savedList
       ? "list"
       : "calendar";
+  // 내 참석만 보기: URL(?mine=1) 우선, 없으면 쿠키(cal_mine)로 마지막 선택 기억
+  const urlMine = url.searchParams.get("mine");
+  const mine =
+    urlMine !== null
+      ? urlMine === "1"
+      : /(?:^|;\s*)cal_mine=1/.test(request.headers.get("Cookie") ?? "");
   return json({
     month,
     gatherings,
     view,
+    mine,
     members,
     savedClubAccount,
     nextWeekOpen,
@@ -254,10 +262,20 @@ function addHours(time: string, hours: number): string {
     : TIME_OPTIONS[TIME_OPTIONS.length - 1];
 }
 
+/** 내 참석 일정: 참석, 그리고 아직 끝나지 않은 모임의 대기 (대기로 끝난 모임은 가지 않은 것) */
+function isMine(g: Gathering): boolean {
+  if (g.my_status === "attending") return true;
+  return g.my_status === "waiting" && (g.status === "planned" || g.status === "ongoing");
+}
+
 export default function CalendarPage() {
-  const { month, gatherings, view, members, savedClubAccount, nextWeekOpen } =
+  const { month, gatherings, view, mine, members, savedClubAccount, nextWeekOpen } =
     useLoaderData<typeof loader>();
   const { user } = useOutletContext<{ user: Me }>();
+  // 내 참석만 보기 (관리자는 투표하지 않아 거를 게 없다)
+  const canFilterMine = !user.is_admin;
+  const onlyMine = canFilterMine && mine;
+  const shown = onlyMine ? gatherings.filter(isMine) : gatherings;
   // 게스트는 일정 보기와 참석 투표만: 일정 등록·엑셀 버튼이 없다
   const canCreate = !isGuest(user);
   // 오테식 모임 기본 계좌: 모임 통장, 없으면 이 달의 마지막 오테식 모임 계좌
@@ -345,7 +363,7 @@ export default function CalendarPage() {
 
   // 날짜별 모임 그룹화
   const byDate = new Map<string, Gathering[]>();
-  for (const g of gatherings) {
+  for (const g of shown) {
     const list = byDate.get(g.event_date) ?? [];
     list.push(g);
     byDate.set(g.event_date, list);
@@ -355,9 +373,18 @@ export default function CalendarPage() {
   const updateParams = (next: {
     month?: string;
     view?: "calendar" | "list";
+    mine?: boolean;
   }) => {
     const p = new URLSearchParams(searchParams);
     if (next.month !== undefined) p.set("month", next.month);
+    if (next.mine !== undefined) {
+      if (next.mine) p.set("mine", "1");
+      else p.delete("mine");
+      // 마지막 선택을 쿠키에 기억 (1년): 모임을 보고 '목록'으로 돌아와도 그대로
+      document.cookie = `cal_mine=${next.mine ? 1 : 0}; path=/; max-age=${
+        60 * 60 * 24 * 365
+      }`;
+    }
     if (next.view !== undefined) {
       if (next.view === "calendar") p.delete("view");
       else p.set("view", next.view);
@@ -476,7 +503,9 @@ export default function CalendarPage() {
               {mm}
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              이 달 일정 {gatherings.length}개
+              {onlyMine
+                ? `내 참석 ${shown.length}개 · 전체 ${gatherings.length}개`
+                : `이 달 일정 ${gatherings.length}개`}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -502,7 +531,40 @@ export default function CalendarPage() {
             </button>
           </div>
         </div>
+        {canFilterMine ? (
+          <div>
+            <div className="segmented" role="group" aria-label="일정 거르기">
+              <button
+                className={`segmented-item ${onlyMine ? "" : "segmented-item-active"}`}
+                aria-pressed={!onlyMine}
+                onClick={() => updateParams({ mine: false })}
+              >
+                전체 일정
+              </button>
+              <button
+                className={`segmented-item ${onlyMine ? "segmented-item-active" : ""}`}
+                aria-pressed={onlyMine}
+                onClick={() => updateParams({ mine: true })}
+              >
+                <Check size={14} strokeWidth={3} />
+                내 참석만
+              </button>
+            </div>
+          </div>
+        ) : null}
         <CalendarLegend />
+        {onlyMine && view === "calendar" && shown.length === 0 && gatherings.length > 0 ? (
+          <p className="px-1 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+            이 달에 참석하는 일정이 없어요.{" "}
+            <button
+              type="button"
+              className="font-bold text-ink underline underline-offset-4 dark:text-white"
+              onClick={() => updateParams({ mine: false })}
+            >
+              전체 일정 보기
+            </button>
+          </p>
+        ) : null}
         {view === "calendar" ? (
           /* 달력 그리드 */
           <div className="card overflow-hidden !p-0">
@@ -611,7 +673,14 @@ export default function CalendarPage() {
           <EmptyCard
             icon={<CalendarDays size={28} />}
             action={
-              canCreate ? (
+              onlyMine && gatherings.length > 0 ? (
+                <button
+                  className="btn-ghost btn-sm"
+                  onClick={() => updateParams({ mine: false })}
+                >
+                  전체 일정 보기
+                </button>
+              ) : canCreate ? (
                 <button
                   className="btn-accent btn-sm"
                   onClick={() => setShowCreate(true)}
@@ -622,7 +691,9 @@ export default function CalendarPage() {
               ) : undefined
             }
           >
-            이 달에 등록된 일정이 없어요.
+            {onlyMine && gatherings.length > 0
+              ? "이 달에 참석하는 일정이 없어요."
+              : "이 달에 등록된 일정이 없어요."}
           </EmptyCard>
         ) : (
           /* 리스트 보기: 날짜별 소제목 + 일정 줄을 카드 한 장에 */
@@ -666,7 +737,7 @@ export default function CalendarPage() {
             })}
           </section>
         )}
-        {view === "calendar" && gatherings.length > 0 ? (
+        {view === "calendar" && shown.length > 0 ? (
           <section className="card overflow-hidden !p-0 sm:hidden">
             <h2 className="section-title px-5 pt-5">이번 달 모임</h2>
             <ul className="mt-2 divide-y divide-slate-200 dark:divide-slate-700">

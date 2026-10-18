@@ -148,6 +148,15 @@ export interface Gathering {
   my_status?: AttendanceStatus | null;
   /** 오테식 모임: 코트 예약 금액 합 (회비 지출) */
   court_total: number;
+  /** 캘린더 목록: 참석자 (투표한 순서). 상세에서는 participants 를 쓴다 */
+  attendees?: AttendeeBrief[];
+}
+
+/** 캘린더 목록에 보여 줄 참석자 */
+export interface AttendeeBrief {
+  id: number;
+  name: string;
+  avatar_url: string | null;
 }
 
 /** 예약자 계좌 (본인과 관리자·임원진에게만 채워짐) */

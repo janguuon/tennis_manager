@@ -540,6 +540,16 @@ class AttendanceSummary(BaseModel):
     total: int = 0
 
 
+class AttendeeBrief(BaseModel):
+    """캘린더 목록에 보여 줄 참석자 (이름·사진만)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    avatar_url: str | None = None
+
+
 class GatheringRead(GatheringBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -563,6 +573,8 @@ class GatheringRead(GatheringBase):
     my_status: AttendanceStatus | None = None
     # 오테식 모임: 코트 예약 금액 합 (회비 지출)
     court_total: int = 0
+    # 캘린더 목록: 참석자 (투표한 순서). 상세는 participants 를 쓴다
+    attendees: list[AttendeeBrief] = []
 
 
 class ParticipantRead(BaseModel):

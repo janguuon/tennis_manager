@@ -159,6 +159,26 @@ def test_my_status_in_calendar_list(club):
     assert FAR_DATE.startswith(FAR_MONTH)
 
 
+
+def test_attendees_in_calendar_list(club):
+    """캘린더 목록에 참석자 이름이 투표한 순서대로 온다 (대기·불참은 빠진다). 상세에는 넣지 않는다."""
+    from conftest import FAR_MONTH
+
+    club.add_members("amy", "ben", "cal", "dan")
+    gid = club.gathering(fee=0, max_participants=2)
+    club.vote(gid, "ben")
+    club.vote(gid, "amy")
+    club.vote(gid, "cal")  # 정원이 차서 대기
+    club.vote(gid, "dan", "absent")
+
+    rows = club.c.get(f"/gatherings?date_from={FAR_MONTH}-01&date_to={FAR_MONTH}-31",
+                      headers=club.headers["dan"]).json()
+    row = next(g for g in rows if g["id"] == gid)
+    assert [a["name"] for a in row["attendees"]] == ["ben", "amy"]
+    assert set(row["attendees"][0]) == {"id", "name", "avatar_url"}
+    assert row["attendance"]["waiting"] == 1
+    assert club.detail(gid)["attendees"] == []
+
 def test_cancel_vote_toggle_keeps_paid_record_for_refund(club):
     """참석을 한 번 더 누르면 투표 취소. 입금했으면 돌려줄 돈이 남도록 불참으로 남긴다."""
     club.add_members("amy", "ben")

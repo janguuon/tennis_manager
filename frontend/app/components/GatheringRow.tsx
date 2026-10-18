@@ -1,11 +1,12 @@
-import { Link } from "@remix-run/react";
+import { Link, useOutletContext } from "@remix-run/react";
 import { ArrowUpRight, Lock, Users } from "lucide-react";
 
+import { MemberAvatar } from "~/components/Club";
 import { MyVotePill } from "~/components/MyVote";
 import { KIND_BADGE, KIND_DOT, KIND_LABEL, isClubKind } from "~/lib/club";
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
-import type { Gathering } from "~/lib/types";
+import type { AttendeeBrief, Gathering, Me } from "~/lib/types";
 
 /** 일정 목록의 한 줄 (캘린더 리스트 보기, 일자별 목록에서 공용). 카드 안에 divide-y로 쌓아 쓴다. */
 export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
@@ -67,6 +68,9 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           ) : null}
         </div>
         <p className="mt-0.5 truncate text-[13px] font-medium text-slate-500 dark:text-slate-400">{meta.join(" · ")}</p>
+        {g.status !== "canceled" ? (
+          <AttendeeLine people={g.attendees ?? []} waiting={g.attendance?.waiting ?? 0} muted={muted} />
+        ) : null}
       </div>
       <span className="flex shrink-0 flex-col items-end gap-1">
         <MyVotePill g={g} />
@@ -78,5 +82,81 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
       </span>
       <ArrowUpRight size={16} className="hidden shrink-0 text-slate-400 transition-colors group-hover:text-ink dark:group-hover:text-white sm:block" />
     </Link>
+  );
+}
+
+/** 참석자 이름을 몇 명까지 적을지 (나머지는 "외 N명"): 작은 휴대폰 2명, 400px부터 3명, 넓은 화면 6명 */
+const NAME_TIERS = [
+  { n: 2, show: "min-[400px]:hidden" },
+  { n: 3, show: "hidden min-[400px]:inline sm:hidden" },
+  { n: 6, show: "hidden sm:inline" },
+] as const;
+
+/**
+ * 참석자 한 줄: 겹친 프로필 3개 + "김민준 · 박서연 · 이도윤 외 6명 · 대기 2".
+ * 늘 한 줄이다. 이름이 길면 말줄임, "외 N명"과 대기는 잘리지 않게 따로 둔다. 내 이름은 진하게.
+ */
+function AttendeeLine({
+  people,
+  waiting,
+  muted,
+}: {
+  people: AttendeeBrief[];
+  waiting: number;
+  muted: boolean;
+}) {
+  const { user } = useOutletContext<{ user: Me }>();
+  if (people.length === 0 && waiting === 0) return null;
+  const names = (n: number) =>
+    people.slice(0, n).map((p, i) => (
+      <span key={p.id}>
+        {i > 0 ? " · " : ""}
+        <span className={p.id === user.id ? "font-bold text-ink dark:text-white" : ""}>{p.name}</span>
+      </span>
+    ));
+  const rest = (n: number) => (people.length > n ? ` 외 ${people.length - n}명` : "");
+  return (
+    <div
+      className={`mt-1.5 flex min-w-0 items-center gap-2 text-[12px] font-medium text-slate-500 dark:text-slate-400 ${
+        muted ? "opacity-70" : ""
+      }`}
+    >
+      <span className="sr-only">
+        {[people.length ? `참석 ${people.map((p) => p.name).join(", ")}` : "", waiting ? `대기 ${waiting}명` : ""]
+          .filter(Boolean)
+          .join(", ")}
+      </span>
+      {people.length ? (
+        <span aria-hidden="true" className="flex shrink-0 -space-x-1.5">
+          {people.slice(0, 3).map((p) => (
+            <MemberAvatar
+              key={p.id}
+              user={p}
+              className="!h-5 !w-5 !text-[9px] ring-2 ring-paper dark:ring-slate-900"
+            />
+          ))}
+        </span>
+      ) : null}
+      <span aria-hidden="true" className="flex min-w-0 items-center">
+        {NAME_TIERS.map(({ n, show }) => (
+          <span key={n} className={`${show} min-w-0 truncate`}>
+            {names(n)}
+          </span>
+        ))}
+        {/* 이름이 길어 잘려도 "외 N명"은 남도록 따로 둔다 */}
+        {NAME_TIERS.map(({ n, show }) =>
+          people.length > n ? (
+            <span key={n} className={`${show} shrink-0 whitespace-pre`}>
+              {rest(n)}
+            </span>
+          ) : null
+        )}
+        {waiting ? (
+          <span className="shrink-0 whitespace-pre text-slate-400">
+            {people.length ? " · " : ""}대기 {waiting}
+          </span>
+        ) : null}
+      </span>
+    </div>
   );
 }

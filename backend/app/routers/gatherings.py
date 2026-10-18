@@ -44,6 +44,7 @@ from ..models import (
 from ..schemas import (
     GUEST_FEE_DEFAULT,
     AttendanceSummary,
+    AttendeeBrief,
     BookerAccount,
     CourtBookingRead,
     GatheringCreate,
@@ -143,6 +144,16 @@ def _to_read(gathering: Gathering) -> GatheringRead:
 def _with_my_status(read: GatheringRead, gathering: Gathering, user: User) -> GatheringRead:
     """보고 있는 회원이 이 모임에 참석·대기·불참 중 무엇을 눌렀는지 (안 눌렀으면 None)."""
     read.my_status = next((p.status for p in gathering.participants if p.user_id == user.id), None)
+    return read
+
+
+def _with_attendees(read: GatheringRead, gathering: Gathering) -> GatheringRead:
+    """캘린더 목록에 보여 줄 참석자 (참석만, 투표한 순서)."""
+    attending = sorted(
+        (p for p in gathering.participants if p.status == AttendanceStatus.ATTENDING),
+        key=lambda p: (p.voted_at, p.id),
+    )
+    read.attendees = [AttendeeBrief.model_validate(p.user) for p in attending]
     return read
 
 
@@ -1135,7 +1146,7 @@ def list_gatherings(
 
     now = visibility.now_kst()
     return [
-        _with_my_status(_to_read(g), g, current_user)
+        _with_attendees(_with_my_status(_to_read(g), g, current_user), g)
         for g in db.scalars(stmt).all()
         if visibility.is_open_for(current_user, g, now)
     ]

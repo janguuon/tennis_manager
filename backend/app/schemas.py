@@ -426,6 +426,20 @@ class GatheringCreate(GatheringBase):
     open_now: bool = False
 
 
+class GatheringCancel(BaseModel):
+    """모임 취소 (운영진·모임을 만든 사람). 사유는 꼭 적는다. 예: 우천 취소, 코트 예약 취소."""
+
+    reason: str = Field(..., max_length=100)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_required(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise PydanticCustomError("cancel_reason", "취소 사유를 적어 주세요.")
+        return v
+
+
 class GatheringOpenRange(BaseModel):
     """기간 안의 공개 전 일정을 한 번에 미리 공개 (예: 다음 주 월~일)."""
 
@@ -575,6 +589,9 @@ class GatheringRead(GatheringBase):
     court_total: int = 0
     # 캘린더 목록: 참석자 (투표한 순서). 상세는 participants 를 쓴다
     attendees: list[AttendeeBrief] = []
+    # 취소된 모임: 사유와 취소한 시각 (한국 시간)
+    cancel_reason: str | None = None
+    canceled_at: datetime | None = None
 
 
 class ParticipantRead(BaseModel):

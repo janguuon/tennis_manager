@@ -150,6 +150,9 @@ export interface Gathering {
   court_total: number;
   /** 캘린더 목록: 참석자 (투표한 순서). 상세에서는 participants 를 쓴다 */
   attendees?: AttendeeBrief[];
+  /** 취소된 모임: 사유(우천 취소 등)와 취소한 시각(한국 시간) */
+  cancel_reason: string | null;
+  canceled_at: string | null;
 }
 
 /** 캘린더 목록에 보여 줄 참석자 */

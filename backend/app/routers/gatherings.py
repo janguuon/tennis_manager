@@ -45,6 +45,7 @@ from ..schemas import (
     GUEST_FEE_DEFAULT,
     AttendanceSummary,
     AttendeeBrief,
+    GatheringCancel,
     BookerAccount,
     CourtBookingRead,
     GatheringCreate,
@@ -155,6 +156,14 @@ def _with_attendees(read: GatheringRead, gathering: Gathering) -> GatheringRead:
     )
     read.attendees = [AttendeeBrief.model_validate(p.user) for p in attending]
     return read
+
+
+CANCELED_NO_VOTE = "취소된 모임이라 참석 투표를 받지 않아요."
+
+
+def _require_not_canceled(gathering: Gathering) -> None:
+    if gathering.status == GatheringStatus.CANCELED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=CANCELED_NO_VOTE)
 
 
 def _require_open(gathering: Gathering, user: User) -> None:
@@ -544,6 +553,7 @@ def promote_waiting(db: Session, gathering: Gathering) -> list[Participant]:
 
 def _set_attendance(db: Session, gathering: Gathering, participant: Participant | None, user_id: int, want: str) -> Participant:
     """참석 신청(정원이 찼으면 대기) 또는 불참. 참석자가 빠지면 대기자를 올린다."""
+    _require_not_canceled(gathering)
     if participant is None:
         participant = Participant(gathering_id=gathering.id, user_id=user_id, status=AttendanceStatus.ABSENT)
         db.add(participant)
@@ -1202,6 +1212,16 @@ def update_gathering(
             if new_kind in CLUB_KINDS:
                 data.setdefault("guest_fee", GUEST_FEE_DEFAULT)
 
+    new_status = data.get("status")
+    if new_status == GatheringStatus.CANCELED and g.status != GatheringStatus.CANCELED:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="모임 취소는 '모임 취소' 버튼으로 사유와 함께 해 주세요.",
+        )
+    if new_status is not None and new_status != GatheringStatus.CANCELED:
+        g.cancel_reason = None
+        g.canceled_at = None
+
     _normalize_courts(data)
     _clean_address(data)
     for field_name, value in data.items():
@@ -1215,6 +1235,55 @@ def update_gathering(
     if "max_participants" in data:
         promote_waiting(db, g)  # 정원을 늘리거나 없애면 대기자가 올라간다
     db.commit()
+    return _to_read(_load_gathering(db, gathering_id))
+
+
+def _require_canceler(gathering: Gathering, user: User) -> None:
+    """모임 취소·되돌리기: 관리자·임원진·총무는 모든 모임, 그 밖에는 모임을 만든 사람(게스트 제외)."""
+    if user.is_guest:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
+    if user.is_staff or gathering.created_by == user.id:
+        return
+    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 취소는 운영진이나 모임을 만든 사람만 할 수 있어요.")
+
+
+@router.post("/{gathering_id}/cancel", response_model=GatheringRead)
+def cancel_gathering(
+    gathering_id: int,
+    payload: GatheringCancel,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """모임 취소 (우천·코트 취소 등). 사유를 남기고 참석 투표를 멈춘다.
+    투표 기록은 그대로 두고, 이미 입금한 사람은 정산에서 돌려줄 돈으로 잡힌다.
+    앱에서 미처 취소하지 못해 자동으로 '완료'가 된 모임도 나중에 취소할 수 있다."""
+    g = _load_gathering(db, gathering_id)
+    _require_canceler(g, current_user)
+    if g.status == GatheringStatus.CANCELED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="이미 취소된 모임이에요.")
+    g.status = GatheringStatus.CANCELED
+    g.cancel_reason = payload.reason
+    g.canceled_at = visibility.now_kst()
+    db.commit()
+    return _to_read(_load_gathering(db, gathering_id))
+
+
+@router.delete("/{gathering_id}/cancel", response_model=GatheringRead)
+def restore_gathering(
+    gathering_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """취소 되돌리기: 다시 예정으로 (이미 끝난 시각이면 읽을 때 완료가 된다). 사유는 지운다."""
+    g = _load_gathering(db, gathering_id)
+    _require_canceler(g, current_user)
+    if g.status != GatheringStatus.CANCELED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="취소된 모임이 아니에요.")
+    g.status = GatheringStatus.PLANNED
+    g.cancel_reason = None
+    g.canceled_at = None
+    db.commit()
+    complete_finished(db)
     return _to_read(_load_gathering(db, gathering_id))
 
 
@@ -1329,6 +1398,7 @@ def cancel_attendance(
     gathering = db.get(Gathering, gathering_id)
     if gathering is not None:
         _require_open(gathering, current_user)
+        _require_not_canceled(gathering)
     participant = db.scalar(
         select(Participant).where(
             Participant.gathering_id == gathering_id,

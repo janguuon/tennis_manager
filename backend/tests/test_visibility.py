@@ -241,7 +241,7 @@ def test_finished_gathering_completes_30_minutes_after_end(club, fixed_now):
     start_only = club.create(kind="flash", event_date=THIS_FRI, start_time="19:00").json()["id"]
     all_day = club.create(kind="flash", event_date=THIS_FRI).json()["id"]
     canceled = club.create(kind="flash", event_date=THIS_FRI, start_time="10:00", end_time="12:00").json()["id"]
-    club.c.patch(f"/gatherings/{canceled}", json={"status": "canceled"}, headers=club.admin)
+    club.c.post(f"/gatherings/{canceled}/cancel", json={"reason": "우천 취소"}, headers=club.admin)
 
     def status(gid):
         return club.detail(gid)["status"]

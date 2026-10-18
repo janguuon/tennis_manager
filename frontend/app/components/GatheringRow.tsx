@@ -69,9 +69,15 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           ) : null}
         </div>
         <p className="mt-0.5 truncate text-[13px] font-medium text-slate-500 dark:text-slate-400">{meta.join(" · ")}</p>
-        {g.status !== "canceled" ? (
+        {g.status === "canceled" ? (
+          g.cancel_reason ? (
+            <p className="mt-1 truncate text-[12px] font-semibold text-[#B42318] dark:text-red-300">
+              취소 · {g.cancel_reason}
+            </p>
+          ) : null
+        ) : (
           <AttendeeLine people={g.attendees ?? []} waiting={g.attendance?.waiting ?? 0} muted={muted} />
-        ) : null}
+        )}
       </div>
       <span className="flex shrink-0 flex-col items-end gap-1">
         <MyVotePill g={g} />

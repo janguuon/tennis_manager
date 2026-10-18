@@ -54,7 +54,7 @@ def test_apply_to_upcoming(club):
                        bank="옛은행", account_number="999").json()["id"]
     flash = club.create(kind="flash", event_date=str(today + timedelta(days=3))).json()["id"]
     canceled = club.create(kind="club_flash", event_date=str(today + timedelta(days=5))).json()["id"]
-    club.c.patch(f"/gatherings/{canceled}", json={"status": "canceled"}, headers=club.admin)
+    club.c.post(f"/gatherings/{canceled}/cancel", json={"reason": "우천 취소"}, headers=club.admin)
 
     r = put_account(club)
     assert r.json()["updated"] == 1  # 다가오는 오테식 모임만

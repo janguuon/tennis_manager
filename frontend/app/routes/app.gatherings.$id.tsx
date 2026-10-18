@@ -18,6 +18,7 @@ import {
 } from "@remix-run/react";
 import {
   ArrowUpRight,
+  CalendarX,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -153,6 +154,117 @@ function GatheringPager({
       {cell(prev, "prev")}
       {cell(next, "next")}
     </nav>
+  );
+}
+
+/** 자주 쓰는 취소 사유 (눌러서 채우고 고쳐 쓸 수 있다) */
+const CANCEL_REASONS = ["우천 취소", "코트 예약 취소", "인원 부족"];
+
+/**
+ * 모임 취소 창: 사유를 적어 취소하고, 끝나면 같은 창에서 단톡방에 알린다.
+ * 페이지 action 을 fetcher 로 불러 성공을 이 창에서 알아챈다.
+ */
+function CancelGatheringModal({
+  gathering,
+  shareText,
+  path,
+  onClose,
+}: {
+  gathering: GatheringDetail;
+  shareText: (reason: string | null) => string;
+  path: string;
+  onClose: () => void;
+}) {
+  const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const [reason, setReason] = useState("");
+  const busy = fetcher.state !== "idle";
+  const done = !busy && fetcher.data?.ok === true;
+  // 서버와 같이 공백을 정리한 사유 (단톡방 문구 미리보기)
+  const clean = reason.trim().replace(/\s+/g, " ");
+  const paidCount = gathering.participants.filter((p) => p.paid).length;
+
+  return (
+    <Modal title={done ? "모임을 취소했어요" : "모임 취소"} onClose={onClose}>
+      {done ? (
+        <div className="space-y-4">
+          <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+            단톡방에도 알려 주세요. 이런 문구가 가요.
+          </p>
+          <p className="whitespace-pre-line break-keep rounded-2xl rounded-tl-md bg-[#FEE500] px-4 py-3 text-[13px] font-medium leading-relaxed text-ink">
+            {shareText(gathering.cancel_reason ?? clean)}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-accent h-12 flex-1 !text-sm"
+              onClick={() => shareToKakao({ base: shareText(gathering.cancel_reason ?? clean), path })}
+            >
+              <Share2 size={14} />
+              카톡방에 알리기
+            </button>
+            <button type="button" className="btn-ghost h-12 flex-1 !text-sm" onClick={onClose}>
+              닫기
+            </button>
+          </div>
+        </div>
+      ) : (
+        <fetcher.Form method="post" className="space-y-5">
+          <input type="hidden" name="intent" value="cancel_gathering" />
+          <div>
+            <label className="label" htmlFor="cancel_reason">
+              취소 사유
+            </label>
+            <input
+              id="cancel_reason"
+              name="reason"
+              className="input"
+              required
+              maxLength={100}
+              autoFocus
+              placeholder="예: 비 예보로 우천 취소"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {CANCEL_REASONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`chip-line hover:bg-ink/5 dark:border-slate-500 dark:text-slate-200 ${
+                    clean === r ? "!border-ink !bg-ink !text-white dark:!bg-white dark:!text-ink" : ""
+                  }`}
+                  onClick={() => setReason(r)}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ul className="list-disc space-y-1 pl-4 text-xs font-medium text-slate-500 dark:text-slate-400">
+            <li>참석 투표를 멈추고, 캘린더·목록·홈에 취소와 사유가 보여요. 투표 기록은 남아요.</li>
+            {paidCount ? (
+              <li>이미 입금한 {paidCount}명은 정산에서 &apos;돌려줄 돈&apos;으로 잡혀요.</li>
+            ) : null}
+            <li>잘못 취소했으면 모임 화면에서 &apos;취소 되돌리기&apos;를 누르면 돼요.</li>
+          </ul>
+          {fetcher.data?.error ? (
+            <p className="alert-error flex items-center gap-2">
+              <CircleAlert size={16} className="shrink-0" />
+              {fetcher.data.error}
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <button type="button" className="btn-ghost h-12 flex-1 !text-sm" onClick={onClose}>
+              닫기
+            </button>
+            <button type="submit" className="btn-danger h-12 flex-1 !text-sm" disabled={busy || !clean}>
+              <CalendarX size={15} />
+              {busy ? "취소하는 중…" : "모임 취소하기"}
+            </button>
+          </div>
+        </fetcher.Form>
+      )}
+    </Modal>
   );
 }
 
@@ -380,6 +492,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
         method: intent === "open_early" ? "POST" : "DELETE",
         token,
       });
+    } else if (intent === "cancel_gathering") {
+      // 모임 취소 (우천·코트 취소 등): 사유를 꼭 적는다
+      await api(`/gatherings/${id}/cancel`, {
+        method: "POST",
+        token,
+        body: { reason: String(formData.get("reason") ?? "") },
+      });
+    } else if (intent === "restore_gathering") {
+      await api(`/gatherings/${id}/cancel`, { method: "DELETE", token });
     } else if (intent === "delete_gathering") {
       await api(`/gatherings/${id}`, { method: "DELETE", token });
       const from = String(formData.get("from") || "");
@@ -412,12 +533,17 @@ export default function GatheringDetailPage() {
   const isOrganizer =
     !guest &&
     (gathering.created_by === user.id || user.is_admin || (club && staff));
+  // 취소된 모임: 참석 투표·명단 변경을 받지 않는다 (서버와 같음)
+  const canceled = gathering.status === "canceled";
+  // 모임 취소(우천·코트 취소 등): 관리자·임원진·총무는 모든 모임, 그 밖에는 만든 사람 (서버와 같음)
+  const canCancel = !guest && (staff || gathering.created_by === user.id);
   // 참석 취소 대신 해 주기(3일 전 마감 뒤 요청 처리): 주최자, 그리고 관리자·임원진·총무는 모든 모임에서
-  const canManageAttendance = isOrganizer || staff;
+  const canManageAttendance = (isOrganizer || staff) && !canceled;
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
   const settle = canSettle(user);
   const canPay = settle || (!club && !guest && gathering.created_by === user.id);
   const [editing, setEditing] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   // 직접 바꾸기 중인 대진표 id
   const [editingDraw, setEditingDraw] = useState<number | null>(null);
   // 게스트비 면제 사유를 적고 있는 게스트 id (관리자·총무)
@@ -565,6 +691,17 @@ export default function GatheringDetailPage() {
     .filter(Boolean)
     .join("\n");
 
+  // 단톡방 취소 안내 (모임 취소 직후 창, 취소된 모임의 카톡 공유)
+  const cancelShare = (reason: string | null) =>
+    [
+      `🚫 [모임 취소] ${gathering.title}`,
+      dateLine,
+      gathering.location ? `📍 ${gathering.location}` : "",
+      reason ? `사유: ${reason}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
   // 총무용 미입금 안내 메시지
   const remindBase = [
     `💰 ${gathering.title} ${club ? "게스트비" : "참가비"} 안내`,
@@ -606,16 +743,25 @@ export default function GatheringDetailPage() {
             type="button"
             className="btn-accent btn-sm"
             onClick={() =>
-              shareToKakao({
-                base: shareBase,
-                names: attendees.map((p) => p.user.name),
-                path,
-              })
+              canceled
+                ? shareToKakao({ base: cancelShare(gathering.cancel_reason), path })
+                : shareToKakao({
+                    base: shareBase,
+                    names: attendees.map((p) => p.user.name),
+                    path,
+                  })
             }
           >
             <Share2 size={14} />
             카톡 공유
           </button>
+          {/* 끝난 모임도: 비로 못 했는데 앱에서 미처 취소하지 못해 자동 완료된 경우 */}
+          {canCancel && !canceled ? (
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setCanceling(true)}>
+              <CalendarX size={14} />
+              모임 취소
+            </button>
+          ) : null}
           {isOrganizer ? (
             <>
               <button
@@ -665,6 +811,39 @@ export default function GatheringDetailPage() {
           <CircleAlert size={16} className="shrink-0" />
           {actionData.error}
         </p>
+      ) : null}
+
+      {/* 취소된 모임: 사유와 취소 시각, 되돌리기 */}
+      {canceled ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-house-red/15 px-4 py-3 text-sm font-semibold text-[#9F2A17] dark:text-red-300">
+          <p className="flex min-w-0 flex-1 basis-60 items-start gap-2">
+            <CalendarX size={16} className="mt-0.5 shrink-0" />
+            <span>
+              <b>취소된 모임이에요.</b>
+              {gathering.cancel_reason ? ` 사유: ${gathering.cancel_reason}` : ""}
+              {gathering.canceled_at ? (
+                <span className="ml-1.5 text-xs font-medium opacity-80">
+                  {formatOpenAt(gathering.canceled_at)} 취소
+                </span>
+              ) : null}
+            </span>
+          </p>
+          {canCancel ? (
+            <Form
+              method="post"
+              onSubmit={(e) => {
+                if (!confirm("취소를 되돌릴까요? 다시 예정된 모임이 되고 참석 투표를 받아요."))
+                  e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="restore_gathering" />
+              <button type="submit" className="btn-ghost btn-sm" disabled={navigation.state !== "idle"}>
+                <Undo2 size={14} />
+                취소 되돌리기
+              </button>
+            </Form>
+          ) : null}
+        </div>
       ) : null}
 
       {/* 공개 시점 안내: 임원진에게는 공개 전 상태, 정회원에게는 게스트 투표 시작 시점
@@ -811,7 +990,11 @@ export default function GatheringDetailPage() {
             </p>
           </div>
 
-          {!user.is_admin ? (
+          {canceled ? (
+            <p className="mt-auto pt-6 text-sm font-bold text-slate-500 dark:text-slate-400">
+              취소된 모임이라 참석 투표를 받지 않아요.
+            </p>
+          ) : !user.is_admin ? (
             <div className="mt-auto pt-6">
               <Form method="post" className="flex gap-2">
                 <input type="hidden" name="intent" value="vote" />
@@ -988,6 +1171,7 @@ export default function GatheringDetailPage() {
                             </span>
                           </ProfileLink>
                           {p.user.invited_by_id &&
+                          !canceled &&
                           (canManageAttendance || p.user.invited_by_id === user.id) &&
                           (status === "attending" || status === "waiting") &&
                           !(status === "attending" && attendanceLocked && !canManageAttendance) ? (
@@ -1532,6 +1716,14 @@ export default function GatheringDetailPage() {
       </div>
 
       {/* 수정 모달 */}
+      {canceling ? (
+        <CancelGatheringModal
+          gathering={gathering}
+          shareText={cancelShare}
+          path={path}
+          onClose={() => setCanceling(false)}
+        />
+      ) : null}
       {editing ? (
         <Modal title="모임 수정" onClose={() => setEditing(false)}>
           <Form method="post" className="space-y-7">
@@ -1593,13 +1785,13 @@ export default function GatheringDetailPage() {
                           className="input"
                           defaultValue={gathering.status}
                         >
-                          {Object.entries(GATHERING_STATUS_LABEL).map(
-                            ([v, label]) => (
+                          {Object.entries(GATHERING_STATUS_LABEL)
+                            .filter(([v]) => v !== "canceled" || canceled)
+                            .map(([v, label]) => (
                               <option key={v} value={v}>
                                 {label}
                               </option>
-                            )
-                          )}
+                            ))}
                         </select>
                       </div>
                     </div>

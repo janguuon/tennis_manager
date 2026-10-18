@@ -168,7 +168,7 @@ def test_canceled_gathering_excluded(club):
     gid = setup_club(club)
     m = generate(club, gid, rounds=1).json()["matches"][0]
     record(club, m["id"], 6, 3)
-    club.c.patch(f"/gatherings/{gid}", json={"status": "canceled"}, headers=club.admin)
+    club.c.post(f"/gatherings/{gid}/cancel", json={"reason": "우천 취소"}, headers=club.admin)
     assert board(club).json()["counted_matches"] == 0
 
 

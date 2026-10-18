@@ -194,7 +194,7 @@ def test_canceled_gathering(club):
     club.vote(gid, "kim")
     club.vote(gid, "lee")
     club.pay(gid, "kim")
-    club.c.patch(f"/gatherings/{gid}", json={"status": "canceled"}, headers=club.admin)
+    club.c.post(f"/gatherings/{gid}/cancel", json={"reason": "우천 취소"}, headers=club.admin)
 
     assert club.detail(gid)["per_person"] == 0
     assert club.my_dues("lee") == []

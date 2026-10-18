@@ -55,7 +55,7 @@ def test_open_range_early(club, fixed_now):
     sat = club.gathering(fee=0, date=NEXT_SAT)
     later = club.gathering(fee=0, date=AFTER)
     canceled = club.gathering(fee=0, date=NEXT_SAT)
-    club.c.patch(f"/gatherings/{canceled}", json={"status": "canceled"}, headers=club.admin)
+    club.c.post(f"/gatherings/{canceled}/cancel", json={"reason": "우천 취소"}, headers=club.admin)
 
     body = {"date_from": "2099-01-19", "date_to": "2099-01-25"}
     assert club.c.post("/gatherings/open", json=body, headers=club.h("amy")).status_code == 403

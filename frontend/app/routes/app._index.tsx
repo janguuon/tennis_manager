@@ -11,6 +11,7 @@ import {
   Wallet,
   CalendarDays,
   BookOpen,
+  CalendarX,
   Megaphone,
 } from "lucide-react";
 
@@ -94,6 +95,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const upcoming = gatherings.filter(
     (g) => g.status === "planned" || g.status === "ongoing"
   );
+  // 일주일 안에 취소된 모임 (우천·코트 취소 등): 홈 위쪽에 알린다
+  const canceledSoon = gatherings
+    .filter((g) => g.status === "canceled" && g.event_date <= addDays(today, 7))
+    .slice(0, 3);
   // 다음 모임 카드에서 ‹ › 로 넘겨 보는 몇 번째 모임 (?n=1 이면 두 번째)
   const want = Math.trunc(Number(new URL(request.url).searchParams.get("n")) || 0);
   const nextIndex = Math.min(Math.max(want, 0), Math.max(upcoming.length - 1, 0));
@@ -118,6 +123,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     next,
     nextIndex,
     upcoming,
+    canceledSoon,
     myDues,
     stats,
     ranking: ranking.slice(0, 5),
@@ -126,7 +132,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function HomePage() {
-  const { today, me, next, nextIndex, upcoming, myDues, stats, ranking, pendingCount } =
+  const { today, me, next, nextIndex, upcoming, canceledSoon, myDues, stats, ranking, pendingCount } =
     useLoaderData<typeof loader>();
   const totalDue = myDues.reduce((sum, due) => sum + due.amount, 0);
   // 클럽 소식은 카드를 넘겨 봐도 늘 바로 다음 모임
@@ -213,6 +219,27 @@ export default function HomePage() {
           <ArrowUpRight size={17} />
         </Link>
       </div>
+      {canceledSoon.length ? (
+        <ul className="space-y-2">
+          {canceledSoon.map((g) => (
+            <li key={g.id}>
+              <Link
+                to={`/app/gatherings/${g.id}?from=${g.event_date}`}
+                className="flex items-center gap-2.5 rounded-2xl bg-house-red/15 px-4 py-3 text-sm font-semibold text-[#9F2A17] transition-colors hover:bg-house-red/25 dark:text-red-300"
+              >
+                <CalendarX size={16} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  <b>
+                    {shortDay(g.event_date)} {g.title} 취소
+                  </b>
+                  {g.cancel_reason ? ` · ${g.cancel_reason}` : ""}
+                </span>
+                <ArrowUpRight size={16} className="shrink-0" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <div className="home-grid">
         <NextGatheringTile
           next={next}

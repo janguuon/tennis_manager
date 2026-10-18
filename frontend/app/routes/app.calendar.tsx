@@ -641,7 +641,13 @@ export default function CalendarPage() {
                               ? "opacity-50"
                               : ""
                           } ${g.open_to_members ? "" : "opacity-60 outline-dashed outline-1 outline-offset-[-3px]"}`}
-                          title={g.open_to_members ? g.title : `${g.title} (아직 정회원에게 공개 전)`}
+                          title={
+                            g.status === "canceled" && g.cancel_reason
+                              ? `${g.title} (취소: ${g.cancel_reason})`
+                              : g.open_to_members
+                              ? g.title
+                              : `${g.title} (아직 정회원에게 공개 전)`
+                          }
                         >
                           <span className="flex items-center justify-between gap-1">
                             <span className="truncate opacity-70">
@@ -654,7 +660,11 @@ export default function CalendarPage() {
                           </span>
                           <span className="block truncate">{g.title}</span>
                           <span className="mt-1 block truncate text-[10px] opacity-70">
-                            {g.open_to_members ? g.location : "공개 전"}
+                            {g.status === "canceled" && g.cancel_reason
+                              ? `취소 · ${g.cancel_reason}`
+                              : g.open_to_members
+                              ? g.location
+                              : "공개 전"}
                           </span>
                         </div>
                       ))}

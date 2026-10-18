@@ -508,11 +508,17 @@ export default function PaymentsPage() {
                   </div>
                   <p className="mt-0.5 text-[13px] font-medium text-slate-500">
                     {shortDate(g.event_date)} ·{" "}
+                    {g.status === "canceled" ? "취소 정산 " : ""}
                     {isClubKind(g.kind)
                       ? `게스트 1인 ${won(g.guest_fee)}`
                       : `총 ${won(g.fee)} · 1인 ${won(g.per_person)}`}{" "}
                     · 입금 {g.paid_count}/{g.payer_count}명
                   </p>
+                  {g.status === "canceled" && g.cancel_reason ? (
+                    <p className="mt-0.5 text-[12px] font-semibold text-[#B42318] dark:text-red-300">
+                      취소 사유 · {g.cancel_reason}
+                    </p>
+                  ) : null}
                 </div>
                 {g.payer_count > 0 && g.payer_count <= 20 ? (
                   <div className="seg">

@@ -35,6 +35,7 @@ import {
   Trash2,
   Undo2,
   UserPlus,
+  Wallet,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -245,6 +246,7 @@ function CancelGatheringModal({
             {paidCount ? (
               <li>이미 입금한 {paidCount}명은 정산에서 &apos;돌려줄 돈&apos;으로 잡혀요.</li>
             ) : null}
+            <li>코트 위약금처럼 취소돼도 낼 돈이 있으면, 취소한 뒤 &apos;정산 금액 정하기&apos;로 다시 나눌 수 있어요.</li>
             <li>잘못 취소했으면 모임 화면에서 &apos;취소 되돌리기&apos;를 누르면 돼요.</li>
           </ul>
           {fetcher.data?.error ? (
@@ -264,6 +266,109 @@ function CancelGatheringModal({
           </div>
         </fetcher.Form>
       )}
+    </Modal>
+  );
+}
+
+/**
+ * 취소 정산 금액 정하기: 취소돼도 낼 돈(예: 코트 위약금).
+ * 일반 벙개는 참석자끼리 나눌 총액(1인 금액은 서버와 같이 100원 단위 올림), 오테식 모임은 게스트 1인 금액.
+ */
+function CancelFeeModal({
+  gathering,
+  club,
+  attending,
+  onClose,
+}: {
+  gathering: GatheringDetail;
+  club: boolean;
+  attending: number;
+  onClose: () => void;
+}) {
+  const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const [fee, setFee] = useState(gathering.cancel_fee ? String(gathering.cancel_fee) : "");
+  const amount = Math.max(0, Math.trunc(Number(fee) || 0));
+  const busy = fetcher.state !== "idle";
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) onClose();
+  }, [fetcher.state, fetcher.data, onClose]);
+  const perPerson = attending > 0 && amount > 0 ? Math.ceil(amount / attending / 100) * 100 : 0;
+  // 빠른 선택: 원래 금액 그대로(우천이라도 코트비를 못 돌려받는 경우), 0원(낼 돈 없음)
+  const original = club ? gathering.guest_fee : gathering.fee;
+  const quick = [
+    ...(original > 0 ? [{ label: `원래 금액 ${won(original)}`, value: original }] : []),
+    { label: "0원 (낼 돈 없음)", value: 0 },
+  ];
+
+  return (
+    <Modal title="취소 정산 금액" onClose={onClose}>
+      <fetcher.Form method="post" className="space-y-5">
+        <input type="hidden" name="intent" value="cancel_fee" />
+        <div>
+          <label className="label" htmlFor="cancel_fee">
+            {club ? "게스트 1인 금액" : "참석자끼리 나눌 총액"}
+          </label>
+          <input
+            id="cancel_fee"
+            name="fee"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={100}
+            className="input"
+            placeholder="예: 12000"
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+          />
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {quick.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                className={`chip-line hover:bg-ink/5 dark:border-slate-500 dark:text-slate-200 ${
+                  amount === q.value && fee !== "" ? "!border-ink !bg-ink !text-white dark:!bg-white dark:!text-ink" : ""
+                }`}
+                onClick={() => setFee(String(q.value))}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="rounded-2xl bg-house-yellow/40 px-4 py-3 text-sm font-bold">
+          {club
+            ? amount > 0
+              ? `참석한 게스트가 1인 ${won(amount)}씩 내요. 회원은 회비로 내요.`
+              : "게스트도 낼 돈이 없어요."
+            : amount > 0
+            ? attending > 0
+              ? `${won(amount)} ÷ 참석 ${attending}명 = 1인 ${won(perPerson)}`
+              : "참석자가 없어서 나눌 사람이 없어요."
+            : "참석자가 낼 돈이 없어요."}
+        </p>
+        <ul className="list-disc space-y-1 pl-4 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <li>이미 입금한 사람은 이 금액과의 차액을 돌려줄 돈으로 다시 계산해요.</li>
+          {club ? (
+            <li>코트 위약금 같은 회비 지출은 정산 탭 &apos;코트비 지급&apos;에서 금액을 고쳐 주세요.</li>
+          ) : (
+            <li>1인 금액은 100원 단위로 올림해요. 예: 코트 위약금, 이미 산 캔볼값.</li>
+          )}
+        </ul>
+        {fetcher.data?.error ? (
+          <p className="alert-error flex items-center gap-2">
+            <CircleAlert size={16} className="shrink-0" />
+            {fetcher.data.error}
+          </p>
+        ) : null}
+        <div className="flex gap-2">
+          <button type="button" className="btn-ghost h-12 flex-1 !text-sm" onClick={onClose}>
+            닫기
+          </button>
+          <button type="submit" className="btn-primary h-12 flex-1 !text-sm" disabled={busy || fee === ""}>
+            {busy ? "저장하는 중…" : "이 금액으로 정산"}
+          </button>
+        </div>
+      </fetcher.Form>
     </Modal>
   );
 }
@@ -499,6 +604,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
         token,
         body: { reason: String(formData.get("reason") ?? "") },
       });
+    } else if (intent === "cancel_fee") {
+      // 취소 정산 금액 (취소돼도 낼 돈, 예: 코트 위약금)
+      await api(`/gatherings/${id}/cancel-fee`, {
+        method: "PUT",
+        token,
+        body: { fee: Number(formData.get("fee") || 0) },
+      });
     } else if (intent === "restore_gathering") {
       await api(`/gatherings/${id}/cancel`, { method: "DELETE", token });
     } else if (intent === "delete_gathering") {
@@ -544,6 +656,7 @@ export default function GatheringDetailPage() {
   const canPay = settle || (!club && !guest && gathering.created_by === user.id);
   const [editing, setEditing] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [settingCancelFee, setSettingCancelFee] = useState(false);
   // 직접 바꾸기 중인 대진표 id
   const [editingDraw, setEditingDraw] = useState<number | null>(null);
   // 게스트비 면제 사유를 적고 있는 게스트 id (관리자·총무)
@@ -595,6 +708,9 @@ export default function GatheringDetailPage() {
 
   // 참가비 정산: 금액은 모두 서버 계산값(1인 금액 = 총액 ÷ 참석 인원, 100원 단위 올림)
   const perPerson = gathering.per_person;
+  // 취소된 모임은 취소 정산 금액으로 다시 정산한다 (일반 벙개: 나눌 총액, 오테식 모임: 게스트 1인)
+  const splitTotal = canceled ? gathering.cancel_fee : gathering.fee;
+  const guestFee = canceled ? gathering.cancel_fee : gathering.guest_fee;
   const payment = gathering.payment;
   const attendees = gathering.participants.filter(
     (p) => p.status === "attending"
@@ -643,7 +759,7 @@ export default function GatheringDetailPage() {
     ? 0
     : club
     ? me.user.member_type === "guest"
-      ? gathering.guest_fee
+      ? guestFee
       : 0
     : perPerson;
   const feeBreakdown =
@@ -692,21 +808,34 @@ export default function GatheringDetailPage() {
     .join("\n");
 
   // 단톡방 취소 안내 (모임 취소 직후 창, 취소된 모임의 카톡 공유)
+  const cancelSettle = canceled && gathering.cancel_fee > 0;
+  const cancelFeeLine = club
+    ? `💰 취소 정산: 게스트 1인 ${won(guestFee)}`
+    : `💰 취소 정산: 총 ${won(splitTotal)} · 1인 ${won(perPerson)}`;
   const cancelShare = (reason: string | null) =>
     [
       `🚫 [모임 취소] ${gathering.title}`,
       dateLine,
       gathering.location ? `📍 ${gathering.location}` : "",
       reason ? `사유: ${reason}` : "",
+      cancelSettle ? cancelFeeLine : "",
+      cancelSettle && account ? `🏦 ${account}` : "",
     ]
       .filter(Boolean)
       .join("\n");
 
   // 총무용 미입금 안내 메시지
   const remindBase = [
-    `💰 ${gathering.title} ${club ? "게스트비" : "참가비"} 안내`,
+    canceled
+      ? `💰 [취소된 모임] ${gathering.title} 취소 정산 안내`
+      : `💰 ${gathering.title} ${club ? "게스트비" : "참가비"} 안내`,
     dateLine,
-    club ? `게스트 1인 ${won(gathering.guest_fee)}` : `1인 ${won(perPerson)}`,
+    canceled && gathering.cancel_reason ? `사유: ${gathering.cancel_reason}` : "",
+    club
+      ? `게스트 1인 ${won(guestFee)}`
+      : canceled
+      ? `총 ${won(splitTotal)} · 1인 ${won(perPerson)}`
+      : `1인 ${won(perPerson)}`,
     account ? `🏦 ${account}` : "",
   ]
     .filter(Boolean)
@@ -826,8 +955,21 @@ export default function GatheringDetailPage() {
                   {formatOpenAt(gathering.canceled_at)} 취소
                 </span>
               ) : null}
+              <span className="mt-0.5 block text-xs font-bold">
+                {cancelSettle
+                  ? club
+                    ? `취소 정산: 게스트 1인 ${won(guestFee)}`
+                    : `취소 정산: 총 ${won(splitTotal)} ÷ ${attendees.length}명 = 1인 ${won(perPerson)}`
+                  : "취소 정산: 낼 돈 없음"}
+              </span>
             </span>
           </p>
+          {canCancel ? (
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setSettingCancelFee(true)}>
+              <Wallet size={14} />
+              정산 금액 정하기
+            </button>
+          ) : null}
           {canCancel ? (
             <Form
               method="post"
@@ -1259,11 +1401,15 @@ export default function GatheringDetailPage() {
                 <div className="detail-payment-heading">
                   <div className="min-w-0">
                     <h2 className="tile-title">
-                      {club ? "게스트비 정산" : "참가비 정산"}
+                      {canceled ? "취소 정산" : club ? "게스트비 정산" : "참가비 정산"}
                     </h2>
                     <p className="tile-sub">
-                      {gathering.status === "canceled"
-                        ? "취소된 모임이라 받을 돈이 없어요"
+                      {canceled
+                        ? cancelSettle
+                          ? club
+                            ? "취소된 모임 · 게스트 1인 금액을 다시 정했어요"
+                            : `취소된 모임 · ${won(splitTotal)} ÷ ${payment.attending}명`
+                          : "취소된 모임이라 받을 돈이 없어요"
                         : club
                         ? payment.payer_count > 0 || waivedCount > 0
                           ? [
@@ -1280,7 +1426,7 @@ export default function GatheringDetailPage() {
                     </p>
                   </div>
                   <p className="shrink-0 font-display text-[30px] font-extrabold leading-none tracking-[-0.05em] sm:text-[34px]">
-                    {won(club ? gathering.guest_fee : perPerson)}
+                    {won(club ? guestFee : perPerson)}
                   </p>
                 </div>
 
@@ -1716,6 +1862,14 @@ export default function GatheringDetailPage() {
       </div>
 
       {/* 수정 모달 */}
+      {settingCancelFee ? (
+        <CancelFeeModal
+          gathering={gathering}
+          club={club}
+          attending={attendees.length}
+          onClose={() => setSettingCancelFee(false)}
+        />
+      ) : null}
       {canceling ? (
         <CancelGatheringModal
           gathering={gathering}

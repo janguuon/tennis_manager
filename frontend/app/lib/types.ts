@@ -153,6 +153,8 @@ export interface Gathering {
   /** 취소된 모임: 사유(우천 취소 등)와 취소한 시각(한국 시간) */
   cancel_reason: string | null;
   canceled_at: string | null;
+  /** 취소 정산 금액 (취소돼도 낼 돈): 일반 벙개는 참석자끼리 나눌 총액, 오테식 모임은 게스트 1인. 0이면 없음 */
+  cancel_fee: number;
 }
 
 /** 캘린더 목록에 보여 줄 참석자 */
@@ -247,9 +249,13 @@ export interface GatheringPaymentSummary {
   event_date: string;
   status: GatheringStatus;
   kind: GatheringKind;
+  /** 일반 벙개 총액 (취소된 모임은 취소 정산 총액) */
   fee: number;
   per_person: number;
+  /** 오테식 모임 게스트 1인 금액 (취소된 모임은 취소 정산 금액) */
   guest_fee: number;
+  /** 취소된 모임의 사유 */
+  cancel_reason?: string | null;
   attending: number;
   /** 낼 돈이 있는 참석자 수 (일반 벙개: 참석자 전원, 오테식 모임: 게스트) */
   payer_count: number;

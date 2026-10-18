@@ -18,7 +18,11 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
     g.location ?? "장소 미정",
     isClubKind(g.kind)
       ? "회비 지출"
-      : g.fee > 0 && g.per_person > 0
+      : g.status === "canceled"
+        ? g.per_person > 0
+          ? `취소 정산 1인 ${won(g.per_person)}`
+          : ""
+        : g.fee > 0 && g.per_person > 0
         ? `1인 ${won(g.per_person)}`
         : g.fee > 0
           ? `총 ${won(g.fee)}`

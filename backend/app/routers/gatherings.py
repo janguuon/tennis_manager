@@ -46,6 +46,7 @@ from ..schemas import (
     AttendanceSummary,
     AttendeeBrief,
     GatheringCancel,
+    GatheringCancelFee,
     BookerAccount,
     CourtBookingRead,
     GatheringCreate,
@@ -230,21 +231,29 @@ def _attendees(gathering: Gathering) -> list[Participant]:
     return [p for p in gathering.participants if p.status == AttendanceStatus.ATTENDING]
 
 
+def _split_total(gathering: Gathering) -> int:
+    """일반 벙개에서 참석자끼리 나눌 총액. 취소된 모임은 취소 정산 금액(예: 코트 위약금, 기본 0)."""
+    return gathering.cancel_fee if gathering.status == GatheringStatus.CANCELED else gathering.fee
+
+
+def _guest_fee(gathering: Gathering) -> int:
+    """오테식 모임 게스트 1인 금액. 취소된 모임은 취소 정산 금액(기본 0)."""
+    return gathering.cancel_fee if gathering.status == GatheringStatus.CANCELED else gathering.guest_fee
+
+
 def _per_person(gathering: Gathering) -> int:
-    """일반 벙개의 현재 1인 금액. 취소된 모임과 오테식 모임(회비 지출)은 0."""
-    if gathering.status == GatheringStatus.CANCELED or gathering.is_club:
+    """일반 벙개의 현재 1인 금액. 오테식 모임(회비 지출)은 0."""
+    if gathering.is_club:
         return 0
-    return per_person_fee(gathering.fee, len(_attendees(gathering)))
+    return per_person_fee(_split_total(gathering), len(_attendees(gathering)))
 
 
 def _nominal_due(gathering: Gathering, p: Participant, per_person: int) -> int:
     """참석한다면 낼 금액: 일반 벙개는 1인 금액, 오테식 모임은 게스트만 게스트비(면제한 게스트는 0)."""
-    if gathering.status == GatheringStatus.CANCELED:
-        return 0
     if gathering.is_club:
         if p.fee_waived:
             return 0
-        return gathering.guest_fee if p.user.member_type == MemberType.GUEST else 0
+        return _guest_fee(gathering) if p.user.member_type == MemberType.GUEST else 0
     return per_person
 
 
@@ -255,9 +264,9 @@ def _has_payment(gathering: Gathering) -> bool:
     이미 낸 사람이 있으면 돌려줄 돈 때문에 남긴다.
     """
     if not gathering.is_club:
-        return gathering.fee > 0
+        return gathering.fee > 0 or _split_total(gathering) > 0
     return any(p.paid for p in gathering.participants) or (
-        gathering.guest_fee > 0
+        _guest_fee(gathering) > 0
         and any(
             p.user.member_type == MemberType.GUEST and p.status == AttendanceStatus.ATTENDING
             for p in gathering.participants
@@ -320,9 +329,10 @@ def _payment_summary(gathering: Gathering) -> GatheringPaymentSummary:
         event_date=gathering.event_date,
         status=gathering.status,
         kind=gathering.kind,
-        fee=gathering.fee,
+        fee=_split_total(gathering),
         per_person=b["per_person"],
-        guest_fee=gathering.guest_fee,
+        guest_fee=_guest_fee(gathering),
+        cancel_reason=gathering.cancel_reason,
         attending=b["attending"],
         payer_count=b["payer_count"],
         paid_count=b["paid_count"],
@@ -1221,6 +1231,7 @@ def update_gathering(
     if new_status is not None and new_status != GatheringStatus.CANCELED:
         g.cancel_reason = None
         g.canceled_at = None
+        g.cancel_fee = 0
 
     _normalize_courts(data)
     _clean_address(data)
@@ -1274,6 +1285,24 @@ def cancel_gathering(
     return _to_read(_load_gathering(db, gathering_id))
 
 
+@router.put("/{gathering_id}/cancel-fee", response_model=GatheringRead)
+def set_cancel_fee(
+    gathering_id: int,
+    payload: GatheringCancelFee,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """취소 정산 금액 (취소돼도 낼 돈, 예: 코트 위약금). 취소할 수 있는 사람이 정한다.
+    일반 벙개는 참석자끼리 1/n, 오테식 모임은 게스트 1인 금액. 받을 돈·돌려줄 돈이 이 금액으로 다시 계산된다."""
+    g = _load_gathering(db, gathering_id)
+    _require_canceler(g, current_user)
+    if g.status != GatheringStatus.CANCELED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="취소된 모임에서만 정할 수 있어요.")
+    g.cancel_fee = payload.fee
+    db.commit()
+    return _to_read(_load_gathering(db, gathering_id))
+
+
 @router.delete("/{gathering_id}/cancel", response_model=GatheringRead)
 def restore_gathering(
     gathering_id: int,
@@ -1288,6 +1317,7 @@ def restore_gathering(
     g.status = GatheringStatus.PLANNED
     g.cancel_reason = None
     g.canceled_at = None
+    g.cancel_fee = 0
     db.commit()
     complete_finished(db)
     return _to_read(_load_gathering(db, gathering_id))
@@ -1614,8 +1644,9 @@ def my_payment_dues(
         .where(
             Participant.user_id == current_user.id,
             Participant.status == AttendanceStatus.ATTENDING,
-            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS)),
-            Gathering.status != GatheringStatus.CANCELED,
+            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS), Gathering.cancel_fee > 0),
+            # 취소된 모임은 취소 정산 금액이 있을 때만
+            or_(Gathering.status != GatheringStatus.CANCELED, Gathering.cancel_fee > 0),
         )
         .options(selectinload(Gathering.participants).selectinload(Participant.user))
         .order_by(Gathering.event_date, Gathering.start_time)
@@ -1668,8 +1699,8 @@ def payment_summary(
         .where(
             Gathering.event_date >= first,
             Gathering.event_date <= last,
-            # 무료 일반 벙개는 정산 대상 아님
-            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS)),
+            # 무료 일반 벙개는 정산 대상 아님 (취소 정산 금액이 있으면 대상)
+            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS), Gathering.cancel_fee > 0),
         )
         .options(*gathering_load_options())
         .order_by(Gathering.event_date, Gathering.start_time)
@@ -1685,8 +1716,8 @@ def payment_summary(
         if not _has_payment(g):
             continue
         s = _payment_summary(g)
-        # 취소된 모임은 돌려줄 돈이 있을 때만 표시
-        if g.status == GatheringStatus.CANCELED and not s.refunds:
+        # 취소된 모임은 받을 돈(취소 정산)이나 돌려줄 돈이 있을 때만 표시
+        if g.status == GatheringStatus.CANCELED and not s.refunds and not s.expected:
             continue
         summaries.append(s)
 

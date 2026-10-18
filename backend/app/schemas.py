@@ -440,6 +440,12 @@ class GatheringCancel(BaseModel):
         return v
 
 
+class GatheringCancelFee(BaseModel):
+    """취소 정산 금액. 일반 벙개는 참석자끼리 나눌 총액, 오테식 모임은 게스트 1인 금액. 0이면 낼 돈 없음."""
+
+    fee: int = Field(..., ge=0, le=10_000_000)
+
+
 class GatheringOpenRange(BaseModel):
     """기간 안의 공개 전 일정을 한 번에 미리 공개 (예: 다음 주 월~일)."""
 
@@ -592,6 +598,8 @@ class GatheringRead(GatheringBase):
     # 취소된 모임: 사유와 취소한 시각 (한국 시간)
     cancel_reason: str | None = None
     canceled_at: datetime | None = None
+    # 취소 정산 금액 (일반 벙개: 나눌 총액, 오테식 모임: 게스트 1인). 0이면 낼 돈 없음
+    cancel_fee: int = 0
 
 
 class ParticipantRead(BaseModel):
@@ -623,9 +631,10 @@ class GatheringPaymentSummary(BaseModel):
     event_date: date
     status: GatheringStatus
     kind: GatheringKind = GatheringKind.FLASH
-    fee: int              # 일반 벙개 총액(모임 전체 금액)
+    fee: int              # 일반 벙개 총액(모임 전체 금액). 취소된 모임은 취소 정산 총액
     per_person: int       # 일반 벙개 1인 금액 (100원 단위 올림). 오테식 모임은 0.
-    guest_fee: int = 0    # 오테식 모임 게스트 1인 참가비
+    guest_fee: int = 0    # 오테식 모임 게스트 1인 참가비. 취소된 모임은 취소 정산 금액
+    cancel_reason: str | None = None  # 취소된 모임의 사유
     attending: int        # 참석 인원
     payer_count: int = 0  # 낼 돈이 있는 참석자 수 (일반 벙개: 참석자 전원, 오테식: 게스트)
     paid_count: int       # 입금한 참석자 수 (낼 돈이 있는 사람 중)

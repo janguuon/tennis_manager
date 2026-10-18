@@ -313,6 +313,9 @@ class Gathering(Base):
     # 모임 취소 사유(우천·코트 취소 등)와 취소한 시각 (한국 시간). 취소되지 않았으면 NULL
     cancel_reason: Mapped[str | None] = mapped_column(String(100))
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 취소 정산 금액 (취소돼도 낼 돈, 예: 코트 위약금). 일반 벙개는 참석자끼리 나눌 총액,
+    # 오테식 모임은 게스트 1인 금액. 취소되지 않은 모임은 0
+    cancel_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -86,6 +86,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     # 모임 취소 사유
     ("gatherings", "cancel_reason", "cancel_reason VARCHAR(100)"),
     ("gatherings", "canceled_at", "canceled_at DATETIME"),
+    ("gatherings", "cancel_fee", "cancel_fee INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

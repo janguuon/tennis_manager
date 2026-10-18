@@ -55,9 +55,10 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           >
             {g.title}
           </span>
-          <span className={`${KIND_BADGE[g.kind]} shrink-0`}>{KIND_LABEL[g.kind]}</span>
+          {/* 휴대폰에선 제목이 잘리지 않게 종류 배지를 뺀다 (왼쪽 색 띠로 구분) */}
+          <span className={`${KIND_BADGE[g.kind]} hidden shrink-0 sm:inline-flex`}>{KIND_LABEL[g.kind]}</span>
           {g.status !== "planned" ? (
-            <span className={GATHERING_STATUS_BADGE[g.status]}>{GATHERING_STATUS_LABEL[g.status]}</span>
+            <span className={`${GATHERING_STATUS_BADGE[g.status]} shrink-0`}>{GATHERING_STATUS_LABEL[g.status]}</span>
           ) : null}
           {/* 아직 정회원에게 공개 전인 일정 (임원진·관리자, 직접 만든 사람에게만 보인다) */}
           {!g.open_to_members ? (

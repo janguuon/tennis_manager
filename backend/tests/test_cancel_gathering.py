@@ -54,6 +54,22 @@ def test_who_can_cancel(club):
     assert _restore(club, flash, "amy").status_code == 200
 
 
+def test_club_gathering_cancel_is_staff_only(club):
+    """오테식 모임은 올린 사람이라도 운영진이 아니면 취소할 수 없다."""
+    club.add_members("off", "amy")
+    club.set_type("off", "officer")
+    # 임원진이 올린 오테식 벙개 → 그 사람이 정회원이 되면 취소할 수 없다
+    gid = club.create(as_="off", kind="club_flash").json()["id"]
+    club.set_type("off", "member")
+    assert _cancel(club, gid, "off").status_code == 403
+    # 회원이 올린 일반 벙개를 오테식 벙개로 바꾸면 올린 회원은 취소할 수 없다
+    flash = club.create(as_="amy", kind="flash").json()["id"]
+    club.c.patch(f"/gatherings/{flash}", json={"kind": "club_flash"}, headers=club.admin)
+    r = _cancel(club, flash, "amy")
+    assert r.status_code == 403 and "운영진" in r.json()["detail"]
+    assert _cancel(club, flash).status_code == 200  # 관리자
+
+
 def test_canceled_gathering_stops_votes(club):
     club.add_members("amy", "ben")
     gid = club.gathering(fee=0)

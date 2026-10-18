@@ -535,8 +535,8 @@ export default function GatheringDetailPage() {
     (gathering.created_by === user.id || user.is_admin || (club && staff));
   // 취소된 모임: 참석 투표·명단 변경을 받지 않는다 (서버와 같음)
   const canceled = gathering.status === "canceled";
-  // 모임 취소(우천·코트 취소 등): 관리자·임원진·총무는 모든 모임, 그 밖에는 만든 사람 (서버와 같음)
-  const canCancel = !guest && (staff || gathering.created_by === user.id);
+  // 모임 취소(우천·코트 취소 등): 오테식 모임은 운영진만, 일반 벙개는 운영진과 올린 사람 (서버와 같음)
+  const canCancel = !guest && (staff || (!club && gathering.created_by === user.id));
   // 참석 취소 대신 해 주기(3일 전 마감 뒤 요청 처리): 주최자, 그리고 관리자·임원진·총무는 모든 모임에서
   const canManageAttendance = (isOrganizer || staff) && !canceled;
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능

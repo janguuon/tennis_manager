@@ -1239,12 +1239,18 @@ def update_gathering(
 
 
 def _require_canceler(gathering: Gathering, user: User) -> None:
-    """모임 취소·되돌리기: 관리자·임원진·총무는 모든 모임, 그 밖에는 모임을 만든 사람(게스트 제외)."""
+    """모임 취소·되돌리기: 오테식 모임(정모·오테식 벙개)은 운영진(관리자·임원진·총무)만,
+    일반 벙개는 운영진과 올린 사람(게스트 제외)."""
     if user.is_guest:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
-    if user.is_staff or gathering.created_by == user.id:
+    if user.is_staff:
         return
-    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 취소는 운영진이나 모임을 만든 사람만 할 수 있어요.")
+    if not gathering.is_club and gathering.created_by == user.id:
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        detail="오테식 모임은 운영진만, 일반 벙개는 운영진과 올린 사람만 취소할 수 있어요.",
+    )
 
 
 @router.post("/{gathering_id}/cancel", response_model=GatheringRead)

@@ -19,6 +19,8 @@ import {
 import {
   ArrowUpRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   Landmark,
   Lock,
@@ -64,6 +66,7 @@ import {
   type CourtBooking,
   type Draw,
   type DrawMatch,
+  type Gathering,
   type GatheringDetail,
   type Me,
   type UserBrief,
@@ -88,7 +91,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       // 코트 예약자 선택용 (게스트는 빈 목록)
       membersOrEmpty(token),
     ]);
-    return json({ gathering, draws, members });
+    const around = await neighbors(token, gathering);
+    return json({ gathering, draws, members, around });
   } catch (err) {
     // 아직 공개 전(403)이거나 지워진(404) 모임은 안내 화면으로
     if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
@@ -96,6 +100,88 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
     throw err;
   }
+}
+
+/**
+ * 이전·다음 일정으로 넘어가기 (날짜·시간 순). 돌아갈 곳(?from)은 넘어간 일정에 맞춘다:
+ * 리스트는 그 달 리스트, 날짜별 목록은 그 날, 캘린더는 그 달.
+ */
+function GatheringPager({
+  prev,
+  next,
+  from,
+}: {
+  prev: GatheringLink | null;
+  next: GatheringLink | null;
+  from: string;
+}) {
+  if (!prev && !next) return null;
+  const fromFor = (g: GatheringLink) =>
+    from.startsWith("list:")
+      ? `list:${g.event_date.slice(0, 7)}`
+      : /^\d{4}-\d{2}-\d{2}$/.test(from)
+      ? g.event_date
+      : g.event_date.slice(0, 7);
+  const label = (g: GatheringLink) => {
+    const [y, m, d] = g.event_date.split("-").map(Number);
+    const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+    return `${m}/${d}(${wd})${g.start_time ? ` ${g.start_time.slice(0, 5)}` : ""}`;
+  };
+  const cell = (g: GatheringLink | null, dir: "prev" | "next") =>
+    g ? (
+      <Link
+        to={`/app/gatherings/${g.id}?from=${encodeURIComponent(fromFor(g))}`}
+        prefetch="intent"
+        className={`gathering-pager ${dir === "next" ? "justify-end text-right" : ""}`}
+        aria-label={`${dir === "prev" ? "이전" : "다음"} 일정: ${label(g)} ${g.title}`}
+      >
+        {dir === "prev" ? <ChevronLeft size={18} className="shrink-0" /> : null}
+        <span className="min-w-0">
+          <span className="block whitespace-nowrap text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+            <span className="hidden sm:inline">{dir === "prev" ? "이전 일정" : "다음 일정"} · </span>
+            {label(g)}
+          </span>
+          <span className="block truncate text-[13px] font-bold">{g.title}</span>
+        </span>
+        {dir === "next" ? <ChevronRight size={18} className="shrink-0" /> : null}
+      </Link>
+    ) : (
+      <span aria-hidden="true" />
+    );
+  return (
+    <nav aria-label="이전·다음 일정" className="grid grid-cols-2 gap-2">
+      {cell(prev, "prev")}
+      {cell(next, "next")}
+    </nav>
+  );
+}
+
+/** 이전·다음 일정으로 넘어가기에 쓰는 일정 요약 */
+type GatheringLink = Pick<Gathering, "id" | "title" | "kind" | "event_date" | "start_time">;
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 이 모임 바로 앞·뒤 일정 (날짜 → 시간 순, 앞뒤 60일 안, 볼 수 있는 일정만) */
+async function neighbors(
+  token: string,
+  g: GatheringDetail
+): Promise<{ prev: GatheringLink | null; next: GatheringLink | null }> {
+  const list = await api<Gathering[]>(
+    `/gatherings?date_from=${shiftDate(g.event_date, -60)}&date_to=${shiftDate(g.event_date, 60)}`,
+    { token }
+  );
+  const key = (x: Gathering) => `${x.event_date} ${x.start_time ?? "99"} ${String(x.id).padStart(8, "0")}`;
+  const sorted = [...list].sort((a, b) => key(a).localeCompare(key(b)));
+  const i = sorted.findIndex((x) => x.id === g.id);
+  const pick = (x: Gathering | undefined): GatheringLink | null =>
+    x
+      ? { id: x.id, title: x.title, kind: x.kind, event_date: x.event_date, start_time: x.start_time }
+      : null;
+  return i < 0 ? { prev: null, next: null } : { prev: pick(sorted[i - 1]), next: pick(sorted[i + 1]) };
 }
 
 /** 공개 전·없는 모임 안내 (예: 카톡으로 받은 다음 주 모임 링크를 금요일 오전 10시 전에 연 경우) */
@@ -312,7 +398,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 
 export default function GatheringDetailPage() {
-  const { gathering, draws, members } = useLoaderData<typeof loader>();
+  const { gathering, draws, members, around } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { user } = useOutletContext<{ user: Me }>();
@@ -564,6 +650,8 @@ export default function GatheringDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <GatheringPager prev={around.prev} next={around.next} from={from} />
 
       <PageHeader
         eyebrow="LET’S PLAY TOGETHER."

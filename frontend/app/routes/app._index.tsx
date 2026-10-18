@@ -4,6 +4,8 @@ import { Link, useFetcher, useLoaderData, useRouteLoaderData } from "@remix-run/
 import {
   ArrowUpRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Users,
   MapPin,
   Wallet,
@@ -92,10 +94,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const upcoming = gatherings.filter(
     (g) => g.status === "planned" || g.status === "ongoing"
   );
+  // 다음 모임 카드에서 ‹ › 로 넘겨 보는 몇 번째 모임 (?n=1 이면 두 번째)
+  const want = Math.trunc(Number(new URL(request.url).searchParams.get("n")) || 0);
+  const nextIndex = Math.min(Math.max(want, 0), Math.max(upcoming.length - 1, 0));
   const records = canSeeRecords(me);
   const [next, stats, ranking, pending] = await Promise.all([
-    upcoming[0]
-      ? api<GatheringDetail>(`/gatherings/${upcoming[0].id}`, { token })
+    upcoming[nextIndex]
+      ? api<GatheringDetail>(`/gatherings/${upcoming[nextIndex].id}`, { token })
       : Promise.resolve(null),
     records
       ? api<PlayerStats>(`/stats/users/${me.id}`, { token })
@@ -111,6 +116,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     today,
     me,
     next,
+    nextIndex,
     upcoming,
     myDues,
     stats,
@@ -120,9 +126,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function HomePage() {
-  const { today, me, next, upcoming, myDues, stats, ranking, pendingCount } =
+  const { today, me, next, nextIndex, upcoming, myDues, stats, ranking, pendingCount } =
     useLoaderData<typeof loader>();
   const totalDue = myDues.reduce((sum, due) => sum + due.amount, 0);
+  // 클럽 소식은 카드를 넘겨 봐도 늘 바로 다음 모임
+  const soonest = upcoming[0];
   const guest = isGuest(me);
   const weekCount = upcoming.filter(
     (g) => daysBetween(today, g.event_date) < 7
@@ -177,9 +185,9 @@ export default function HomePage() {
             ? `새로운 식구 ${pendingCount}명이 가입 승인을 기다려요.`
             : latestNotice
             ? `${NOTICE_ICON[latestNotice.kind]} ${latestNotice.title}`
-            : next
-            ? `${shortDay(next.event_date)} ${next.title} · ${
-                next.attendance?.attending ?? 0
+            : soonest
+            ? `${shortDay(soonest.event_date)} ${soonest.title} · ${
+                soonest.attendance?.attending ?? 0
               }명 함께해요.`
             : "좋아하는 사람들과, 좋아하는 테니스를."}
         </p>
@@ -189,8 +197,8 @@ export default function HomePage() {
               ? "/app/admin"
               : latestNotice
               ? "/app/notices"
-              : next
-              ? `/app/gatherings/${next.id}`
+              : soonest
+              ? `/app/gatherings/${soonest.id}?from=${soonest.event_date}`
               : "/app/calendar"
           }
           className="text-link"
@@ -208,6 +216,8 @@ export default function HomePage() {
       <div className="home-grid">
         <NextGatheringTile
           next={next}
+          index={nextIndex}
+          total={upcoming.length}
           today={today}
           me={me}
           myDue={
@@ -418,11 +428,16 @@ export default function HomePage() {
 
 function NextGatheringTile({
   next,
+  index,
+  total,
   today,
   me,
   myDue,
 }: {
   next: GatheringDetail | null;
+  /** 다가오는 모임 중 몇 번째(0부터)를 보여 주는지, 모두 몇 개인지 (‹ › 로 넘겨 보기) */
+  index: number;
+  total: number;
   today: string;
   me: User;
   myDue: number;
@@ -474,8 +489,39 @@ function NextGatheringTile({
         <Eyebrow>
           NEXT MATCH / {m}.{String(d).padStart(2, "0")}
         </Eyebrow>
-        <span className="chip-white !bg-white/25">
-          {daysLeft === 0 ? "오늘" : `D−${daysLeft}`}
+        <span className="flex items-center gap-1.5">
+          {total > 1 ? (
+            <span className="flex items-center rounded-full bg-white/25">
+              <Link
+                to={index - 1 <= 0 ? "/app" : `/app?n=${index - 1}`}
+                preventScrollReset
+                aria-label="이전 모임"
+                aria-disabled={index === 0}
+                className={`grid h-7 w-7 place-items-center rounded-full hover:bg-white/30 ${
+                  index === 0 ? "pointer-events-none opacity-30" : ""
+                }`}
+              >
+                <ChevronLeft size={16} />
+              </Link>
+              <span className="min-w-[2.2rem] text-center text-[11px] font-bold tabular-nums">
+                {index + 1}/{total}
+              </span>
+              <Link
+                to={`/app?n=${index + 1}`}
+                preventScrollReset
+                aria-label="다음 모임"
+                aria-disabled={index >= total - 1}
+                className={`grid h-7 w-7 place-items-center rounded-full hover:bg-white/30 ${
+                  index >= total - 1 ? "pointer-events-none opacity-30" : ""
+                }`}
+              >
+                <ChevronRight size={16} />
+              </Link>
+            </span>
+          ) : null}
+          <span className="chip-white !bg-white/25">
+            {daysLeft === 0 ? "오늘" : `D−${daysLeft}`}
+          </span>
         </span>
       </div>
       <div className="hero-intro">

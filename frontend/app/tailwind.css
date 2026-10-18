@@ -963,6 +963,11 @@
   .import-steps p {
     @apply mt-1 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400;
   }
+  /* 모임 화면 위 이전·다음 일정 */
+  .gathering-pager {
+    @apply flex min-w-0 items-center gap-2 rounded-2xl border border-slate-200 bg-paper px-3 py-2.5 text-ink transition-colors hover:border-ink
+      dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-300;
+  }
   .file-drop {
     @apply flex min-h-[64px] cursor-pointer items-center gap-3 rounded-2xl border-[1.5px] border-dashed border-slate-300 bg-paper px-4 py-3 text-sm font-semibold text-slate-600 transition-colors
       hover:border-ink focus-within:ring-4 focus-within:ring-house-yellow/40

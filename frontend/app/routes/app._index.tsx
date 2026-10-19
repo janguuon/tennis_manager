@@ -30,7 +30,7 @@ import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
 import { KIND_DOT, isGuest, isStaff, naverMapUrl } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
-import { won } from "~/lib/format";
+import { todayKST, won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import { WEEKDAYS, formatOpenAt } from "~/lib/status";
 import type {
@@ -45,13 +45,6 @@ import type {
 } from "~/lib/types";
 
 export const meta: MetaFunction = () => [{ title: "홈 · 오테식 매니저" }];
-
-/** 오늘 날짜 "YYYY-MM-DD" (서버가 어느 시간대에 있든 한국 기준) */
-function todayKST(): string {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(
-    new Date()
-  );
-}
 
 function addDays(date: string, days: number): string {
   const [y, m, d] = date.split("-").map(Number);

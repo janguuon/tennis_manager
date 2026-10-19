@@ -17,10 +17,12 @@ import {
 import {
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   FileSpreadsheet,
+  History,
   List,
   Lock,
   Plus,
@@ -44,6 +46,7 @@ import {
   isGuest,
   isStaff,
 } from "~/lib/club";
+import { todayKST } from "~/lib/format";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import type { NewSchedule } from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
@@ -148,6 +151,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : /(?:^|;\s*)cal_mine=1/.test(request.headers.get("Cookie") ?? "");
   return json({
     month,
+    // 오늘 (서버 시간대와 상관없이 한국 기준): 오늘 표시·지난 일정 접기
+    today: todayKST(),
     gatherings,
     view,
     mine,
@@ -262,6 +267,32 @@ function addHours(time: string, hours: number): string {
     : TIME_OPTIONS[TIME_OPTIONS.length - 1];
 }
 
+/** 이번 달 지난 일정 접기·펼치기 줄 */
+function PastToggle({
+  count,
+  open,
+  onToggle,
+}: {
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex w-full items-center justify-between gap-2 px-5 py-3.5 text-[13px] font-bold text-slate-500 transition-colors hover:bg-white hover:text-ink dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white sm:px-6"
+    >
+      <span className="flex items-center gap-2">
+        <History size={15} />
+        지난 일정 {count}개 {open ? "접기" : "보기"}
+      </span>
+      <ChevronDown size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+    </button>
+  );
+}
+
 /** 내 참석 일정: 참석, 그리고 아직 끝나지 않은 모임의 대기 (대기로 끝난 모임은 가지 않은 것) */
 function isMine(g: Gathering): boolean {
   if (g.my_status === "attending") return true;
@@ -269,7 +300,7 @@ function isMine(g: Gathering): boolean {
 }
 
 export default function CalendarPage() {
-  const { month, gatherings, view, mine, members, savedClubAccount, nextWeekOpen } =
+  const { month, today, gatherings, view, mine, members, savedClubAccount, nextWeekOpen } =
     useLoaderData<typeof loader>();
   const { user } = useOutletContext<{ user: Me }>();
   // 내 참석만 보기 (관리자는 투표하지 않아 거를 게 없다)
@@ -353,13 +384,7 @@ export default function CalendarPage() {
   }, [showCreate]);
 
   const cells = buildCells(month);
-  const todayStr = (() => {
-    const n = new Date();
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}-${String(n.getDate()).padStart(2, "0")}`;
-  })();
+  const todayStr = today;
 
   // 날짜별 모임 그룹화
   const byDate = new Map<string, Gathering[]>();
@@ -400,6 +425,13 @@ export default function CalendarPage() {
 
   // 리스트 뷰: 일정이 있는 날짜만 오름차순으로
   const listDates = [...byDate.keys()].sort();
+  // 이번 달은 오늘 이전 일정을 접어 둔다 ("지난 일정 N개 보기"). 지난 달·다음 달은 전부 보인다.
+  const [showPast, setShowPast] = useState(false);
+  useEffect(() => setShowPast(false), [month]); // 달을 넘기면 다시 접는다
+  const pastDates =
+    month === todayStr.slice(0, 7) ? listDates.filter((d) => d < todayStr) : [];
+  const pastCount = pastDates.reduce((n, d) => n + (byDate.get(d)?.length ?? 0), 0);
+  const visibleDates = showPast ? listDates : listDates.slice(pastDates.length);
   const cellBase =
     "min-h-[5rem] border-b border-r border-slate-200/70 p-1.5 text-center dark:border-slate-700 [&:nth-child(7n)]:border-r-0 sm:min-h-[8rem] sm:p-2 sm:text-left";
 
@@ -706,9 +738,17 @@ export default function CalendarPage() {
               : "이 달에 등록된 일정이 없어요."}
           </EmptyCard>
         ) : (
-          /* 리스트 보기: 날짜별 소제목 + 일정 줄을 카드 한 장에 */
+          /* 리스트 보기: 날짜별 소제목 + 일정 줄을 카드 한 장에 (이번 달 지난 일정은 접어 둔다) */
           <section className="card overflow-hidden !p-0">
-            {listDates.map((dateStr, i) => {
+            {pastCount ? (
+              <PastToggle count={pastCount} open={showPast} onToggle={() => setShowPast((v) => !v)} />
+            ) : null}
+            {visibleDates.length === 0 ? (
+              <p className="px-5 py-6 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 sm:px-6">
+                {onlyMine ? "이번 달에 남은 내 일정이 없어요." : "이번 달 남은 일정이 없어요."}
+              </p>
+            ) : null}
+            {visibleDates.map((dateStr, i) => {
               const [ly, lm, ld] = dateStr.split("-").map(Number);
               const wd = WEEKDAYS[new Date(ly, lm - 1, ld).getDay()];
               const list = [...(byDate.get(dateStr) ?? [])].sort((a, b) =>
@@ -718,7 +758,7 @@ export default function CalendarPage() {
                 <div
                   key={dateStr}
                   className={
-                    i > 0
+                    i > 0 || pastCount
                       ? "border-t-[1.5px] border-slate-200 dark:border-slate-700"
                       : ""
                   }
@@ -750,8 +790,18 @@ export default function CalendarPage() {
         {view === "calendar" && shown.length > 0 ? (
           <section className="card overflow-hidden !p-0 sm:hidden">
             <h2 className="section-title px-5 pt-5">이번 달 모임</h2>
+            {pastCount ? (
+              <div className="mt-2 border-t border-slate-200 dark:border-slate-700">
+                <PastToggle count={pastCount} open={showPast} onToggle={() => setShowPast((v) => !v)} />
+              </div>
+            ) : null}
+            {visibleDates.length === 0 ? (
+              <p className="border-t border-slate-200 px-5 py-6 text-center text-sm font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                {onlyMine ? "이번 달에 남은 내 일정이 없어요." : "이번 달 남은 일정이 없어요."}
+              </p>
+            ) : null}
             <ul className="mt-2 divide-y divide-slate-200 dark:divide-slate-700">
-              {listDates.map((dateStr) => (
+              {visibleDates.map((dateStr) => (
                 <li key={dateStr}>
                   <p className="px-5 pt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
                     {dateStr.slice(5).replace("-", ".")}

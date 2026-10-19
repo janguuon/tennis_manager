@@ -12,3 +12,8 @@ export function accountText(a: {
   if (!a.account_number) return "";
   return `${a.bank ? `${a.bank} ` : ""}${a.account_number}${a.account_holder ? ` (${a.account_holder})` : ""}`;
 }
+
+/** 오늘 날짜 "YYYY-MM-DD" (서버가 어느 시간대에 있든 한국 기준) */
+export function todayKST(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
+}

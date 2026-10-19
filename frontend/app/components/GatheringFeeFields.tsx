@@ -39,7 +39,7 @@ type BookingRow = {
  * - 일반 벙개: 코트비 + 캔볼값 (참석자 n빵), 입금 받을 계좌
  * - 오테식 정모·벙개: 게스트비, 게스트비 입금 계좌(회비 통장), 코트 예약자(등록할 때)
  *
- * members를 주면 코트 예약 줄을 함께 입력받는다(등록). 수정할 때는 모임 화면에서 관리한다.
+ * members를 주면 코트 예약 줄을 함께 입력받는다(등록). 올린 뒤에는 모임 화면 '회비 지출' 카드에서 고친다.
  * children: 종류 선택과 금액 칸 사이에 들어갈 칸(날짜·코트 등). 고른 종류를 받는다.
  */
 export function GatheringFeeFields({
@@ -321,7 +321,7 @@ export function GatheringFeeFields({
             </>
           ) : (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              코트요정은 모임 화면의 ‘회비 지출’ 카드에서 추가·지급 처리해요.
+              코트요정·코트비는 모임 화면의 ‘회비 지출’ 카드에서 추가·수정해요. 지급은 관리자·총무가 처리해요.
             </p>
           )}
         </FieldGroup>

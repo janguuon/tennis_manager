@@ -203,18 +203,29 @@ def test_add_edit_booking_permissions(club):
     gid = club.create(kind="club_flash").json()["id"]
     body = {"booker_id": club.ids["kim"], "amount": 24000}
 
-    # 지급 내역 추가·수정은 정산 담당(관리자·총무)만
-    for who in ("kim", "off"):
-        assert club.c.post(f"/gatherings/{gid}/court-bookings", json=body,
-                           headers=club.headers[who]).status_code == 403
-    r = club.c.post(f"/gatherings/{gid}/court-bookings", json=body, headers=club.headers["tre"])
+    # 지급 전 내역 추가·수정·삭제는 운영진(관리자·임원진·총무), 정회원은 안 된다
+    assert club.c.post(f"/gatherings/{gid}/court-bookings", json=body,
+                       headers=club.headers["kim"]).status_code == 403
+    r = club.c.post(f"/gatherings/{gid}/court-bookings", json=body, headers=club.headers["off"])
     assert r.status_code == 201
     bid = r.json()["id"]
+    assert r.json()["account"] is None  # 계좌는 관리자·총무와 본인만
     assert club.c.patch(f"/court-bookings/{bid}", json={"amount": 1},
-                        headers=club.headers["off"]).status_code == 403
+                        headers=club.headers["kim"]).status_code == 403
     r = club.c.patch(f"/court-bookings/{bid}", json={"amount": 26000, "court_label": "7번"},
-                     headers=club.headers["tre"])
+                     headers=club.headers["off"])
     assert (r.json()["amount"], r.json()["court_label"]) == (26000, "7번")
+    # 지급 처리는 관리자·총무만
+    assert club.c.put(f"/court-bookings/{bid}/reimbursement", json={"reimbursed": True},
+                      headers=club.headers["off"]).status_code == 403
+    assert club.c.put(f"/court-bookings/{bid}/reimbursement", json={"reimbursed": True},
+                      headers=club.headers["tre"]).status_code == 200
+    # 지급한 내역은 지급 취소 전까지 고칠 수 없다
+    assert club.c.patch(f"/court-bookings/{bid}", json={"amount": 30000},
+                        headers=club.headers["off"]).status_code == 400
+    extra = club.c.post(f"/gatherings/{gid}/court-bookings", json=body, headers=club.headers["off"]).json()["id"]
+    assert club.c.delete(f"/court-bookings/{extra}", headers=club.headers["kim"]).status_code == 403
+    assert club.c.delete(f"/court-bookings/{extra}", headers=club.headers["off"]).status_code == 204
 
     # 없는 회원, 0원은 거부
     assert club.c.post(f"/gatherings/{gid}/court-bookings", json={"booker_id": 999, "amount": 1},

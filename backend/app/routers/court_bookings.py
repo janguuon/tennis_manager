@@ -3,8 +3,8 @@
 
 코트를 잡은 회원이 코트비를 먼저 내면, 총무(정산 담당: 관리자·총무)가 회비에서 돌려준다.
 한 모임에 예약자가 여러 명일 수 있어 예약 1건(예약자·코트·금액)마다 지급 여부를 기록한다.
-등록·수정·지급 처리는 관리자·총무만, 조회는 본인 예약(내가 받을 코트비)도 가능하다.
-(모임을 처음 만들 때 함께 넣는 예약 내역은 임원진도 넣을 수 있다.)
+지급 전 내역의 등록·수정·삭제는 오테식 모임을 올리는 운영진(관리자·임원진·총무),
+지급 처리와 계좌 보기는 관리자·총무만. 조회는 본인 예약(내가 받을 코트비)도 가능하다.
 """
 from datetime import datetime
 
@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..deps import get_current_settler, get_current_user
+from ..deps import get_current_member, get_current_settler, get_current_user
 from ..models import CourtBooking, Gathering, User
 from ..schemas import (
     CourtBookingInput,
@@ -42,6 +42,14 @@ def _load_booking(db: Session, booking_id: int) -> CourtBooking:
     return b
 
 
+def _require_booking_editor(user: User) -> None:
+    """지급 전 코트비 내역 등록·수정·삭제: 오테식 모임을 올리는 운영진(관리자·임원진·총무)."""
+    if not user.is_staff:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="코트비 내역은 운영진(관리자·임원진·총무)만 고칠 수 있어요."
+        )
+
+
 def _require_not_reimbursed(b: CourtBooking) -> None:
     if b.reimbursed_at is not None:
         raise HTTPException(
@@ -59,9 +67,10 @@ def add_court_booking(
     gathering_id: int,
     payload: CourtBookingInput,
     db: Session = Depends(get_db),
-    settler: User = Depends(get_current_settler),
+    current_user: User = Depends(get_current_member),
 ):
-    """오테식 모임에 코트 예약 1건 추가 (관리자·총무)."""
+    """오테식 모임에 코트 예약 1건 추가 (운영진)."""
+    _require_booking_editor(current_user)
     g = _load_gathering(db, gathering_id)
     if not g.is_club:
         raise HTTPException(
@@ -74,7 +83,7 @@ def add_court_booking(
     db.flush()
     sync_court_fairy(db, g.id)
     db.commit()
-    return court_booking_read(_load_booking(db, booking.id), settler)
+    return court_booking_read(_load_booking(db, booking.id), current_user)
 
 
 @router.patch("/court-bookings/{booking_id}", response_model=CourtBookingRead)
@@ -82,9 +91,10 @@ def update_court_booking(
     booking_id: int,
     payload: CourtBookingUpdate,
     db: Session = Depends(get_db),
-    settler: User = Depends(get_current_settler),
+    current_user: User = Depends(get_current_member),
 ):
-    """예약자·금액·코트 수정 (지급 전만)."""
+    """예약자·금액·코트 수정 (지급 전만, 운영진)."""
+    _require_booking_editor(current_user)
     b = _load_booking(db, booking_id)
     _require_not_reimbursed(b)
     data = payload.model_dump(exclude_unset=True)
@@ -101,16 +111,17 @@ def update_court_booking(
     sync_court_fairy(db, b.gathering_id)
     db.commit()
     db.expire_all()
-    return court_booking_read(_load_booking(db, booking_id), settler)
+    return court_booking_read(_load_booking(db, booking_id), current_user)
 
 
 @router.delete("/court-bookings/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_court_booking(
     booking_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_settler),
+    current_user: User = Depends(get_current_member),
 ):
-    """예약 삭제 (지급 전만)."""
+    """예약 삭제 (지급 전만, 운영진)."""
+    _require_booking_editor(current_user)
     b = _load_booking(db, booking_id)
     _require_not_reimbursed(b)
     gathering_id = b.gathering_id

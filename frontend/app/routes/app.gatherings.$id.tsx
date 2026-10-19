@@ -506,6 +506,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
           court_label: String(formData.get("court_label") || "").trim() || null,
         },
       });
+    } else if (intent === "update_booking") {
+      // 코트요정을 바꾸지 않으면 booker_id 를 보내지 않아 적어 둔 이름을 그대로 둔다
+      const bookerId = Number(formData.get("booker_id") || 0);
+      await api(`/court-bookings/${formData.get("booking_id")}`, {
+        method: "PATCH",
+        token,
+        body: {
+          amount: Number(formData.get("amount") || 0),
+          court_label: String(formData.get("court_label") || "").trim() || null,
+          ...(bookerId > 0 ? { booker_id: bookerId } : {}),
+        },
+      });
     } else if (intent === "reimburse") {
       await api(`/court-bookings/${formData.get("booking_id")}/reimbursement`, {
         method: "PUT",
@@ -1390,7 +1402,8 @@ export default function GatheringDetailPage() {
                 total={gathering.court_total}
                 bookings={gathering.court_bookings}
                 members={members}
-                staff={settle}
+                canEdit={staff}
+                settle={settle}
                 userId={user.id}
               />
             ) : null}
@@ -2253,23 +2266,96 @@ function ProfileLink({
 }
 
 /**
+ * 회비 지출 코트비 1건 고치기 (지급 전, 운영진): 코트요정·코트·금액.
+ * 엑셀에 이름만 적은 코트요정은 그대로 두거나 회원으로 바꿀 수 있다.
+ */
+function BookingEditForm({
+  booking,
+  members,
+  onDone,
+}: {
+  booking: CourtBooking;
+  members: UserBrief[];
+  onDone: () => void;
+}) {
+  const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const busy = fetcher.state !== "idle";
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) onDone();
+  }, [fetcher.state, fetcher.data, onDone]);
+  return (
+    <fetcher.Form method="post" className="court-booking-form mt-2.5">
+      <input type="hidden" name="intent" value="update_booking" />
+      <input type="hidden" name="booking_id" value={booking.id} />
+      <select
+        name="booker_id"
+        className="tile-input col-span-full sm:col-span-1"
+        aria-label="코트요정"
+        defaultValue={booking.booker ? String(booking.booker.id) : ""}
+      >
+        {booking.booker ? null : <option value="">{booking.booker_name}</option>}
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+      <input
+        name="court_label"
+        className="tile-input"
+        placeholder="코트 (예: 3번)"
+        aria-label="코트"
+        defaultValue={booking.court_label ?? ""}
+      />
+      <input
+        name="amount"
+        type="number"
+        min="100"
+        step="100"
+        className="tile-input"
+        placeholder="코트비"
+        aria-label="코트비"
+        required
+        defaultValue={booking.amount}
+      />
+      {fetcher.data?.error ? (
+        <p className="col-span-full text-xs font-bold text-[#9F2A17]">{fetcher.data.error}</p>
+      ) : null}
+      <div className="col-span-full flex gap-2">
+        <button type="button" className="btn-ghost btn-sm flex-1" onClick={onDone}>
+          취소
+        </button>
+        <button className="btn-ink btn-sm flex-1" disabled={busy}>
+          <Check size={14} />
+          {busy ? "저장 중…" : "저장"}
+        </button>
+      </div>
+    </fetcher.Form>
+  );
+}
+
+/**
  * 오테식 모임의 회비 지출: 코트 예약자별 코트비와 지급 여부.
- * 정산 담당(관리자·총무)은 예약자를 추가하고, 계좌를 복사해 송금한 뒤 지급 완료를 누른다.
+ * 운영진(관리자·임원진·총무)은 지급 전 내역을 추가·수정·삭제하고,
+ * 정산 담당(관리자·총무)은 계좌를 복사해 송금한 뒤 지급 완료를 누른다.
  */
 function CourtExpenseTile({
   total,
   bookings,
   members,
-  staff,
+  canEdit,
+  settle,
   userId,
 }: {
   total: number;
   bookings: CourtBooking[];
   members: UserBrief[];
-  staff: boolean;
+  canEdit: boolean;
+  settle: boolean;
   userId: number;
 }) {
   const navigation = useNavigation();
+  const [editingId, setEditingId] = useState<number | null>(null);
   const busy =
     navigation.state !== "idle" &&
     navigation.formData?.get("intent") === "add_booking";
@@ -2291,7 +2377,7 @@ function CourtExpenseTile({
 
       {bookings.length === 0 ? (
         <p className="text-sm font-semibold">
-          {staff
+          {canEdit
             ? "코트요정(코트를 잡고 코트비를 낸 회원)을 추가하면 정산 탭에 올라가요."
             : "아직 등록된 코트 예약이 없어요."}
         </p>
@@ -2331,9 +2417,15 @@ function CourtExpenseTile({
                   </span>
                 </span>
               </div>
-              {staff && !b.reimbursed ? (
+              {editingId === b.id ? (
+                <BookingEditForm
+                  booking={b}
+                  members={members}
+                  onDone={() => setEditingId(null)}
+                />
+              ) : (canEdit || settle) && !b.reimbursed ? (
                 <div className="mt-2.5 space-y-2">
-                  {b.account?.account_number ? (
+                  {!settle ? null : b.account?.account_number ? (
                     <p className="flex items-start gap-1.5 text-xs font-semibold">
                       <Landmark size={14} className="mt-px shrink-0" />
                       <span className="break-all">
@@ -2346,57 +2438,71 @@ function CourtExpenseTile({
                     </p>
                   )}
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    {b.account?.account_number ? (
+                    {settle && b.account?.account_number ? (
                       <CopyButton
                         text={b.account.account_number}
                         label="계좌 복사"
                         tone="ink"
                       />
                     ) : null}
-                    <Form
-                      method="post"
-                      onSubmit={(e) => {
-                        if (
-                          !confirm(
-                            `${b.booker_name}님에게 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                    {settle ? (
+                      <Form
+                        method="post"
+                        onSubmit={(e) => {
+                          if (
+                            !confirm(
+                              `${b.booker_name}님에게 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                            )
                           )
-                        )
-                          e.preventDefault();
-                      }}
-                    >
-                      <input type="hidden" name="intent" value="reimburse" />
-                      <input type="hidden" name="booking_id" value={b.id} />
-                      <input type="hidden" name="reimbursed" value="true" />
-                      <button className="btn-ink btn-sm">
-                        <Check size={14} />
-                        지급 완료
-                      </button>
-                    </Form>
-                    <Form
-                      method="post"
-                      onSubmit={(e) => {
-                        if (
-                          !confirm(`${b.booker_name}님의 코트 예약을 지울까요?`)
-                        )
-                          e.preventDefault();
-                      }}
-                    >
-                      <input
-                        type="hidden"
-                        name="intent"
-                        value="delete_booking"
-                      />
-                      <input type="hidden" name="booking_id" value={b.id} />
-                      <button
-                        className="icon-btn !h-8 !w-8 !text-ink hover:!bg-ink/10"
-                        aria-label={`${b.booker_name} 코트 예약 삭제`}
+                            e.preventDefault();
+                        }}
                       >
-                        <Trash2 size={15} />
+                        <input type="hidden" name="intent" value="reimburse" />
+                        <input type="hidden" name="booking_id" value={b.id} />
+                        <input type="hidden" name="reimbursed" value="true" />
+                        <button className="btn-ink btn-sm">
+                          <Check size={14} />
+                          지급 완료
+                        </button>
+                      </Form>
+                    ) : null}
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="icon-btn !h-8 !w-8 !text-ink hover:!bg-ink/10"
+                        aria-label={`${b.booker_name} 코트비 수정`}
+                        onClick={() => setEditingId(b.id)}
+                      >
+                        <Pencil size={15} />
                       </button>
-                    </Form>
+                    ) : null}
+                    {canEdit ? (
+                      <Form
+                        method="post"
+                        onSubmit={(e) => {
+                          if (
+                            !confirm(`${b.booker_name}님의 코트 예약을 지울까요?`)
+                          )
+                            e.preventDefault();
+                        }}
+                      >
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="delete_booking"
+                        />
+                        <input type="hidden" name="booking_id" value={b.id} />
+                        <button
+                          className="icon-btn !h-8 !w-8 !text-ink hover:!bg-ink/10"
+                          aria-label={`${b.booker_name} 코트 예약 삭제`}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </Form>
+                    ) : null}
                   </div>
                 </div>
-              ) : staff && b.reimbursed ? (
+              ) : settle && b.reimbursed ? (
                 <Form
                   method="post"
                   className="mt-2"
@@ -2423,7 +2529,7 @@ function CourtExpenseTile({
         </ul>
       )}
 
-      {staff ? (
+      {canEdit ? (
         <Form method="post" className="court-booking-form">
           <input type="hidden" name="intent" value="add_booking" />
           <p className="col-span-full text-xs font-extrabold">
@@ -2472,7 +2578,11 @@ function CourtExpenseTile({
         <p className="text-xs font-semibold">
           지급 대기 {pending.length}건 ·{" "}
           {won(pending.reduce((s, b) => s + b.amount, 0))}
-          {staff ? " · 계좌로 보낸 뒤 지급 완료를 눌러 주세요." : ""}
+          {settle
+            ? " · 계좌로 보낸 뒤 지급 완료를 눌러 주세요."
+            : canEdit
+            ? " · 지급은 관리자·총무가 해요."
+            : ""}
         </p>
       ) : null}
     </section>

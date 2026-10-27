@@ -183,6 +183,8 @@ function CancelGatheringModal({
   // 서버와 같이 공백을 정리한 사유 (단톡방 문구 미리보기)
   const clean = reason.trim().replace(/\s+/g, " ");
   const paidCount = gathering.participants.filter((p) => p.paid).length;
+  // 오테식 모임: 아직 취소하지 않은 지급 전 코트비가 있으면 코트마다 취소하도록 안내
+  const openCourts = gathering.court_bookings.filter((b) => !b.canceled && !b.reimbursed).length;
 
   return (
     <Modal title={done ? "모임을 취소했어요" : "모임 취소"} onClose={onClose}>
@@ -247,6 +249,11 @@ function CancelGatheringModal({
               <li>이미 입금한 {paidCount}명은 정산에서 &apos;돌려줄 돈&apos;으로 잡혀요.</li>
             ) : null}
             <li>코트 위약금처럼 취소돼도 낼 돈이 있으면, 취소한 뒤 &apos;정산 금액 정하기&apos;로 다시 나눌 수 있어요.</li>
+            {openCourts ? (
+              <li>
+                회비로 낼 코트비 {openCourts}건은 &apos;회비 지출&apos;에서 코트마다 &apos;코트 취소&apos;를 눌러 취소 수수료를 정해 주세요.
+              </li>
+            ) : null}
             <li>잘못 취소했으면 모임 화면에서 &apos;취소 되돌리기&apos;를 누르면 돼요.</li>
           </ul>
           {fetcher.data?.error ? (
@@ -517,6 +524,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
           court_label: String(formData.get("court_label") || "").trim() || null,
           ...(bookerId > 0 ? { booker_id: bookerId } : {}),
         },
+      });
+    } else if (intent === "cancel_booking") {
+      // 코트 취소: 코트비 대신 취소 수수료만 지급 (다시 보내면 수수료만 고친다)
+      await api(`/court-bookings/${formData.get("booking_id")}/cancel`, {
+        method: "PUT",
+        token,
+        body: { fee: Number(formData.get("fee") || 0) },
+      });
+    } else if (intent === "restore_booking") {
+      await api(`/court-bookings/${formData.get("booking_id")}/cancel`, {
+        method: "DELETE",
+        token,
       });
     } else if (intent === "reimburse") {
       await api(`/court-bookings/${formData.get("booking_id")}/reimbursement`, {
@@ -974,6 +993,11 @@ export default function GatheringDetailPage() {
                     : `취소 정산: 총 ${won(splitTotal)} ÷ ${attendees.length}명 = 1인 ${won(perPerson)}`
                   : "취소 정산: 낼 돈 없음"}
               </span>
+              {club && gathering.court_bookings.some((b) => !b.canceled && !b.reimbursed) ? (
+                <span className="mt-0.5 block text-xs font-bold">
+                  회비 지출의 코트비는 코트마다 &apos;코트 취소&apos;를 눌러 취소 수수료를 정해 주세요.
+                </span>
+              ) : null}
             </span>
           </p>
           {canCancel ? (
@@ -2266,6 +2290,71 @@ function ProfileLink({
 }
 
 /**
+ * 코트 취소 (지급 전, 운영진): 원래 코트비 대신 낼 취소 수수료를 정한다. 0원이면 지급할 것 없음.
+ * 이미 취소한 코트는 수수료만 고친다.
+ */
+function CourtCancelForm({
+  booking,
+  onDone,
+}: {
+  booking: CourtBooking;
+  onDone: () => void;
+}) {
+  const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const [fee, setFee] = useState(booking.canceled ? String(booking.cancel_fee) : "");
+  const busy = fetcher.state !== "idle";
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) onDone();
+  }, [fetcher.state, fetcher.data, onDone]);
+  return (
+    <fetcher.Form method="post" className="mt-2.5 space-y-2 rounded-2xl bg-white/60 p-3">
+      <input type="hidden" name="intent" value="cancel_booking" />
+      <input type="hidden" name="booking_id" value={booking.id} />
+      <p className="text-xs font-extrabold">
+        {booking.canceled ? "취소 수수료 고치기" : "코트 취소"} · 원래 코트비 {won(booking.court_fee)}
+      </p>
+      <div className="flex gap-2">
+        <input
+          name="fee"
+          type="number"
+          min="0"
+          step="100"
+          className="tile-input min-w-0 flex-1"
+          placeholder="취소 수수료 (없으면 0)"
+          aria-label="취소 수수료"
+          required
+          autoFocus
+          value={fee}
+          onChange={(e) => setFee(e.target.value)}
+        />
+        <button
+          type="button"
+          className="chip-white !h-auto shrink-0 cursor-pointer px-3 transition-opacity hover:opacity-80"
+          onClick={() => setFee("0")}
+        >
+          수수료 없음
+        </button>
+      </div>
+      <p className="text-[11px] font-semibold opacity-80">
+        코트비 대신 이 수수료만 회비에서 {booking.booker_name}님에게 지급해요. 0원이면 지급할 돈이 없어요.
+      </p>
+      {fetcher.data?.error ? (
+        <p className="text-xs font-bold text-[#9F2A17]">{fetcher.data.error}</p>
+      ) : null}
+      <div className="flex gap-2">
+        <button type="button" className="btn-ghost btn-sm flex-1" onClick={onDone}>
+          닫기
+        </button>
+        <button className="btn-ink btn-sm flex-1" disabled={busy || fee === ""}>
+          <CalendarX size={14} />
+          {busy ? "저장 중…" : booking.canceled ? "수수료 저장" : "코트 취소"}
+        </button>
+      </div>
+    </fetcher.Form>
+  );
+}
+
+/**
  * 회비 지출 코트비 1건 고치기 (지급 전, 운영진): 코트요정·코트·금액.
  * 엑셀에 이름만 적은 코트요정은 그대로 두거나 회원으로 바꿀 수 있다.
  */
@@ -2356,10 +2445,12 @@ function CourtExpenseTile({
 }) {
   const navigation = useNavigation();
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [cancelingId, setCancelingId] = useState<number | null>(null);
   const busy =
     navigation.state !== "idle" &&
     navigation.formData?.get("intent") === "add_booking";
-  const pending = bookings.filter((b) => !b.reimbursed);
+  // 지급 대기: 아직 안 보냈고 보낼 돈이 있는 것 (수수료 없이 취소한 코트는 빼고)
+  const pending = bookings.filter((b) => !b.reimbursed && b.amount > 0);
   return (
     <section className="tile-green space-y-4">
       <Eyebrow>CLUB EXPENSE</Eyebrow>
@@ -2396,8 +2487,14 @@ function CourtExpenseTile({
                       · {b.court_label}
                     </span>
                   ) : null}
-                  <p className="mt-0.5 text-xs font-semibold">
-                    {b.reimbursed
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-semibold">
+                    {b.canceled ? (
+                      <span className="badge-red !h-5 !px-2 !text-[11px]">코트 취소</span>
+                    ) : null}
+                    {b.canceled ? (b.cancel_fee > 0 ? `수수료 ${won(b.cancel_fee)} · ` : "수수료 없음") : ""}
+                    {b.canceled && b.amount === 0
+                      ? ""
+                      : b.reimbursed
                       ? `지급 완료${
                           b.reimbursed_by ? ` · ${b.reimbursed_by.name}` : ""
                         }${
@@ -2409,11 +2506,14 @@ function CourtExpenseTile({
                   </p>
                 </div>
                 <span className="flex shrink-0 items-center gap-2">
+                  {b.canceled ? (
+                    <s className="text-xs font-semibold opacity-60">{won(b.court_fee)}</s>
+                  ) : null}
                   <strong className="font-display text-lg font-extrabold tracking-[-0.03em]">
                     {won(b.amount)}
                   </strong>
                   <span className={b.reimbursed ? "chip-ink" : "chip-line"}>
-                    {b.reimbursed ? "지급" : "대기"}
+                    {b.reimbursed ? "지급" : b.amount === 0 ? "없음" : "대기"}
                   </span>
                 </span>
               </div>
@@ -2423,9 +2523,11 @@ function CourtExpenseTile({
                   members={members}
                   onDone={() => setEditingId(null)}
                 />
+              ) : cancelingId === b.id ? (
+                <CourtCancelForm booking={b} onDone={() => setCancelingId(null)} />
               ) : (canEdit || settle) && !b.reimbursed ? (
                 <div className="mt-2.5 space-y-2">
-                  {!settle ? null : b.account?.account_number ? (
+                  {!settle || b.amount === 0 ? null : b.account?.account_number ? (
                     <p className="flex items-start gap-1.5 text-xs font-semibold">
                       <Landmark size={14} className="mt-px shrink-0" />
                       <span className="break-all">
@@ -2438,20 +2540,20 @@ function CourtExpenseTile({
                     </p>
                   )}
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    {settle && b.account?.account_number ? (
+                    {settle && b.amount > 0 && b.account?.account_number ? (
                       <CopyButton
                         text={b.account.account_number}
                         label="계좌 복사"
                         tone="ink"
                       />
                     ) : null}
-                    {settle ? (
+                    {settle && b.amount > 0 ? (
                       <Form
                         method="post"
                         onSubmit={(e) => {
                           if (
                             !confirm(
-                              `${b.booker_name}님에게 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                              `${b.booker_name}님에게 ${b.canceled ? "취소 수수료" : "코트비"} ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
                             )
                           )
                             e.preventDefault();
@@ -2469,9 +2571,45 @@ function CourtExpenseTile({
                     {canEdit ? (
                       <button
                         type="button"
+                        className="chip-white !h-8 cursor-pointer px-3 transition-opacity hover:opacity-80"
+                        onClick={() => {
+                          setEditingId(null);
+                          setCancelingId(b.id);
+                        }}
+                      >
+                        <CalendarX size={13} />
+                        {b.canceled ? "수수료 고치기" : "코트 취소"}
+                      </button>
+                    ) : null}
+                    {canEdit && b.canceled ? (
+                      <Form
+                        method="post"
+                        onSubmit={(e) => {
+                          if (
+                            !confirm(
+                              `코트 취소를 되돌릴까요?\n다시 원래 코트비 ${won(b.court_fee)}을 ${b.booker_name}님에게 지급해요.`
+                            )
+                          )
+                            e.preventDefault();
+                        }}
+                      >
+                        <input type="hidden" name="intent" value="restore_booking" />
+                        <input type="hidden" name="booking_id" value={b.id} />
+                        <button className="chip-white !h-8 cursor-pointer px-3 transition-opacity hover:opacity-80">
+                          <Undo2 size={13} />
+                          되돌리기
+                        </button>
+                      </Form>
+                    ) : null}
+                    {canEdit && !b.canceled ? (
+                      <button
+                        type="button"
                         className="icon-btn !h-8 !w-8 !text-ink hover:!bg-ink/10"
                         aria-label={`${b.booker_name} 코트비 수정`}
-                        onClick={() => setEditingId(b.id)}
+                        onClick={() => {
+                          setCancelingId(null);
+                          setEditingId(b.id);
+                        }}
                       >
                         <Pencil size={15} />
                       </button>

@@ -379,6 +379,12 @@ class CourtBookingUpdate(BaseModel):
     court_label: str | None = Field(None, max_length=50)
 
 
+class CourtBookingCancel(BaseModel):
+    """코트 취소: 원래 코트비 대신 낼 취소 수수료 (0원이면 지급할 것 없음)."""
+
+    fee: int = Field(0, ge=0, le=10_000_000)
+
+
 class ReimbursementUpdate(BaseModel):
     """코트비 지급 처리. reimbursed=false면 지급 기록을 지운다."""
 
@@ -409,7 +415,14 @@ class CourtBookingRead(BaseModel):
     # 코트비를 받을 회원(코트요정). 엑셀로 올린 코트요정이 회원이 아니면 None 이고 이름만 있다
     booker: UserBrief | None = None
     booker_name: str
+    # 회비에서 지급할 금액: 코트비, 코트를 취소했으면 취소 수수료
     amount: int
+    # 원래 코트비 (코트를 취소해도 남는다)
+    court_fee: int = 0
+    # 코트 취소 (우천 등): 취소 수수료만 지급한다
+    canceled: bool = False
+    canceled_at: datetime | None = None
+    cancel_fee: int = 0
     court_label: str | None = None
     reimbursed: bool
     reimbursed_at: datetime | None = None

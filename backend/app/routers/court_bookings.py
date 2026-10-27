@@ -16,12 +16,14 @@ from ..database import get_db
 from ..deps import get_current_member, get_current_settler, get_current_user
 from ..models import CourtBooking, Gathering, User
 from ..schemas import (
+    CourtBookingCancel,
     CourtBookingInput,
     CourtBookingRead,
     CourtBookingUpdate,
     ReimbursementBulkUpdate,
     ReimbursementUpdate,
 )
+from .. import visibility
 from .gatherings import _load_gathering, court_booking_read, require_booker, sync_court_fairy
 
 router = APIRouter(tags=["court-bookings"])
@@ -132,6 +134,46 @@ def delete_court_booking(
     db.commit()
 
 
+@router.put("/court-bookings/{booking_id}/cancel", response_model=CourtBookingRead)
+def cancel_court_booking(
+    booking_id: int,
+    payload: CourtBookingCancel,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """코트 취소 (지급 전, 운영진). 원래 코트비 대신 취소 수수료만 회비에서 지급한다.
+    이미 취소한 코트에 다시 보내면 수수료만 고친다."""
+    _require_booking_editor(current_user)
+    b = _load_booking(db, booking_id)
+    _require_not_reimbursed(b)
+    if b.canceled_at is None:
+        b.canceled_at = visibility.now_kst()
+    b.cancel_fee = payload.fee
+    db.commit()
+    db.expire_all()
+    return court_booking_read(_load_booking(db, booking_id), current_user)
+
+
+@router.delete("/court-bookings/{booking_id}/cancel", response_model=CourtBookingRead)
+def restore_court_booking(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """코트 취소 되돌리기 (지급 전, 운영진): 다시 원래 코트비를 지급한다."""
+    _require_booking_editor(current_user)
+    b = _load_booking(db, booking_id)
+    _require_not_reimbursed(b)
+    b.canceled_at = None
+    b.cancel_fee = 0
+    db.commit()
+    db.expire_all()
+    return court_booking_read(_load_booking(db, booking_id), current_user)
+
+
+NOTHING_TO_PAY = "취소 수수료가 0원이라 지급할 코트비가 없어요."
+
+
 @router.put("/court-bookings/{booking_id}/reimbursement", response_model=CourtBookingRead)
 def set_reimbursement(
     booking_id: int,
@@ -142,6 +184,8 @@ def set_reimbursement(
     """코트비 지급 완료/취소 (관리자·총무). 지급 시각과 처리한 사람을 기록한다."""
     b = _load_booking(db, booking_id)
     if payload.reimbursed:
+        if b.payable <= 0:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=NOTHING_TO_PAY)
         b.reimbursed_at = datetime.now()
         b.reimbursed_by = settler.id
     else:
@@ -167,6 +211,8 @@ def set_reimbursement_many(
     now = datetime.now()
     for b in found.values():
         if payload.reimbursed:
+            if b.payable <= 0:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=NOTHING_TO_PAY)
             if b.reimbursed_at is None:  # 이미 지급한 건은 처음 기록 그대로
                 b.reimbursed_at = now
                 b.reimbursed_by = settler.id
@@ -190,7 +236,10 @@ def list_court_bookings(
     if pending:
         stmt = stmt.where(CourtBooking.reimbursed_at.is_(None))
     stmt = stmt.order_by(Gathering.event_date, CourtBooking.id)
-    return [court_booking_read(b, settler) for b in db.scalars(stmt).all()]
+    rows = db.scalars(stmt).all()
+    if pending:  # 수수료 없이 취소한 코트는 지급할 게 없다
+        rows = [b for b in rows if b.payable > 0]
+    return [court_booking_read(b, settler) for b in rows]
 
 
 @router.get("/court-bookings/me", response_model=list[CourtBookingRead])
@@ -208,5 +257,5 @@ def my_court_bookings(
         )
         .order_by(Gathering.event_date, CourtBooking.id)
     )
-    rows = [court_booking_read(b, current_user) for b in db.scalars(stmt).all()]
+    rows = [court_booking_read(b, current_user) for b in db.scalars(stmt).all() if b.payable > 0]
     return [r for r in rows if r.open_to_members]

@@ -182,7 +182,14 @@ export interface CourtBooking {
   booker: UserBrief | null;
   /** 받을 사람 이름: 회원 이름, 또는 엑셀에 적은 이름 */
   booker_name: string;
+  /** 회비에서 지급할 금액: 코트비, 코트를 취소했으면 취소 수수료 */
   amount: number;
+  /** 원래 코트비 (코트를 취소해도 남는다) */
+  court_fee: number;
+  /** 코트 취소 (우천 등): 취소 수수료만 지급한다 */
+  canceled: boolean;
+  canceled_at: string | null;
+  cancel_fee: number;
   court_label: string | null;
   reimbursed: boolean;
   reimbursed_at: string | null;

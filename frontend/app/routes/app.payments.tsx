@@ -294,9 +294,14 @@ export default function PaymentsPage() {
                           <span className="block truncate">
                             {shortDate(b.event_date)} · {b.gathering_title}
                           </span>
-                          {b.court_label ? (
+                          {b.court_label || b.canceled ? (
                             <span className="block truncate text-[11px] font-medium opacity-75">
-                              {b.court_label}
+                              {[
+                                b.court_label,
+                                b.canceled ? `코트 취소 · 수수료 (원래 ${won(b.court_fee)})` : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </span>
                           ) : null}
                         </Link>
@@ -309,7 +314,7 @@ export default function PaymentsPage() {
                           onSubmit={(e) => {
                             if (
                               !confirm(
-                                `${g.name}님에게 ${shortDate(b.event_date)} ${b.gathering_title} 코트비 ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
+                                `${g.name}님에게 ${shortDate(b.event_date)} ${b.gathering_title} ${b.canceled ? "취소 수수료" : "코트비"} ${won(b.amount)}을 보냈나요?\n확인을 누르면 지급 완료로 기록돼요.`
                               )
                             )
                               e.preventDefault();
@@ -597,6 +602,7 @@ export default function PaymentsPage() {
                   <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                     {b.booker_name}
                     {b.court_label ? ` · ${b.court_label}` : ""}
+                    {b.canceled ? ` · 코트 취소 (원래 ${won(b.court_fee)})` : ""}
                   </span>
                 </span>
                 <strong className="shrink-0 text-sm">{won(b.amount)}</strong>
@@ -605,7 +611,7 @@ export default function PaymentsPage() {
                     b.reimbursed ? "badge-ink" : "badge-line"
                   }`}
                 >
-                  {b.reimbursed ? "지급" : "대기"}
+                  {b.reimbursed ? "지급" : b.amount === 0 ? "없음" : "대기"}
                 </span>
               </li>
             ))}

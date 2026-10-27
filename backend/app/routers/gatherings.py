@@ -139,7 +139,7 @@ def _to_read(gathering: Gathering) -> GatheringRead:
     read = GatheringRead.model_validate(gathering)
     read.attendance = _summary(gathering)
     read.per_person = _per_person(gathering)
-    read.court_total = sum(b.amount for b in gathering.court_bookings)
+    read.court_total = sum(b.payable for b in gathering.court_bookings)
     return _with_open_times(read, gathering)
 
 
@@ -199,7 +199,11 @@ def court_booking_read(b: CourtBooking, viewer: User) -> CourtBookingRead:
         kind=b.gathering.kind,
         booker=UserBrief.model_validate(b.booker) if b.booker else None,
         booker_name=b.payee_name,
-        amount=b.amount,
+        amount=b.payable,
+        court_fee=b.amount,
+        canceled=b.canceled_at is not None,
+        canceled_at=b.canceled_at,
+        cancel_fee=b.cancel_fee,
         court_label=b.court_label,
         reimbursed=b.reimbursed_at is not None,
         reimbursed_at=b.reimbursed_at,

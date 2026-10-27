@@ -363,6 +363,10 @@ class CourtBooking(Base):
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     court_label: Mapped[str | None] = mapped_column(String(50))  # 예: "3번 코트"
 
+    # 코트 취소(우천 등): 취소한 시각과 취소 수수료. 취소하면 코트비 대신 수수료만 회비에서 지급한다
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    cancel_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
     # 지급 처리: 시각과 처리한 사람. 미지급이면 NULL.
     reimbursed_at: Mapped[datetime | None] = mapped_column(DateTime)
     reimbursed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
@@ -376,6 +380,11 @@ class CourtBooking(Base):
     def payee_name(self) -> str:
         """코트비를 받을 사람 이름: 회원이면 회원 이름, 아니면 적은 이름."""
         return self.booker.name if self.booker else (self.booker_name or "")
+
+    @property
+    def payable(self) -> int:
+        """회비에서 지급할 금액: 코트비, 코트를 취소했으면 취소 수수료(0원이면 지급할 것 없음)."""
+        return self.cancel_fee if self.canceled_at is not None else self.amount
 
 
 class Participant(Base):

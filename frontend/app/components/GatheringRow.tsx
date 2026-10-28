@@ -1,5 +1,6 @@
 import { Link, useOutletContext } from "@remix-run/react";
 import { ArrowUpRight, Lock, Users } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { MemberAvatar } from "~/components/Club";
 import { MyVotePill } from "~/components/MyVote";
@@ -32,17 +33,18 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
     }`,
   ].filter(Boolean);
 
+  // 시간 | 제목·장소 | 인원 (| 화살표). 참석자 줄은 그 아래에서 인원 칸 밑까지 넓게 쓴다
   return (
     <Link
       to={to}
-      className="group relative flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white dark:hover:bg-slate-800/60 sm:px-6"
+      className="group relative grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-x-4 px-5 py-4 transition-colors hover:bg-white dark:hover:bg-slate-800/60 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto] sm:px-6"
     >
       {/* 종류 색 띠: 오테식 정모 초록 · 오테식 벙개 보라 · 일반 벙개 주황 */}
       <span
         aria-hidden="true"
         className={`absolute inset-y-3 left-0 w-1 rounded-r-full ${KIND_DOT[g.kind]} ${muted ? "opacity-40" : ""}`}
       />
-      <div className="w-12 shrink-0">
+      <div>
         <div
           className={`font-display text-[17px] font-extrabold tracking-[-0.03em] ${
             muted ? "text-slate-400" : "text-ink dark:text-white"
@@ -52,7 +54,7 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
         </div>
         {end ? <div className="text-xs font-semibold text-slate-400">{end}</div> : null}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span
             className={`truncate text-[15px] font-bold ${
@@ -75,6 +77,17 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           ) : null}
         </div>
         <p className="mt-0.5 truncate text-[13px] font-medium text-slate-500 dark:text-slate-400">{meta.join(" · ")}</p>
+      </div>
+      <span className="flex flex-col items-end gap-1">
+        <MyVotePill g={g} />
+        <span className="badge-line">
+          <Users size={12} />
+          {g.attendance?.attending ?? 0}
+          {g.max_participants ? `/${g.max_participants}` : ""}
+        </span>
+      </span>
+      <ArrowUpRight size={16} className="hidden text-slate-400 transition-colors group-hover:text-ink dark:group-hover:text-white sm:block" />
+      <div className="col-[2/-1] min-w-0">
         {g.status === "canceled" ? (
           g.cancel_reason ? (
             <p className="mt-1 truncate text-[12px] font-semibold text-[#B42318] dark:text-red-300">
@@ -85,29 +98,20 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           <AttendeeLine people={g.attendees ?? []} waiting={g.attendance?.waiting ?? 0} muted={muted} />
         )}
       </div>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        <MyVotePill g={g} />
-        <span className="badge-line">
-          <Users size={12} />
-          {g.attendance?.attending ?? 0}
-          {g.max_participants ? `/${g.max_participants}` : ""}
-        </span>
-      </span>
-      <ArrowUpRight size={16} className="hidden shrink-0 text-slate-400 transition-colors group-hover:text-ink dark:group-hover:text-white sm:block" />
     </Link>
   );
 }
 
-/** 참석자 이름을 몇 명까지 적을지 (나머지는 "외 N명"): 작은 휴대폰 2명, 400px부터 3명, 넓은 화면 6명 */
-const NAME_TIERS = [
-  { n: 2, show: "min-[400px]:hidden" },
-  { n: 3, show: "hidden min-[400px]:inline sm:hidden" },
-  { n: 6, show: "hidden sm:inline" },
-] as const;
+// 서버 렌더에서는 쓰지 않는다 (재는 일은 브라우저에서만)
+const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/** 휴대폰(sm 미만)에서 참석자 이름을 몇 줄까지 보일지. 넘치면 들어가는 만큼만 적고 "외 N명". */
+const PHONE_LINES = 2;
 
 /**
- * 참석자 한 줄: 겹친 프로필 3개 + "김민준 · 박서연 · 이도윤 외 6명 · 대기 2".
- * 늘 한 줄이다. 이름이 길면 말줄임, "외 N명"과 대기는 잘리지 않게 따로 둔다. 내 이름은 진하게.
+ * 참석자: 겹친 프로필 3개 + "김민준 · 박서연 · 이도윤 · … · 대기 2".
+ * 넓은 화면은 이름을 모두 적고 줄을 바꾼다. 휴대폰은 두 줄에 들어가는 만큼 적고 "외 N명"
+ * (모두 적어 보고 두 줄을 넘으면 한 명씩 줄인다. 그리기 전에 끝나 깜빡이지 않는다). 내 이름은 진하게.
  */
 function AttendeeLine({
   people,
@@ -119,18 +123,39 @@ function AttendeeLine({
   muted: boolean;
 }) {
   const { user } = useOutletContext<{ user: Me }>();
+  const boxRef = useRef<HTMLSpanElement>(null);
+  // 처음(서버 렌더)에는 모두 적고, 휴대폰은 줄일 때까지 CSS로 두 줄에서 자른다
+  const [shown, setShown] = useState(people.length);
+  const ids = people.map((p) => p.id).join(",");
+  const width = useRef(0);
+
+  // 명단이 바뀌거나 폭이 바뀌면 다시 모두 적어 본다
+  useBrowserLayoutEffect(() => setShown(people.length), [ids, people.length]);
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (Math.abs(entry.contentRect.width - width.current) < 1) return;
+      width.current = entry.contentRect.width;
+      setShown(people.length);
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [ids, people.length]);
+
+  // 휴대폰: 두 줄을 넘으면 한 명 줄인다 (줄인 뒤 다시 그려지면 또 잰다)
+  useBrowserLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box || shown <= 1 || window.matchMedia("(min-width: 640px)").matches) return;
+    const lineHeight = parseFloat(getComputedStyle(box).lineHeight);
+    if (box.scrollHeight > lineHeight * PHONE_LINES + 1) setShown(shown - 1);
+  });
+
   if (people.length === 0 && waiting === 0) return null;
-  const names = (n: number) =>
-    people.slice(0, n).map((p, i) => (
-      <span key={p.id}>
-        {i > 0 ? " · " : ""}
-        <span className={p.id === user.id ? "font-bold text-ink dark:text-white" : ""}>{p.name}</span>
-      </span>
-    ));
-  const rest = (n: number) => (people.length > n ? ` 외 ${people.length - n}명` : "");
+  const n = Math.min(shown, people.length);
   return (
     <div
-      className={`mt-1.5 flex min-w-0 items-center gap-2 text-[12px] font-medium text-slate-500 dark:text-slate-400 ${
+      className={`mt-1.5 flex min-w-0 items-start gap-2 text-[12px] font-medium leading-5 text-slate-500 dark:text-slate-400 ${
         muted ? "opacity-70" : ""
       }`}
     >
@@ -150,23 +175,26 @@ function AttendeeLine({
           ))}
         </span>
       ) : null}
-      <span aria-hidden="true" className="flex min-w-0 items-center">
-        {NAME_TIERS.map(({ n, show }) => (
-          <span key={n} className={`${show} min-w-0 truncate`}>
-            {names(n)}
+      {/* 이름은 끊지 않고, 가운뎃점 앞은 붙는 공백이라 줄은 "·" 뒤에서만 바뀐다 */}
+      <span ref={boxRef} aria-hidden="true" className="block min-w-0 flex-1 max-sm:line-clamp-2">
+        {people.slice(0, n).map((p, i) => (
+          <span key={p.id}>
+            {i > 0 ? "\u00a0· " : ""}
+            <span className={`whitespace-nowrap ${p.id === user.id ? "font-bold text-ink dark:text-white" : ""}`}>
+              {p.name}
+            </span>
           </span>
         ))}
-        {/* 이름이 길어 잘려도 "외 N명"은 남도록 따로 둔다 */}
-        {NAME_TIERS.map(({ n, show }) =>
-          people.length > n ? (
-            <span key={n} className={`${show} shrink-0 whitespace-pre`}>
-              {rest(n)}
-            </span>
-          ) : null
-        )}
+        {n < people.length ? (
+          <>
+            {" "}
+            <span className="whitespace-nowrap">외 {people.length - n}명</span>
+          </>
+        ) : null}
         {waiting ? (
-          <span className="shrink-0 whitespace-pre text-slate-400">
-            {people.length ? " · " : ""}대기 {waiting}
+          <span className="text-slate-400">
+            {people.length ? "\u00a0· " : ""}
+            <span className="whitespace-nowrap">대기 {waiting}</span>
           </span>
         ) : null}
       </span>

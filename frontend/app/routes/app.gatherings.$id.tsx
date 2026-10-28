@@ -60,6 +60,7 @@ import { shareToKakao } from "~/lib/kakao";
 import { membersOrEmpty } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
+import { useSwipeNav } from "~/lib/swipe";
 import { ATTENDANCE_LABEL, ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
 import { DRAW_METHOD_LABEL, TIER_CLASS, expectedSplit } from "~/lib/tier";
 import {
@@ -105,9 +106,20 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 /**
- * 이전·다음 일정으로 넘어가기 (날짜·시간 순). 돌아갈 곳(?from)은 넘어간 일정에 맞춘다:
+ * 이전·다음 일정 주소. 돌아갈 곳(?from)은 넘어간 일정에 맞춘다:
  * 리스트는 그 달 리스트, 날짜별 목록은 그 날, 캘린더는 그 달.
  */
+function pagerHref(g: GatheringLink | null, from: string): string | null {
+  if (!g) return null;
+  const back = from.startsWith("list:")
+    ? `list:${g.event_date.slice(0, 7)}`
+    : /^\d{4}-\d{2}-\d{2}$/.test(from)
+    ? g.event_date
+    : g.event_date.slice(0, 7);
+  return `/app/gatherings/${g.id}?from=${encodeURIComponent(back)}`;
+}
+
+/** 이전·다음 일정으로 넘어가기 (날짜·시간 순). 휴대폰은 화면을 좌우로 밀어도 된다. */
 function GatheringPager({
   prev,
   next,
@@ -118,12 +130,6 @@ function GatheringPager({
   from: string;
 }) {
   if (!prev && !next) return null;
-  const fromFor = (g: GatheringLink) =>
-    from.startsWith("list:")
-      ? `list:${g.event_date.slice(0, 7)}`
-      : /^\d{4}-\d{2}-\d{2}$/.test(from)
-      ? g.event_date
-      : g.event_date.slice(0, 7);
   const label = (g: GatheringLink) => {
     const [y, m, d] = g.event_date.split("-").map(Number);
     const wd = WEEKDAYS[new Date(y, m - 1, d).getDay()];
@@ -132,7 +138,7 @@ function GatheringPager({
   const cell = (g: GatheringLink | null, dir: "prev" | "next") =>
     g ? (
       <Link
-        to={`/app/gatherings/${g.id}?from=${encodeURIComponent(fromFor(g))}`}
+        to={pagerHref(g, from)!}
         prefetch="intent"
         className={`gathering-pager ${dir === "next" ? "justify-end text-right" : ""}`}
         aria-label={`${dir === "prev" ? "이전" : "다음"} 일정: ${label(g)} ${g.title}`}
@@ -728,6 +734,8 @@ export default function GatheringDetailPage() {
     }`;
     backLabel = "캘린더";
   }
+  // 휴대폰: 화면을 좌우로 밀어 이전·다음 일정으로
+  const swipeRef = useSwipeNav(pagerHref(around.prev, from), pagerHref(around.next, from));
 
   // 수정 성공 시 모달 닫기
   useEffect(() => {
@@ -894,7 +902,7 @@ export default function GatheringDetailPage() {
     : false;
 
   return (
-    <PageBody>
+    <PageBody bodyRef={swipeRef}>
       {/* 뒤로가기 + 액션 */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-5">
         <BackLink to={backHref}>{backLabel}</BackLink>

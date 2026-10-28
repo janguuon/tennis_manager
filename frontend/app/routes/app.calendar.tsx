@@ -50,6 +50,7 @@ import { todayKST } from "~/lib/format";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import type { NewSchedule } from "~/lib/schedule-notice";
 import { requireToken } from "~/lib/session.server";
+import { useSwipeNav } from "~/lib/swipe";
 import { WEEKDAYS, formatOpenAt } from "~/lib/status";
 import type {
   ClubAccount,
@@ -421,6 +422,15 @@ export default function CalendarPage() {
     setSearchParams(p);
   };
   const goMonth = (m: string) => updateParams({ month: m });
+  // 휴대폰: 달력·리스트를 좌우로 밀어 이전·다음 달로 (보기 방식·거르기는 그대로)
+  const monthHref = (m: string) => {
+    const p = new URLSearchParams(searchParams);
+    p.set("month", m);
+    return `?${p}`;
+  };
+  const swipeRef = useSwipeNav(monthHref(shiftMonth(month, -1)), monthHref(shiftMonth(month, 1)), {
+    preventScrollReset: true,
+  });
   const [yy, mm] = month.split("-");
 
   // 리스트 뷰: 일정이 있는 날짜만 오름차순으로
@@ -527,297 +537,299 @@ export default function CalendarPage() {
           <p className="alert-success">{actionData.notice}</p>
         ) : null}
 
-        <div className="calendar-heading card !py-4">
-          <div>
-            <h2>
-              {yy}
-              <span className="text-house-orange">.</span>
-              {mm}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {onlyMine
-                ? `내 참석 ${shown.length}개 · 전체 ${gatherings.length}개`
-                : `이 달 일정 ${gatherings.length}개`}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              className="icon-btn"
-              aria-label="이전 달"
-              onClick={() => goMonth(shiftMonth(month, -1))}
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <button
-              className="btn-ghost btn-sm"
-              onClick={() => goMonth(currentMonth())}
-            >
-              오늘
-            </button>
-            <button
-              className="icon-btn"
-              aria-label="다음 달"
-              onClick={() => goMonth(shiftMonth(month, 1))}
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        </div>
-        {canFilterMine ? (
-          <div>
-            <div className="segmented" role="group" aria-label="일정 거르기">
+        <div ref={swipeRef} className="space-y-5">
+          <div className="calendar-heading card !py-4">
+            <div>
+              <h2>
+                {yy}
+                <span className="text-house-orange">.</span>
+                {mm}
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {onlyMine
+                  ? `내 참석 ${shown.length}개 · 전체 ${gatherings.length}개`
+                  : `이 달 일정 ${gatherings.length}개`}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
               <button
-                className={`segmented-item ${onlyMine ? "" : "segmented-item-active"}`}
-                aria-pressed={!onlyMine}
-                onClick={() => updateParams({ mine: false })}
+                className="icon-btn"
+                aria-label="이전 달"
+                onClick={() => goMonth(shiftMonth(month, -1))}
               >
-                전체 일정
+                <ChevronLeft size={20} />
               </button>
               <button
-                className={`segmented-item ${onlyMine ? "segmented-item-active" : ""}`}
-                aria-pressed={onlyMine}
-                onClick={() => updateParams({ mine: true })}
+                className="btn-ghost btn-sm"
+                onClick={() => goMonth(currentMonth())}
               >
-                <Check size={14} strokeWidth={3} />
-                내 참석만
+                오늘
+              </button>
+              <button
+                className="icon-btn"
+                aria-label="다음 달"
+                onClick={() => goMonth(shiftMonth(month, 1))}
+              >
+                <ChevronRight size={20} />
               </button>
             </div>
           </div>
-        ) : null}
-        <CalendarLegend />
-        {onlyMine && view === "calendar" && shown.length === 0 && gatherings.length > 0 ? (
-          <p className="px-1 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
-            이 달에 참석하는 일정이 없어요.{" "}
-            <button
-              type="button"
-              className="font-bold text-ink underline underline-offset-4 dark:text-white"
-              onClick={() => updateParams({ mine: false })}
-            >
-              전체 일정 보기
-            </button>
-          </p>
-        ) : null}
-        {view === "calendar" ? (
-          /* 달력 그리드 */
-          <div className="card overflow-hidden !p-0">
-            <div className="grid grid-cols-7 bg-house-yellow">
-              {WEEKDAYS.map((w, i) => (
-                <div
-                  key={w}
-                  className={`py-2.5 text-center text-xs font-extrabold text-ink ${
-                    i === 0 || i === 6 ? "" : "opacity-70"
-                  }`}
-                >
-                  {w}
-                </div>
-              ))}
-            </div>
-
-            {/* -mb-px: 마지막 줄의 아래 테두리를 카드 테두리 뒤로 숨김 */}
-            <div className="-mb-px grid grid-cols-7">
-              {cells.map((day, idx) => {
-                if (day === null) {
-                  return (
-                    <div
-                      key={idx}
-                      className={`${cellBase} bg-slate-100/60 dark:bg-slate-950/40`}
-                    />
-                  );
-                }
-                const dateStr = `${month}-${String(day).padStart(2, "0")}`;
-                const isToday = dateStr === todayStr;
-                const isPast = dateStr < todayStr;
-                const dayGatherings = byDate.get(dateStr) ?? [];
-                const weekday = idx % 7;
-
-                return (
-                  <Link
-                    key={idx}
-                    to={`/app/day/${dateStr}`}
-                    className={`${cellBase} block transition-colors hover:bg-white dark:hover:bg-slate-800/50`}
-                  >
-                    <span
-                      className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1 font-display text-[14px] font-extrabold ${
-                        isToday
-                          ? "bg-ink text-house-yellow dark:bg-house-yellow dark:text-ink"
-                          : isPast
-                          ? "text-slate-400 dark:text-slate-600"
-                          : weekday === 0
-                          ? "text-[#D2381F] dark:text-red-400"
-                          : weekday === 6
-                          ? "text-[#2F5BD3] dark:text-blue-400"
-                          : "text-ink dark:text-slate-100"
-                      }`}
-                    >
-                      {day}
-                    </span>
-
-                    {/* 모바일: 종류 색 동그라미 + 내 투표 아이콘 (최대 3개) */}
-                    <div className="mt-1 flex flex-wrap justify-center gap-0.5 sm:hidden">
-                      {dayGatherings.slice(0, 3).map((g) => (
-                        <KindVoteDot key={g.id} g={g} />
-                      ))}
-                    </div>
-
-                    {/* 데스크톱: 일정 칩 */}
-                    <div className="mt-1 hidden space-y-1 sm:block">
-                      {dayGatherings.slice(0, 3).map((g) => (
-                        <div
-                          key={g.id}
-                          className={`rounded-lg px-2 py-2 text-[11px] font-semibold leading-relaxed ${
-                            KIND_CHIP[g.kind]
-                          } ${
-                            g.status === "canceled"
-                              ? "line-through opacity-50"
-                              : g.status === "completed"
-                              ? "opacity-50"
-                              : ""
-                          } ${g.open_to_members ? "" : "opacity-60 outline-dashed outline-1 outline-offset-[-3px]"}`}
-                          title={
-                            g.status === "canceled" && g.cancel_reason
-                              ? `${g.title} (취소: ${g.cancel_reason})`
-                              : g.open_to_members
-                              ? g.title
-                              : `${g.title} (아직 정회원에게 공개 전)`
-                          }
-                        >
-                          <span className="flex items-center justify-between gap-1">
-                            <span className="truncate opacity-70">
-                              {g.start_time
-                                ? `${g.start_time.slice(0, 5)} · `
-                                : ""}
-                              {KIND_SHORT[g.kind]}
-                            </span>
-                            <MyVoteChip g={g} />
-                          </span>
-                          <span className="block truncate">{g.title}</span>
-                          <span className="mt-1 block truncate text-[10px] opacity-70">
-                            {g.status === "canceled" && g.cancel_reason
-                              ? `취소 · ${g.cancel_reason}`
-                              : g.open_to_members
-                              ? g.location
-                              : "공개 전"}
-                          </span>
-                        </div>
-                      ))}
-                      {dayGatherings.length > 3 ? (
-                        <div className="px-1 text-[11px] font-bold text-slate-500">
-                          +{dayGatherings.length - 3}개
-                        </div>
-                      ) : null}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ) : listDates.length === 0 ? (
-          <EmptyCard
-            icon={<CalendarDays size={28} />}
-            action={
-              onlyMine && gatherings.length > 0 ? (
+          {canFilterMine ? (
+            <div>
+              <div className="segmented" role="group" aria-label="일정 거르기">
                 <button
-                  className="btn-ghost btn-sm"
+                  className={`segmented-item ${onlyMine ? "" : "segmented-item-active"}`}
+                  aria-pressed={!onlyMine}
                   onClick={() => updateParams({ mine: false })}
                 >
-                  전체 일정 보기
+                  전체 일정
                 </button>
-              ) : canCreate ? (
                 <button
-                  className="btn-accent btn-sm"
-                  onClick={() => setShowCreate(true)}
+                  className={`segmented-item ${onlyMine ? "segmented-item-active" : ""}`}
+                  aria-pressed={onlyMine}
+                  onClick={() => updateParams({ mine: true })}
                 >
-                  <Plus size={16} />
-                  일정 등록
+                  <Check size={14} strokeWidth={3} />
+                  내 참석만
                 </button>
-              ) : undefined
-            }
-          >
-            {onlyMine && gatherings.length > 0
-              ? "이 달에 참석하는 일정이 없어요."
-              : "이 달에 등록된 일정이 없어요."}
-          </EmptyCard>
-        ) : (
-          /* 리스트 보기: 날짜별 소제목 + 일정 줄을 카드 한 장에 (이번 달 지난 일정은 접어 둔다) */
-          <section className="card overflow-hidden !p-0">
-            {pastCount ? (
-              <PastToggle count={pastCount} open={showPast} onToggle={() => setShowPast((v) => !v)} />
-            ) : null}
-            {visibleDates.length === 0 ? (
-              <p className="px-5 py-6 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 sm:px-6">
-                {onlyMine ? "이번 달에 남은 내 일정이 없어요." : "이번 달 남은 일정이 없어요."}
-              </p>
-            ) : null}
-            {visibleDates.map((dateStr, i) => {
-              const [ly, lm, ld] = dateStr.split("-").map(Number);
-              const wd = WEEKDAYS[new Date(ly, lm - 1, ld).getDay()];
-              const list = [...(byDate.get(dateStr) ?? [])].sort((a, b) =>
-                (a.start_time ?? "99").localeCompare(b.start_time ?? "99")
-              );
-              return (
-                <div
-                  key={dateStr}
-                  className={
-                    i > 0 || pastCount
-                      ? "border-t-[1.5px] border-slate-200 dark:border-slate-700"
-                      : ""
-                  }
-                >
-                  <h2 className="flex items-center gap-2 px-5 pb-1 pt-4 font-display text-[17px] font-extrabold tracking-[-0.03em] sm:px-6">
-                    {lm}.{ld}{" "}
-                    <span className="font-sans text-[13px] font-bold text-slate-500">
-                      {wd}요일
-                    </span>
-                    {dateStr === todayStr ? (
-                      <span className="badge-yellow">오늘</span>
-                    ) : null}
-                  </h2>
-                  <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
-                    {list.map((g) => (
-                      <li key={g.id}>
-                        <GatheringRow
-                          g={g}
-                          to={`/app/gatherings/${g.id}?from=list:${month}`}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </section>
-        )}
-        {view === "calendar" && shown.length > 0 ? (
-          <section className="card overflow-hidden !p-0 sm:hidden">
-            <h2 className="section-title px-5 pt-5">이번 달 모임</h2>
-            {pastCount ? (
-              <div className="mt-2 border-t border-slate-200 dark:border-slate-700">
-                <PastToggle count={pastCount} open={showPast} onToggle={() => setShowPast((v) => !v)} />
               </div>
-            ) : null}
-            {visibleDates.length === 0 ? (
-              <p className="border-t border-slate-200 px-5 py-6 text-center text-sm font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                {onlyMine ? "이번 달에 남은 내 일정이 없어요." : "이번 달 남은 일정이 없어요."}
-              </p>
-            ) : null}
-            <ul className="mt-2 divide-y divide-slate-200 dark:divide-slate-700">
-              {visibleDates.map((dateStr) => (
-                <li key={dateStr}>
-                  <p className="px-5 pt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {dateStr.slice(5).replace("-", ".")}
-                  </p>
-                  {(byDate.get(dateStr) ?? []).map((g) => (
-                    <GatheringRow
-                      key={g.id}
-                      g={g}
-                      to={`/app/gatherings/${g.id}?from=${month}`}
-                    />
-                  ))}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+            </div>
+          ) : null}
+          <CalendarLegend />
+          {onlyMine && view === "calendar" && shown.length === 0 && gatherings.length > 0 ? (
+            <p className="px-1 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+              이 달에 참석하는 일정이 없어요.{" "}
+              <button
+                type="button"
+                className="font-bold text-ink underline underline-offset-4 dark:text-white"
+                onClick={() => updateParams({ mine: false })}
+              >
+                전체 일정 보기
+              </button>
+            </p>
+          ) : null}
+          {view === "calendar" ? (
+            /* 달력 그리드 */
+            <div className="card overflow-hidden !p-0">
+              <div className="grid grid-cols-7 bg-house-yellow">
+                {WEEKDAYS.map((w, i) => (
+                  <div
+                    key={w}
+                    className={`py-2.5 text-center text-xs font-extrabold text-ink ${
+                      i === 0 || i === 6 ? "" : "opacity-70"
+                    }`}
+                  >
+                    {w}
+                  </div>
+                ))}
+              </div>
+
+              {/* -mb-px: 마지막 줄의 아래 테두리를 카드 테두리 뒤로 숨김 */}
+              <div className="-mb-px grid grid-cols-7">
+                {cells.map((day, idx) => {
+                  if (day === null) {
+                    return (
+                      <div
+                        key={idx}
+                        className={`${cellBase} bg-slate-100/60 dark:bg-slate-950/40`}
+                      />
+                    );
+                  }
+                  const dateStr = `${month}-${String(day).padStart(2, "0")}`;
+                  const isToday = dateStr === todayStr;
+                  const isPast = dateStr < todayStr;
+                  const dayGatherings = byDate.get(dateStr) ?? [];
+                  const weekday = idx % 7;
+
+                  return (
+                    <Link
+                      key={idx}
+                      to={`/app/day/${dateStr}`}
+                      className={`${cellBase} block transition-colors hover:bg-white dark:hover:bg-slate-800/50`}
+                    >
+                      <span
+                        className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1 font-display text-[14px] font-extrabold ${
+                          isToday
+                            ? "bg-ink text-house-yellow dark:bg-house-yellow dark:text-ink"
+                            : isPast
+                            ? "text-slate-400 dark:text-slate-600"
+                            : weekday === 0
+                            ? "text-[#D2381F] dark:text-red-400"
+                            : weekday === 6
+                            ? "text-[#2F5BD3] dark:text-blue-400"
+                            : "text-ink dark:text-slate-100"
+                        }`}
+                      >
+                        {day}
+                      </span>
+
+                      {/* 모바일: 종류 색 동그라미 + 내 투표 아이콘 (최대 3개) */}
+                      <div className="mt-1 flex flex-wrap justify-center gap-0.5 sm:hidden">
+                        {dayGatherings.slice(0, 3).map((g) => (
+                          <KindVoteDot key={g.id} g={g} />
+                        ))}
+                      </div>
+
+                      {/* 데스크톱: 일정 칩 */}
+                      <div className="mt-1 hidden space-y-1 sm:block">
+                        {dayGatherings.slice(0, 3).map((g) => (
+                          <div
+                            key={g.id}
+                            className={`rounded-lg px-2 py-2 text-[11px] font-semibold leading-relaxed ${
+                              KIND_CHIP[g.kind]
+                            } ${
+                              g.status === "canceled"
+                                ? "line-through opacity-50"
+                                : g.status === "completed"
+                                ? "opacity-50"
+                                : ""
+                            } ${g.open_to_members ? "" : "opacity-60 outline-dashed outline-1 outline-offset-[-3px]"}`}
+                            title={
+                              g.status === "canceled" && g.cancel_reason
+                                ? `${g.title} (취소: ${g.cancel_reason})`
+                                : g.open_to_members
+                                ? g.title
+                                : `${g.title} (아직 정회원에게 공개 전)`
+                            }
+                          >
+                            <span className="flex items-center justify-between gap-1">
+                              <span className="truncate opacity-70">
+                                {g.start_time
+                                  ? `${g.start_time.slice(0, 5)} · `
+                                  : ""}
+                                {KIND_SHORT[g.kind]}
+                              </span>
+                              <MyVoteChip g={g} />
+                            </span>
+                            <span className="block truncate">{g.title}</span>
+                            <span className="mt-1 block truncate text-[10px] opacity-70">
+                              {g.status === "canceled" && g.cancel_reason
+                                ? `취소 · ${g.cancel_reason}`
+                                : g.open_to_members
+                                ? g.location
+                                : "공개 전"}
+                            </span>
+                          </div>
+                        ))}
+                        {dayGatherings.length > 3 ? (
+                          <div className="px-1 text-[11px] font-bold text-slate-500">
+                            +{dayGatherings.length - 3}개
+                          </div>
+                        ) : null}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ) : listDates.length === 0 ? (
+            <EmptyCard
+              icon={<CalendarDays size={28} />}
+              action={
+                onlyMine && gatherings.length > 0 ? (
+                  <button
+                    className="btn-ghost btn-sm"
+                    onClick={() => updateParams({ mine: false })}
+                  >
+                    전체 일정 보기
+                  </button>
+                ) : canCreate ? (
+                  <button
+                    className="btn-accent btn-sm"
+                    onClick={() => setShowCreate(true)}
+                  >
+                    <Plus size={16} />
+                    일정 등록
+                  </button>
+                ) : undefined
+              }
+            >
+              {onlyMine && gatherings.length > 0
+                ? "이 달에 참석하는 일정이 없어요."
+                : "이 달에 등록된 일정이 없어요."}
+            </EmptyCard>
+          ) : (
+            /* 리스트 보기: 날짜별 소제목 + 일정 줄을 카드 한 장에 (이번 달 지난 일정은 접어 둔다) */
+            <section className="card overflow-hidden !p-0">
+              {pastCount ? (
+                <PastToggle count={pastCount} open={showPast} onToggle={() => setShowPast((v) => !v)} />
+              ) : null}
+              {visibleDates.length === 0 ? (
+                <p className="px-5 py-6 text-center text-sm font-semibold text-slate-500 dark:text-slate-400 sm:px-6">
+                  {onlyMine ? "이번 달에 남은 내 일정이 없어요." : "이번 달 남은 일정이 없어요."}
+                </p>
+              ) : null}
+              {visibleDates.map((dateStr, i) => {
+                const [ly, lm, ld] = dateStr.split("-").map(Number);
+                const wd = WEEKDAYS[new Date(ly, lm - 1, ld).getDay()];
+                const list = [...(byDate.get(dateStr) ?? [])].sort((a, b) =>
+                  (a.start_time ?? "99").localeCompare(b.start_time ?? "99")
+                );
+                return (
+                  <div
+                    key={dateStr}
+                    className={
+                      i > 0 || pastCount
+                        ? "border-t-[1.5px] border-slate-200 dark:border-slate-700"
+                        : ""
+                    }
+                  >
+                    <h2 className="flex items-center gap-2 px-5 pb-1 pt-4 font-display text-[17px] font-extrabold tracking-[-0.03em] sm:px-6">
+                      {lm}.{ld}{" "}
+                      <span className="font-sans text-[13px] font-bold text-slate-500">
+                        {wd}요일
+                      </span>
+                      {dateStr === todayStr ? (
+                        <span className="badge-yellow">오늘</span>
+                      ) : null}
+                    </h2>
+                    <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                      {list.map((g) => (
+                        <li key={g.id}>
+                          <GatheringRow
+                            g={g}
+                            to={`/app/gatherings/${g.id}?from=list:${month}`}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </section>
+          )}
+          {view === "calendar" && shown.length > 0 ? (
+            <section className="card overflow-hidden !p-0 sm:hidden">
+              <h2 className="section-title px-5 pt-5">이번 달 모임</h2>
+              {pastCount ? (
+                <div className="mt-2 border-t border-slate-200 dark:border-slate-700">
+                  <PastToggle count={pastCount} open={showPast} onToggle={() => setShowPast((v) => !v)} />
+                </div>
+              ) : null}
+              {visibleDates.length === 0 ? (
+                <p className="border-t border-slate-200 px-5 py-6 text-center text-sm font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  {onlyMine ? "이번 달에 남은 내 일정이 없어요." : "이번 달 남은 일정이 없어요."}
+                </p>
+              ) : null}
+              <ul className="mt-2 divide-y divide-slate-200 dark:divide-slate-700">
+                {visibleDates.map((dateStr) => (
+                  <li key={dateStr}>
+                    <p className="px-5 pt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      {dateStr.slice(5).replace("-", ".")}
+                    </p>
+                    {(byDate.get(dateStr) ?? []).map((g) => (
+                      <GatheringRow
+                        key={g.id}
+                        g={g}
+                        to={`/app/gatherings/${g.id}?from=${month}`}
+                      />
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
       </PageBody>
 
       {/* 일정 등록 */}

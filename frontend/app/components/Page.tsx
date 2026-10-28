@@ -1,16 +1,19 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Link } from "@remix-run/react";
 import { ArrowLeft } from "lucide-react";
 
 export function PageBody({
   children,
   narrow = false,
+  bodyRef,
 }: {
   children: ReactNode;
   narrow?: boolean;
+  /** 좌우로 밀어 넘기기(useSwipeNav)처럼 페이지 전체에 달 ref */
+  bodyRef?: Ref<HTMLDivElement>;
 }) {
   return (
-    <div className={`page-body ${narrow ? "page-body-narrow" : ""}`}>
+    <div ref={bodyRef} className={`page-body ${narrow ? "page-body-narrow" : ""}`}>
       {children}
     </div>
   );

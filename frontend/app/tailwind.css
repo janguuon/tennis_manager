@@ -493,6 +493,11 @@
   .member-card {
     @apply card-link overflow-hidden !p-0 transition-transform hover:-translate-y-1;
   }
+  /* 회원 카드의 전화 버튼: 배너 오른쪽 아래 */
+  .member-call {
+    @apply absolute right-3 top-[66px] z-10 grid h-10 w-10 place-items-center rounded-full bg-white text-ink shadow-sm ring-1 ring-ink/10
+      transition-transform hover:scale-105 active:scale-95;
+  }
   .member-banner {
     @apply relative h-28 overflow-hidden p-5;
   }

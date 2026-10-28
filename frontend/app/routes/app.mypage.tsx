@@ -231,7 +231,10 @@ export default function MyPage() {
             <input
               id="phone"
               name="phone"
+              type="tel"
+              inputMode="tel"
               className="input"
+              placeholder="010-1234-5678"
               defaultValue={user.phone ?? ""}
             />
           </div>

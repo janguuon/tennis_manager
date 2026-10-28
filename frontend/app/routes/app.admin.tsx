@@ -429,7 +429,14 @@ export default function AdminPage() {
                     </p>
                     <p className="text-xs text-slate-500">
                       {m.created_at.slice(0, 10)} 가입
-                      {m.ntrp ? ` · NTRP ${m.ntrp}` : ""}
+                      {m.ntrp ? ` · NTRP ${m.ntrp}` : ""} ·{" "}
+                      {/* 전화번호는 프로필에서 등록한다 (회원 목록에서 눌러 바로 전화) */}
+                      <Link
+                        to={`/app/members/${m.id}`}
+                        className="font-semibold underline-offset-2 hover:underline"
+                      >
+                        {m.phone ?? "전화번호 등록"}
+                      </Link>
                     </p>
                   </div>
                 </div>

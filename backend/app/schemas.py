@@ -26,6 +26,29 @@ GUEST_FEE_DEFAULT = 5000
 
 
 # --- 회원 -------------------------------------------------------------------
+def clean_phone(v: str | None) -> str | None:
+    """전화번호 정리: 비우면 None, 휴대폰·지역번호는 하이픈을 넣는다 (01012345678 → 010-1234-5678)."""
+    v = (v or "").strip()
+    if not v:
+        return None
+    if not re.fullmatch(r"\+?[0-9\s().-]+", v):
+        raise PydanticCustomError("phone_rule", "전화번호는 숫자로 적어 주세요. (예: 010-1234-5678)")
+    digits = re.sub(r"\D", "", v)
+    if not 8 <= len(digits) <= 15:
+        raise PydanticCustomError("phone_rule", "전화번호 자릿수를 확인해 주세요. (예: 010-1234-5678)")
+    if v.startswith("+"):
+        return "+" + digits
+    if len(digits) == 11 and digits.startswith("01"):
+        return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+    if len(digits) == 10 and digits.startswith("01"):
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+    if digits.startswith("02") and len(digits) in (9, 10):
+        return f"02-{digits[2:-4]}-{digits[-4:]}"
+    if digits.startswith("0") and len(digits) in (10, 11):
+        return f"{digits[:3]}-{digits[3:-4]}-{digits[-4:]}"
+    return digits
+
+
 class UserBase(BaseModel):
     name: str = Field(..., max_length=50)
     nickname: str | None = Field(None, max_length=50)
@@ -91,6 +114,11 @@ class UserUpdate(BaseModel):
     account_number: str | None = Field(None, max_length=50)
     account_holder: str | None = Field(None, max_length=50)
 
+    @field_validator("phone")
+    @classmethod
+    def _phone_rule(cls, v: str | None) -> str | None:
+        return clean_phone(v)
+
     # 성별은 필수 항목이라 바꿀 수는 있어도 비울 수는 없다 (보내지 않으면 그대로)
     @field_validator("gender")
     @classmethod
@@ -129,6 +157,17 @@ class UserRead(UserBase):
 # 프로필 동그라미 위에 둘러 놓을 수 있는 별 수
 AWARD_MAX_EACH = 5
 AWARD_MAX_TOTAL = 9
+
+
+class PhoneUpdate(BaseModel):
+    """회원 전화번호 (관리자). 비우면 지운다."""
+
+    phone: str | None = Field(None, max_length=20)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone_rule(cls, v: str | None) -> str | None:
+        return clean_phone(v)
 
 
 class AwardUpdate(BaseModel):

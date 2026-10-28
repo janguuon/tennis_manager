@@ -11,13 +11,14 @@ import {
   useLoaderData,
   useNavigation,
 } from "@remix-run/react";
-import { Star } from "lucide-react";
+import { Phone, Star } from "lucide-react";
 
 import { Eyebrow, MemberAvatar, awardText } from "~/components/Club";
 import { BackLink, PageBody } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
 import { canSeeRecords } from "~/lib/features";
+import { telHref } from "~/lib/format";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { requireMember } from "~/lib/guard.server";
 import {
@@ -42,24 +43,34 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const user = await api<User>(`/users/${id}`, { token });
     return json({ user, records: null, isAdmin: me.is_admin });
   }
-  const [stats, partners, opponents] = await Promise.all([
+  // 프로필(전화번호 포함)은 회원 정보에서, 전적은 통계에서
+  const [user, stats, partners, opponents] = await Promise.all([
+    api<User>(`/users/${id}`, { token }),
     api<PlayerStats>(`/stats/users/${id}`, { token }),
     api<PartnerStat[]>(`/stats/users/${id}/partners`, { token }),
     api<OpponentStat[]>(`/stats/users/${id}/opponents`, { token }),
   ]);
   return json({
-    user: stats.user,
+    user,
     records: { stats, partners, opponents },
     isAdmin: me.is_admin,
   });
 }
 
-// 대회 입상 별 정하기 (관리자)
+// 관리자: 전화번호 등록, 대회 입상 별 정하기
 export async function action({ request, params }: ActionFunctionArgs) {
   const { token } = await requireMember(request);
   const form = await request.formData();
   const count = (k: string) => Number(form.get(k) || 0);
   try {
+    if (form.get("intent") === "phone") {
+      await api(`/admin/users/${params.id}/phone`, {
+        method: "PUT",
+        token,
+        body: { phone: String(form.get("phone") ?? "") || null },
+      });
+      return json({ ok: true, error: null as string | null, intent: "phone" });
+    }
     await api(`/admin/users/${params.id}/award`, {
       method: "PUT",
       token,
@@ -70,10 +81,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         note: String(form.get("note") ?? "") || null,
       },
     });
-    return json({ ok: true, error: null as string | null });
+    return json({ ok: true, error: null as string | null, intent: "award" });
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "저장하지 못했어요.";
-    return json({ ok: false, error: message }, { status: 400 });
+    return json({ ok: false, error: message, intent: String(form.get("intent") || "award") }, { status: 400 });
   }
 }
 
@@ -126,8 +137,50 @@ export default function MemberDetailPage() {
                 {u.award_note ? ` · ${u.award_note}` : ""}
               </p>
             ) : null}
+            {u.phone ? (
+              <a
+                href={telHref(u.phone)}
+                className="btn-ink btn-sm mt-3"
+                aria-label={`${u.name}에게 전화 걸기 (${u.phone})`}
+              >
+                <Phone size={14} strokeWidth={2.4} />
+                {u.phone}
+              </a>
+            ) : null}
           </div>
         </section>
+
+        {/* 전화번호 (관리자만 등록): 회원 목록·프로필에서 눌러 바로 전화 */}
+        {isAdmin ? (
+          <section className="card lg:col-span-2">
+            <h2 className="text-[15px] font-extrabold">전화번호</h2>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+              등록하면 회원 목록과 프로필에 전화 버튼이 생겨 눌러 바로 걸 수 있어요. 비우고 저장하면 지워져요.
+            </p>
+            <Form method="post" className="mt-3 flex flex-wrap items-center gap-2">
+              <input type="hidden" name="intent" value="phone" />
+              <input
+                key={u.phone ?? ""} // 저장하면 정리된 번호(010-1234-5678)로 다시 보인다
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                maxLength={20}
+                defaultValue={u.phone ?? ""}
+                placeholder="010-1234-5678"
+                aria-label={`${u.name} 전화번호`}
+                className="input h-10 min-w-0 flex-1 sm:max-w-xs"
+              />
+              <button className="btn-primary btn-sm !h-10" disabled={saving}>
+                {saving ? "저장 중…" : "저장"}
+              </button>
+            </Form>
+            {actionData?.error && actionData.intent === "phone" ? (
+              <p role="alert" className="alert-error mt-2">
+                {actionData.error}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* 대회 입상 별 (관리자만): 프로필 동그라미 위 금·은·동 별 개수 */}
         {isAdmin ? (
@@ -174,7 +227,7 @@ export default function MemberDetailPage() {
                 {saving ? "저장 중…" : "저장"}
               </button>
             </Form>
-            {actionData?.error ? (
+            {actionData?.error && actionData.intent === "award" ? (
               <p role="alert" className="alert-error mt-2">
                 {actionData.error}
               </p>

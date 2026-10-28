@@ -31,6 +31,7 @@ from ..schemas import (
     MemberDeleteResult,
     MemberTypeUpdate,
     PasswordUpdate,
+    PhoneUpdate,
     PurgePreview,
     PurgeResult,
     UserRead,
@@ -126,6 +127,16 @@ def set_award(user_id: int, payload: AwardUpdate, db: Session = Depends(get_db))
     user = _get_user_or_404(db, user_id)
     user.award_gold, user.award_silver, user.award_bronze = payload.gold, payload.silver, payload.bronze
     user.award_note = payload.note if payload.gold + payload.silver + payload.bronze else None
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.put("/users/{user_id}/phone", response_model=UserRead)
+def set_phone(user_id: int, payload: PhoneUpdate, db: Session = Depends(get_db)):
+    """회원 전화번호 등록·수정 (관리자). 회원 목록에서 눌러 바로 전화를 건다. 비우면 지운다."""
+    user = _get_user_or_404(db, user_id)
+    user.phone = payload.phone
     db.commit()
     db.refresh(user)
     return user

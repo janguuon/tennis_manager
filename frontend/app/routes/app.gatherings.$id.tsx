@@ -321,7 +321,7 @@ function CancelFeeModal({
             type="number"
             inputMode="numeric"
             min={0}
-            step={100}
+            step={club ? 100 : 1}
             className="input"
             placeholder="예: 12000"
             value={fee}
@@ -2318,7 +2318,6 @@ function CourtCancelForm({
           name="fee"
           type="number"
           min="0"
-          step="100"
           className="tile-input min-w-0 flex-1"
           placeholder="취소 수수료 (없으면 0)"
           aria-label="취소 수수료"
@@ -2399,8 +2398,7 @@ function BookingEditForm({
       <input
         name="amount"
         type="number"
-        min="100"
-        step="100"
+        min="1"
         className="tile-input"
         placeholder="코트비"
         aria-label="코트비"
@@ -2698,8 +2696,7 @@ function CourtExpenseTile({
           <input
             name="amount"
             type="number"
-            min="100"
-            step="100"
+            min="1"
             className="tile-input"
             placeholder="코트비"
             aria-label="코트비"

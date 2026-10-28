@@ -149,7 +149,6 @@ export function GatheringFeeFields({
                 name="court_fee"
                 type="number"
                 min="0"
-                step="100"
                 className="input"
                 placeholder="0"
                 value={courtFee}
@@ -165,7 +164,6 @@ export function GatheringFeeFields({
                 name="ball_fee"
                 type="number"
                 min="0"
-                step="100"
                 className="input"
                 placeholder="0"
                 value={ballFee}
@@ -275,8 +273,7 @@ export function GatheringFeeFields({
                   <input
                     name="booking_amount"
                     type="number"
-                    min="100"
-                    step="100"
+                    min="1"
                     className="input row-start-2 sm:row-start-1"
                     placeholder="코트비"
                     aria-label={`${i + 1}번째 코트비`}

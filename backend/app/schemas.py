@@ -340,6 +340,10 @@ class RankingEntry(BaseModel):
 
 
 # --- 모임 / 캘린더 ----------------------------------------------------------
+# 코트 바닥 재질: 하드 · 인조잔디 · 클레이 · 카펫
+CourtSurface = Literal["hard", "turf", "clay", "carpet"]
+
+
 class GatheringBase(BaseModel):
     title: str = Field(..., max_length=200)
     description: str | None = None
@@ -350,6 +354,7 @@ class GatheringBase(BaseModel):
     address: str | None = Field(None, max_length=200, description="코트 주소(선택): 지도 버튼이 먼저 이 주소로 찾는다")
     court_count: int = Field(1, ge=1, description="코트 면 수 = 동시 진행 가능한 대진 수")
     court_numbers: str | None = Field(None, max_length=200, description="실제 코트 번호(쉼표 구분, 예: '3, 5')")
+    court_surface: CourtSurface | None = Field(None, description="코트 바닥 재질(선택). 비우면 같은 장소의 재질")
     court_fairy: str | None = Field(None, max_length=200, description="코트요정(코트를 잡아 준 사람) 이름")
     court_reservers: str | None = Field(
         None, max_length=300, description="예약자명: 코트에서 말할 예약 이름 (예: '3·5번 장미주, 2번 김다빈')"
@@ -551,6 +556,7 @@ class GatheringUpdate(BaseModel):
     address: str | None = Field(None, max_length=200)
     court_count: int | None = Field(None, ge=1)
     court_numbers: str | None = Field(None, max_length=200)
+    court_surface: CourtSurface | None = None
     court_fairy: str | None = Field(None, max_length=200)
     court_reservers: str | None = Field(None, max_length=300)
     max_participants: int | None = Field(None, ge=1)

@@ -16,6 +16,8 @@ export type AttendanceStatus = "attending" | "absent" | "waiting" | "maybe";
 export type GatheringStatus = "planned" | "ongoing" | "completed" | "canceled";
 /** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 일반 벙개 (n빵) */
 export type GatheringKind = "club_regular" | "club_flash" | "flash";
+/** 코트 바닥 재질: 하드 · 인조잔디 · 클레이 · 카펫 */
+export type CourtSurface = "hard" | "turf" | "clay" | "carpet";
 
 export interface User {
   id: number;
@@ -110,6 +112,8 @@ export interface Gathering {
   location: string | null;
   court_count: number;
   court_numbers: string | null;
+  /** 코트 바닥 재질(선택). 같은 장소의 일정끼리 함께 쓴다 */
+  court_surface: CourtSurface | null;
   /** 코트요정: 코트를 잡아 준 사람(들) 이름 */
   court_fairy: string | null;
   /** 코트 주소(선택): 지도 버튼이 장소 이름보다 먼저 쓴다 */

@@ -1,6 +1,8 @@
 import { Star } from "lucide-react";
 import type { ReactNode } from "react";
 import { BallBasket } from "~/components/BallBasket";
+import { COURT_SURFACE_LABEL } from "~/lib/club";
+import type { CourtSurface } from "~/lib/types";
 
 const COLORS = [
   "bg-house-lav",
@@ -128,11 +130,14 @@ export function ClubIllustration() {
     </div>
   );
 }
-export function TennisCourt({ label }: { label: string }) {
+/** 코트 그림. 바닥 재질을 알면 그 색으로 (하드 파랑 · 인조잔디 초록 · 클레이 벽돌색 · 카펫 회색) */
+export function TennisCourt({ label, surface }: { label: string; surface?: CourtSurface | null }) {
+  const kind = surface ? `${COURT_SURFACE_LABEL[surface]} ` : "";
   return (
     <div
       className="tennis-court"
-      aria-label={label ? `${label}번 코트` : "테니스 코트"}
+      data-surface={surface ?? undefined}
+      aria-label={label ? `${label}번 ${kind}코트` : `${kind}테니스 코트`}
     >
       <div className="court-lines" />
       <i className="court-net" />

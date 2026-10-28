@@ -28,7 +28,7 @@ import { NOTICE_ICON } from "~/components/NoticePopup";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
-import { KIND_DOT, isGuest, isStaff, naverMapUrl } from "~/lib/club";
+import { COURT_SURFACE_LABEL, KIND_DOT, isGuest, isStaff, naverMapUrl } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { todayKST, won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -567,6 +567,7 @@ function NextGatheringTile({
         <span>
           {next.location ?? "장소 미정"}
           {next.court_numbers ? ` · ${next.court_numbers}번 코트` : ""}
+          {next.court_surface ? ` · ${COURT_SURFACE_LABEL[next.court_surface]}` : ""}
           {next.court_reservers ? (
             <span className="block">예약자명 {next.court_reservers}</span>
           ) : null}
@@ -729,7 +730,7 @@ function CourtTile({
             }`}
           >
             {labels.slice(0, 6).map((label, i) => (
-              <TennisCourt key={i} label={label} />
+              <TennisCourt key={i} label={label} surface={next.court_surface} />
             ))}
           </div>
           <div className="mt-auto flex items-start justify-between gap-2">
@@ -737,6 +738,7 @@ function CourtTile({
               <h2 className="text-base font-bold">우리의 코트</h2>
               <p className="mt-2 text-xs leading-relaxed text-white/85">
                 {next.location ?? "장소 미정"}
+                {next.court_surface ? ` · ${COURT_SURFACE_LABEL[next.court_surface]} 코트` : ""}
                 {labels.length > 6 ? ` · 외 ${labels.length - 6}면` : ""}
               </p>
             </div>

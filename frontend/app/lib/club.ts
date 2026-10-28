@@ -1,5 +1,5 @@
 // 모임 종류·회원 등급 표기와 권한 (서버·클라이언트 공용)
-import type { GatheringKind, User } from "~/lib/types";
+import type { CourtSurface, GatheringKind, User } from "~/lib/types";
 
 export const KIND_LABEL: Record<GatheringKind, string> = {
   club_regular: "오테식 정모",
@@ -54,6 +54,23 @@ export const KIND_ORDER: GatheringKind[] = [
 ];
 
 export const isClubKind = (kind: GatheringKind) => kind !== "flash";
+
+export const COURT_SURFACES: CourtSurface[] = ["hard", "turf", "clay", "carpet"];
+
+export const COURT_SURFACE_LABEL: Record<CourtSurface, string> = {
+  hard: "하드",
+  turf: "인조잔디",
+  clay: "클레이",
+  carpet: "카펫",
+};
+
+/** 코트 바닥 색 점: 하드 파랑 · 인조잔디 초록 · 클레이 벽돌색 · 카펫 회색 */
+export const COURT_SURFACE_DOT: Record<CourtSurface, string> = {
+  hard: "bg-[#2F5BD3]",
+  turf: "bg-[#3E8E41]",
+  clay: "bg-[#C4562B]",
+  carpet: "bg-slate-500",
+};
 
 /** 네이버 지도 검색 링크: 주소가 있으면 주소로, 없으면 장소 이름으로. 둘 다 없으면 null */
 export function naverMapUrl(g: { address?: string | null; location?: string | null }) {

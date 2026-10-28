@@ -483,31 +483,42 @@ def _clean_address(data: dict) -> None:
         data["address"] = " ".join((data["address"] or "").split()) or None
 
 
-def _fill_address(db: Session, g: Gathering) -> None:
-    """주소가 비어 있으면 같은 장소의 가장 최근 주소로 채운다 (매주 다시 적지 않게)."""
-    if g.address or not g.location:
+# 장소에 딸린 정보: 같은 장소의 일정끼리 함께 쓴다
+PLACE_FIELDS = ("address", "court_surface")
+
+
+def _fill_place(db: Session, g: Gathering, keep=()) -> None:
+    """주소·코트 바닥이 비어 있으면 같은 장소의 가장 최근 값으로 채운다 (매주 다시 적지 않게).
+    keep에 든 항목(이번에 직접 적거나 비운 것)은 건드리지 않는다."""
+    fields = [f for f in PLACE_FIELDS if f not in keep and not getattr(g, f)]
+    if not fields or not g.location:
         return
     for other in db.scalars(
         select(Gathering)
-        .where(Gathering.address.is_not(None), Gathering.location.is_not(None))
+        .where(Gathering.location.is_not(None), Gathering.id != g.id)
         .order_by(Gathering.event_date.desc(), Gathering.id.desc())
     ):
-        if _place(other.location) == _place(g.location):
-            g.address = other.address
+        if _place(other.location) != _place(g.location):
+            continue
+        for f in [f for f in fields if getattr(other, f)]:
+            setattr(g, f, getattr(other, f))
+            fields.remove(f)
+        if not fields:
             return
 
 
-def _share_address(db: Session, g: Gathering) -> None:
-    """주소를 적으면 같은 장소인데 주소가 없는 다른 일정에도 채운다. (flush 뒤에 부른다)"""
-    if not g.address or not g.location:
+def _share_place(db: Session, g: Gathering) -> None:
+    """주소·코트 바닥을 적으면 같은 장소인데 비어 있는 다른 일정에도 채운다. (flush 뒤에 부른다)"""
+    fields = [f for f in PLACE_FIELDS if getattr(g, f)]
+    if not fields or not g.location:
         return
     for other in db.scalars(
-        select(Gathering).where(
-            Gathering.address.is_(None), Gathering.location.is_not(None), Gathering.id != g.id
-        )
+        select(Gathering).where(Gathering.location.is_not(None), Gathering.id != g.id)
     ):
         if _place(other.location) == _place(g.location):
-            other.address = g.address
+            for f in fields:
+                if not getattr(other, f):
+                    setattr(other, f, getattr(g, f))
 
 
 def _normalize_courts(data: dict) -> None:
@@ -636,7 +647,7 @@ def create_gathering(
     gathering = Gathering(**data, created_by=current_user.id)
     _apply_kind_rules(gathering)
     _fill_club_account(db, gathering)
-    _fill_address(db, gathering)
+    _fill_place(db, gathering)
     fairies = []
     for b in bookings:
         fairies.append(require_booker(db, b["booker_id"]).name)
@@ -649,7 +660,7 @@ def create_gathering(
         _open_early([gathering])
     db.add(gathering)
     db.flush()
-    _share_address(db, gathering)
+    _share_place(db, gathering)
     db.commit()
     return _to_read(_load_gathering(db, gathering.id))
 
@@ -760,7 +771,7 @@ async def import_gatherings(
             gathering = Gathering(**d, created_by=current_user.id)
             _apply_kind_rules(gathering)
             _fill_club_account(db, gathering)
-            _fill_address(db, gathering)
+            _fill_place(db, gathering)
             db.add(gathering)
             made.append(gathering)
         except ValidationError as ve:
@@ -775,7 +786,7 @@ async def import_gatherings(
 
     db.flush()
     for g in made:
-        _share_address(db, g)
+        _share_place(db, g)
     db.commit()
     result = GatheringImportResult(
         created=len(made), failed=len(errors), errors=errors, items=_import_items(made)
@@ -1097,7 +1108,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             address=next((" ".join(r.address.split()) for r in group.rows if r.address), None),
             created_by=current_user.id,
         )
-        _fill_address(db, gathering)
+        _fill_place(db, gathering)
         if club:
             gathering.guest_fee = GUEST_FEE_DEFAULT
             fill_club_account(gathering, club_account)
@@ -1134,7 +1145,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
 
     db.flush()
     for g in made:
-        _share_address(db, g)
+        _share_place(db, g)
     db.commit()
     notices = (
         [f"일반 벙개({', '.join(no_account)})는 입금 계좌가 비어 있어요. 모임 수정에서 계좌를 적어 주세요."]
@@ -1243,10 +1254,10 @@ def update_gathering(
         setattr(g, field_name, value)
     _apply_kind_rules(g)
     _fill_club_account(db, g)  # 오테식 모임으로 바꿨거나 계좌를 비우면 모임 통장
-    if "location" in data and "address" not in data and not g.address:
-        _fill_address(db, g)  # 장소를 바꿨으면 그 장소의 주소로
+    if "location" in data:
+        _fill_place(db, g, keep=data)  # 장소를 바꿨으면 그 장소의 주소·코트 바닥으로
     db.flush()
-    _share_address(db, g)
+    _share_place(db, g)
     if "max_participants" in data:
         promote_waiting(db, g)  # 정원을 늘리거나 없애면 대기자가 올라간다
     db.commit()

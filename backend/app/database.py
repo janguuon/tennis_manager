@@ -90,6 +90,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     # 코트 취소와 취소 수수료
     ("court_bookings", "canceled_at", "canceled_at DATETIME"),
     ("court_bookings", "cancel_fee", "cancel_fee INTEGER NOT NULL DEFAULT 0"),
+    # 코트 바닥 재질
+    ("gatherings", "court_surface", "court_surface VARCHAR(20)"),
 ]
 
 

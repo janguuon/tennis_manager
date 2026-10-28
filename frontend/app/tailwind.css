@@ -636,6 +636,15 @@
   background: #4465c0;
   color: white;
 }
+.tennis-court[data-surface="turf"] {
+  background: #3f8a4b;
+}
+.tennis-court[data-surface="clay"] {
+  background: #c25a2e;
+}
+.tennis-court[data-surface="carpet"] {
+  background: #5d6470;
+}
 .court-lines {
   position: absolute;
   inset: 0 13%;
@@ -935,6 +944,20 @@
   }
   .kind-option.is-locked {
     @apply cursor-not-allowed opacity-50 hover:border-slate-200 dark:hover:border-slate-700;
+  }
+  /* 코트 바닥 고르기 (일정 등록·수정) */
+  .surface-option {
+    @apply inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] border-slate-200 bg-paper px-3.5 text-[13px] font-bold transition-colors
+      hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500;
+  }
+  .surface-option > i {
+    @apply block h-2 w-2 rounded-full;
+  }
+  .surface-option.is-selected {
+    @apply border-ink bg-white dark:border-white dark:bg-slate-800;
+  }
+  .surface-option:focus-within {
+    @apply ring-[3px] ring-house-yellow;
   }
   /* 원색 타일 안 입력칸: 다크 모드에서도 밝게 */
   .tile-input {

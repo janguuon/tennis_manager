@@ -3,7 +3,7 @@ import { ArrowUpRight, Lock, Users } from "lucide-react";
 
 import { MemberAvatar } from "~/components/Club";
 import { MyVotePill } from "~/components/MyVote";
-import { KIND_BADGE, KIND_DOT, KIND_LABEL, isClubKind } from "~/lib/club";
+import { COURT_SURFACE_LABEL, KIND_BADGE, KIND_DOT, KIND_LABEL, isClubKind } from "~/lib/club";
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
 import type { AttendeeBrief, Gathering, Me } from "~/lib/types";
@@ -27,7 +27,9 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
         : g.fee > 0
           ? `총 ${won(g.fee)}`
           : "",
-    `코트 ${g.court_numbers ? g.court_numbers : `${g.court_count}면`}`,
+    `${g.court_surface ? `${COURT_SURFACE_LABEL[g.court_surface]} ` : ""}코트 ${
+      g.court_numbers ? g.court_numbers : `${g.court_count}면`
+    }`,
   ].filter(Boolean);
 
   return (

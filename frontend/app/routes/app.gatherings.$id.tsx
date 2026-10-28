@@ -42,11 +42,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
+import { CourtSurfaceField, CourtSurfaceTag } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import {
+  COURT_SURFACE_LABEL,
   KIND_LABEL,
   canSettle,
   isClubKind,
@@ -614,6 +616,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           location: get("location") || null,
           address: get("address") || null,
           court_numbers: courtNumbers || null,
+          court_surface: get("court_surface") || null,
           // 오테식 모임은 코트요정 칸이 없다(지급 내역에서 맞춘다) → 보내지 않아 그대로 둔다
           ...(formData.has("court_fairy")
             ? { court_fairy: get("court_fairy") || null }
@@ -831,7 +834,7 @@ export default function GatheringDetailPage() {
       gathering.court_numbers
         ? `${gathering.court_numbers} (${gathering.court_count}면)`
         : `${gathering.court_count}면`
-    }`,
+    }${gathering.court_surface ? ` · ${COURT_SURFACE_LABEL[gathering.court_surface]}` : ""}`,
     club
       ? `💸 회비 지출${
           gathering.guest_fee > 0
@@ -1125,11 +1128,14 @@ export default function GatheringDetailPage() {
             {gathering.address ? (
               <p className="pl-6 text-[12px] opacity-80">{gathering.address}</p>
             ) : null}
-            <p className="pl-6">
-              {gathering.court_numbers
-                ? `${gathering.court_numbers}번 코트`
-                : `코트 ${gathering.court_count}면`}{" "}
-              · 총 {gathering.court_count}면
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6">
+              <span>
+                {gathering.court_numbers
+                  ? `${gathering.court_numbers}번 코트`
+                  : `코트 ${gathering.court_count}면`}{" "}
+                · 총 {gathering.court_count}면
+              </span>
+              {gathering.court_surface ? <CourtSurfaceTag surface={gathering.court_surface} /> : null}
             </p>
             {gathering.court_reservers ? (
               <p className="pl-6">예약자명 {gathering.court_reservers}</p>
@@ -2076,6 +2082,10 @@ export default function GatheringDetailPage() {
                         defaultValue={gathering.court_numbers ?? ""}
                       />
                     </div>
+                    <CourtSurfaceField
+                      defaultValue={gathering.court_surface}
+                      hint="한 번 고르면 같은 장소인데 바닥이 비어 있는 일정에도 들어가요."
+                    />
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label" htmlFor="e_count">

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { CourtSurfaceField } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
 import { CalendarLegend, KindVoteDot, MyVoteChip } from "~/components/MyVote";
@@ -205,6 +206,8 @@ export async function action({ request }: ActionFunctionArgs) {
     location: get("location") || null,
     address: get("address") || null,
     court_numbers: courtNumbers || null,
+    // 모름이면 같은 장소에서 고른 바닥이 들어간다 (서버)
+    court_surface: get("court_surface") || null,
     court_fairy: get("court_fairy") || null,
     court_reservers: get("court_reservers") || null,
     // 코트 번호를 적었으면 면수는 자동(백엔드 계산), 아니면 직접 입력값 사용
@@ -986,6 +989,7 @@ export default function CalendarPage() {
                         쉼표로 나눠 적으면 그 수만큼 동시에 경기를 진행해요.
                       </p>
                     </div>
+                    <CourtSurfaceField hint="모름으로 두면 같은 장소에서 골랐던 바닥이 들어가요." />
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="label" htmlFor="court_count">

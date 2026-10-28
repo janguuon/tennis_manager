@@ -15,6 +15,8 @@ from .auth import nickname_taken
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+PHONE_ADMIN_ONLY = "연락처는 관리자가 등록해요. 바꾸려면 관리자에게 말해 주세요."
+
 
 @router.get("/me", response_model=UserMe)
 def read_my_profile(current_user: User = Depends(get_current_user)):
@@ -28,8 +30,11 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """프로필 수정: 전달된 필드만 부분 갱신한다."""
+    """프로필 수정: 전달된 필드만 부분 갱신한다. 연락처는 관리자만 바꾼다 (회원 목록의 전화 버튼에 쓰인다)."""
     data = payload.model_dump(exclude_unset=True)
+
+    if "phone" in data and data["phone"] != current_user.phone and not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=PHONE_ADMIN_ONLY)
 
     # 닉네임 변경 시 중복 검사 (앞뒤 공백·대소문자 무시, 빈 칸이면 닉네임 지우기)
     if "nickname" in data:

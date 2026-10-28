@@ -48,7 +48,8 @@ export async function action({ request }: ActionFunctionArgs) {
       // 성별은 비울 수 없다: 고르지 않았으면 보내지 않아 그대로 둔다
       gender: get("gender") || undefined,
       ntrp: get("ntrp") ? Number(get("ntrp")) : null,
-      phone: get("phone") || null,
+      // 연락처는 관리자만 고친다: 칸이 있을 때(관리자)만 보낸다
+      ...(formData.has("phone") ? { phone: get("phone") || null } : {}),
       bio: get("bio") || null,
     };
     try {
@@ -228,15 +229,31 @@ export default function MyPage() {
             <label className="label" htmlFor="phone">
               연락처
             </label>
-            <input
-              id="phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              className="input"
-              placeholder="010-1234-5678"
-              defaultValue={user.phone ?? ""}
-            />
+            {user.is_admin ? (
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                className="input"
+                placeholder="010-1234-5678"
+                defaultValue={user.phone ?? ""}
+              />
+            ) : (
+              <>
+                <input
+                  id="phone"
+                  className="input"
+                  value={user.phone ?? ""}
+                  placeholder="아직 등록되지 않았어요"
+                  readOnly
+                  disabled
+                />
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  연락처는 관리자가 등록해요. 바꾸려면 관리자에게 말해 주세요.
+                </p>
+              </>
+            )}
           </div>
           <div>
             <label className="label" htmlFor="bio">

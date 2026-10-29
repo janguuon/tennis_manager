@@ -133,10 +133,12 @@ def get_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """특정 회원 프로필 조회. 게스트는 자기 프로필만."""
+    """특정 회원 프로필 조회. 게스트는 자기 프로필만.
+    탈퇴했거나 승인 전인 사람은 관리자만 본다 (회원 목록에 없는 사람의 연락처가 보이지 않게)."""
     if current_user.is_guest and current_user.id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     user = db.get(User, user_id)
-    if not user:
+    listed = user is not None and user.is_active and user.approval_status == ApprovalStatus.APPROVED
+    if not user or not (listed or current_user.is_admin or user.id == current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="회원을 찾을 수 없습니다.")
     return user

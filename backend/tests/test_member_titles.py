@@ -1,4 +1,4 @@
-"""임원진 직함(회장·부회장·고문·경기이사·총무·부총무): 정하기, 권한, 회원 목록 순서."""
+"""임원진 직함(회장·부회장·고문·경기이사·총무·부총무): 정하기, 권한, 회원 목록 순서. 목록에 없는 사람의 프로필."""
 from datetime import datetime
 
 from app.database import SessionLocal
@@ -61,3 +61,24 @@ def test_member_list_orders_titles_then_join_date_then_guests(club):
         names = [u["username"] for u in club.c.get("/users", headers=club.h(who)).json()]
         assert names == ["pre", "vic", "adv", "mat", "tre", "vtr", "off", "m_a", "admin1", "m_b", "gu1", "gu2"]
 
+
+def test_unlisted_profiles_are_admin_only(club):
+    club.add_members("amy", "ben")
+    club.c.put(f"/admin/users/{club.ids['amy']}/phone", json={"phone": "01012345678"}, headers=club.admin)
+    # 기록이 있어 탈퇴 처리된 회원
+    gid = club.gathering(fee=10000)
+    club.vote(gid, "amy")
+    club.pay(gid, "amy")
+    assert club.c.delete(f"/admin/users/{club.ids['amy']}", headers=club.admin).json()["result"] == "deactivated"
+    # 승인 전인 가입 신청자
+    club.c.post("/auth/signup", json={"gender": "male", "username": "new", "password": "1234", "name": "new"})
+    [pending] = club.c.get("/admin/signups/pending", headers=club.admin).json()
+
+    for uid in (club.ids["amy"], pending["id"]):
+        assert club.c.get(f"/users/{uid}", headers=club.headers["ben"]).status_code == 404
+        assert club.c.get(f"/users/{uid}", headers=club.admin).status_code == 200
+    assert club.c.get(f"/users/{club.ids['amy']}", headers=club.admin).json()["phone"] == "010-1234-5678"
+    # 목록에 있는 회원과 내 프로필은 그대로
+    admin_id = club.c.get("/users/me", headers=club.admin).json()["id"]
+    assert club.c.get(f"/users/{admin_id}", headers=club.headers["ben"]).status_code == 200
+    assert club.c.get(f"/users/{club.ids['ben']}", headers=club.headers["ben"]).status_code == 200

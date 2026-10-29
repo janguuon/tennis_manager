@@ -14,10 +14,29 @@ export async function requireMember(request: Request) {
   return { token, me };
 }
 
-/** 회원 목록(코트요정 고르기용). 게스트는 볼 수 없어 빈 목록이다. */
+/**
+ * 회원 목록(코트요정 고르기용). 게스트는 볼 수 없어 빈 목록이다.
+ * 고르는 데 쓰는 칸만 남긴다: 전화번호·이메일 같은 연락처가 페이지 데이터로 브라우저에 가지 않게.
+ */
 export async function membersOrEmpty(token: string): Promise<UserBrief[]> {
   try {
-    return await api<UserBrief[]>("/users", { token });
+    const members = await api<UserBrief[]>("/users", { token });
+    return members.map((m) => ({
+      id: m.id,
+      username: m.username,
+      name: m.name,
+      nickname: m.nickname,
+      gender: m.gender,
+      ntrp: m.ntrp,
+      member_type: m.member_type,
+      avatar_url: m.avatar_url,
+      invited_by_id: m.invited_by_id,
+      invited_by_name: m.invited_by_name,
+      award_gold: m.award_gold,
+      award_silver: m.award_silver,
+      award_bronze: m.award_bronze,
+      award_note: m.award_note,
+    }));
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) return [];
     throw err;

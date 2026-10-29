@@ -33,6 +33,7 @@ import { FEATURES, canSeeRecords } from "~/lib/features";
 import { todayKST, won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import { WEEKDAYS, formatOpenAt } from "~/lib/status";
+import { useSwipeNav } from "~/lib/swipe";
 import type {
   AttendanceStatus,
   Gathering,
@@ -455,7 +456,7 @@ function NextGatheringTile({
   myDue,
 }: {
   next: GatheringDetail | null;
-  /** 다가오는 모임 중 몇 번째(0부터)를 보여 주는지, 모두 몇 개인지 (‹ › 로 넘겨 보기) */
+  /** 다가오는 모임 중 몇 번째(0부터)를 보여 주는지, 모두 몇 개인지 (‹ › 나 좌우로 밀어 넘겨 보기) */
   index: number;
   total: number;
   today: string;
@@ -463,6 +464,10 @@ function NextGatheringTile({
   myDue: number;
 }) {
   const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  // ‹ › 와 같은 곳: 휴대폰에서는 카드를 좌우로 밀어 넘긴다
+  const prevHref = index > 0 ? (index - 1 === 0 ? "/app" : `/app?n=${index - 1}`) : null;
+  const nextHref = index < total - 1 ? `/app?n=${index + 1}` : null;
+  const swipeRef = useSwipeNav(prevHref, nextHref, { preventScrollReset: true });
   if (!next)
     return (
       <section className="tile-orange home-next">
@@ -504,7 +509,7 @@ function NextGatheringTile({
     !me.is_admin && me.member_type === "guest" && !next.guest_vote_open && next.created_by !== me.id;
   const href = `/app/gatherings/${next.id}?from=${next.event_date}`;
   return (
-    <section className="tile-orange home-next">
+    <section ref={swipeRef} className="tile-orange home-next">
       <div className="relative z-10 flex items-center justify-between gap-3">
         <Eyebrow>
           NEXT MATCH / {m}.{String(d).padStart(2, "0")}
@@ -513,7 +518,7 @@ function NextGatheringTile({
           {total > 1 ? (
             <span className="flex items-center rounded-full bg-white/25">
               <Link
-                to={index - 1 <= 0 ? "/app" : `/app?n=${index - 1}`}
+                to={prevHref ?? "/app"}
                 preventScrollReset
                 aria-label="이전 모임"
                 aria-disabled={index === 0}
@@ -527,7 +532,7 @@ function NextGatheringTile({
                 {index + 1}/{total}
               </span>
               <Link
-                to={`/app?n=${index + 1}`}
+                to={nextHref ?? `/app?n=${index}`}
                 preventScrollReset
                 aria-label="다음 모임"
                 aria-disabled={index >= total - 1}

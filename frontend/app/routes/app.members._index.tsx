@@ -7,6 +7,7 @@ import { MemberAvatar, memberColor } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 
 import { api } from "~/lib/api.server";
+import { isOfficer } from "~/lib/club";
 import { telHref } from "~/lib/format";
 import { requireMember } from "~/lib/guard.server";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
@@ -16,7 +17,9 @@ export const meta: MetaFunction = () => [{ title: "회원 · 오테식 매니저
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { token } = await requireMember(request);
-  const members = await api<User[]>("/users", { token });
+  // 서버가 임원진 직함순 → 정회원(가입순) → 게스트로 준다.
+  // 관리자 계정은 회원 탭에 싣지 않는다 (직함이 있는 관리자는 그 직함으로 나온다)
+  const members = (await api<User[]>("/users", { token })).filter((m) => !m.is_admin || isOfficer(m));
   return json({ members });
 }
 
@@ -44,9 +47,10 @@ export default function MembersPage() {
                     user={m}
                     className="absolute bottom-4 z-10 !h-12 !w-12 border-2 border-white/50 !bg-white/35 !text-lg"
                   />
-                  {m.is_admin || m.member_type !== "member" ? (
+                  {/* 임원진은 직함 (목록도 직함순), 게스트는 "게스트" */}
+                  {m.member_type !== "member" ? (
                     <span className="chip-ink absolute right-3 top-3 z-10 !text-[10px]">
-                      {m.is_admin ? "관리자" : MEMBER_TYPE_LABEL[m.member_type]}
+                      {MEMBER_TYPE_LABEL[m.member_type]}
                     </span>
                   ) : null}
                 </div>

@@ -28,7 +28,8 @@ import { requireToken } from "~/lib/session.server";
 import { MEMBER_TYPE_LABEL, withRo } from "~/lib/status";
 import type { ClubAccount, MemberType, User } from "~/lib/types";
 
-const MEMBER_TYPES: MemberType[] = ["treasurer", "officer", "member", "guest"];
+// 임원진 직함순 → 정회원 → 게스트
+const MEMBER_TYPES = Object.keys(MEMBER_TYPE_LABEL) as MemberType[];
 
 /** 탈퇴 회원을 완전히 지울 때 함께 지워지는 것 (서버 PurgePreview) */
 type PurgePreview = {

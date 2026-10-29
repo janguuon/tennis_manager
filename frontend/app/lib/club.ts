@@ -1,5 +1,5 @@
 // 모임 종류·회원 등급 표기와 권한 (서버·클라이언트 공용)
-import type { CourtSurface, GatheringKind, User } from "~/lib/types";
+import type { CourtSurface, GatheringKind, MemberType, User } from "~/lib/types";
 
 export const KIND_LABEL: Record<GatheringKind, string> = {
   club_regular: "오테식 정모",
@@ -82,9 +82,21 @@ export function naverMapUrl(g: { address?: string | null; location?: string | nu
 export const isGuest = (u: Pick<User, "is_admin" | "member_type">) =>
   !u.is_admin && u.member_type === "guest";
 
-/** 관리자·임원진·총무: 오테식 모임 생성·운영, 대진, 일정 먼저 보기 (서버 User.is_staff) */
-export const isStaff = (u: Pick<User, "is_admin" | "member_type">) =>
-  u.is_admin || u.member_type === "officer" || u.member_type === "treasurer";
+/** 임원진 직함 (서버 OFFICER_TYPES). 모두 임원진 권한이고, 정산은 총무만 한다 */
+export const OFFICER_TYPES: MemberType[] = [
+  "president",
+  "vice_president",
+  "advisor",
+  "match_director",
+  "treasurer",
+  "vice_treasurer",
+  "officer",
+];
+
+export const isOfficer = (u: Pick<User, "member_type">) => OFFICER_TYPES.includes(u.member_type);
+
+/** 관리자·임원진(회장·부회장·고문·경기이사·총무·부총무 포함): 오테식 모임 생성·운영, 대진, 일정 먼저 보기 (서버 User.is_staff) */
+export const isStaff = (u: Pick<User, "is_admin" | "member_type">) => u.is_admin || isOfficer(u);
 
 /** 관리자·총무: 정산(오테식 모임 입금 확인, 코트비 지급·지급 내역, 예약자 계좌) (서버 User.can_settle) */
 export const canSettle = (u: Pick<User, "is_admin" | "member_type">) =>

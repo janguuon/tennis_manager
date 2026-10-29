@@ -17,9 +17,14 @@ export const GATHERING_STATUS_BADGE: Record<GatheringStatus, string> = {
 
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-/** 회원 구분 이름 */
+/** 회원 구분 이름 (적은 순서 = 회원 목록 순서, 서버 MemberType과 같다) */
 export const MEMBER_TYPE_LABEL: Record<MemberType, string> = {
+  president: "회장",
+  vice_president: "부회장",
+  advisor: "고문",
+  match_director: "경기이사",
   treasurer: "총무",
+  vice_treasurer: "부총무",
   officer: "임원진",
   member: "정회원",
   guest: "게스트",

@@ -2,13 +2,13 @@
 회원 라우터: 내 프로필 조회/수정, 회원 목록/단건 조회.
 """
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from .. import avatars
 from ..database import get_db
 from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_user
-from ..models import ApprovalStatus, User
+from ..models import ApprovalStatus, MemberType, User
 from ..schemas import PasswordUpdate, UserMe, UserRead, UserUpdate
 from ..security import hash_password
 from .auth import nickname_taken
@@ -16,6 +16,9 @@ from .auth import nickname_taken
 router = APIRouter(prefix="/users", tags=["users"])
 
 PHONE_ADMIN_ONLY = "연락처는 관리자가 등록해요. 바꾸려면 관리자에게 말해 주세요."
+
+# 회원 목록 순서: 회장·부회장·고문·경기이사·총무·부총무·임원진 → 정회원 → 게스트 (MemberType 정의 순서)
+MEMBER_RANK = case(*((User.member_type == t, i) for i, t in enumerate(MemberType)), else_=len(MemberType))
 
 
 @router.get("/me", response_model=UserMe)
@@ -109,13 +112,15 @@ def list_members(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_member),
 ):
-    """팀 회원 목록 (승인된 활성 회원만). 게스트는 볼 수 없다."""
+    """팀 회원 목록 (승인된 활성 회원만). 게스트는 볼 수 없다.
+    임원진 직함순, 같은 구분 안에서는 먼저 가입한 회원부터."""
     users = db.scalars(
         select(User)
         .where(
             User.is_active.is_(True),
             User.approval_status == ApprovalStatus.APPROVED,
         )
+        .order_by(MEMBER_RANK, User.created_at, User.id)
         .offset(skip)
         .limit(limit)
     ).all()

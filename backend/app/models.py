@@ -81,12 +81,30 @@ class MemberType(str, enum.Enum):
     """
     회원 구분 (회칙 제3조). 관리자(is_admin)와 별개로 관리자가 지정한다.
     일정이 보이는 시점(app/visibility.py)과 정산 권한·금액이 다르다.
+    적은 순서가 회원 목록 순서다 (임원진 직함순 → 정회원 → 게스트).
     """
 
+    # 임원진 (OFFICER_TYPES): 모두 임원진 권한이고, 정산은 총무만 한다 (회칙 제8조)
+    PRESIDENT = "president"  # 회장
+    VICE_PRESIDENT = "vice_president"  # 부회장
+    ADVISOR = "advisor"  # 고문
+    MATCH_DIRECTOR = "match_director"  # 경기이사
     TREASURER = "treasurer"  # 총무: 임원진 권한 + 정산(입금 확인·코트비 지급)
+    VICE_TREASURER = "vice_treasurer"  # 부총무
     OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개 생성·운영, 대진
     MEMBER = "member"     # 정회원: 전주 금요일 오전 10시부터 (다음 주 월~일 일정)
     GUEST = "guest"       # 게스트: 모임 3일 전 0시부터, 오테식 모임 참석 시 게스트비
+
+
+OFFICER_TYPES = (
+    MemberType.PRESIDENT,
+    MemberType.VICE_PRESIDENT,
+    MemberType.ADVISOR,
+    MemberType.MATCH_DIRECTOR,
+    MemberType.TREASURER,
+    MemberType.VICE_TREASURER,
+    MemberType.OFFICER,
+)
 
 
 class AttendanceStatus(str, enum.Enum):
@@ -190,8 +208,8 @@ class User(Base):
 
     @property
     def is_staff(self) -> bool:
-        """관리자·임원진·총무: 오테식 모임 생성·운영, 대진, 일정 먼저 보기."""
-        return self.is_admin or self.member_type in (MemberType.OFFICER, MemberType.TREASURER)
+        """관리자·임원진(회장·부회장·고문·경기이사·총무·부총무 포함): 오테식 모임 생성·운영, 대진, 일정 먼저 보기."""
+        return self.is_admin or self.member_type in OFFICER_TYPES
 
     @property
     def can_settle(self) -> bool:

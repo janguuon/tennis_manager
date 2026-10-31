@@ -691,6 +691,8 @@ export default function GatheringDetailPage() {
   const canCancel = !guest && (staff || (!club && gathering.created_by === user.id));
   // 참석 취소 대신 해 주기(3일 전 마감 뒤 요청 처리): 주최자, 그리고 관리자·임원진·총무는 모든 모임에서
   const canManageAttendance = (isOrganizer || staff) && !canceled;
+  // 대진 점수 입력·고치기: 주최자·관리자·임원진(모든 모임), 그리고 그 경기에 뛴 선수 (서버와 같음)
+  const canScore = (m: DrawMatch) => !guest && (isOrganizer || staff || m.slot_ids.includes(user.id));
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
   const settle = canSettle(user);
   const canPay = settle || (!club && !guest && gathering.created_by === user.id);
@@ -1890,7 +1892,7 @@ export default function GatheringDetailPage() {
                       <DrawMatchRow
                         key={m.id}
                         match={m}
-                        canRecord={isOrganizer}
+                        canRecord={canScore(m)}
                         courtLabels={courtLabels}
                         club={club}
                         edit={

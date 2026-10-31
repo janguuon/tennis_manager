@@ -157,7 +157,7 @@ def _require_organizer(db: Session, gathering_id: int, user: User) -> Gathering:
     g = db.get(Gathering, gathering_id)
     if not g:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
-    # 모임 관리 권한과 같다: 오테식 모임은 클럽 일정이라 임원진도 대진을 짜고 결과를 입력한다.
+    # 모임 관리 권한과 같다: 오테식 모임은 클럽 일정이라 임원진도 대진을 짠다 (점수 입력은 _require_scorer).
     # 게스트는 보기와 투표만 한다
     if not user.is_guest and (g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff)):
         return g
@@ -186,6 +186,19 @@ def _require_editor(db: Session, gathering_id: int, user: User) -> Gathering:
     if attending is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="이 모임 참석자만 대진을 바꿀 수 있어요.")
     return g
+
+
+def _require_scorer(db: Session, dm: DrawMatch, user: User) -> Gathering:
+    """점수 입력·고치기·지우기: 주최자·관리자·임원진(모든 모임), 그리고 그 경기에 뛴 선수. 게스트는 보기만."""
+    draw = db.get(Draw, dm.draw_id)
+    g = db.get(Gathering, draw.gathering_id)
+    if not g:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
+    if user.is_guest:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
+    if g.created_by == user.id or user.is_staff or user.id in _draw_match_player_ids(dm):
+        return g
+    raise HTTPException(status.HTTP_403_FORBIDDEN, detail="이 경기에 뛴 선수와 운영진만 점수를 입력할 수 있어요.")
 
 
 def _retype(dm: DrawMatch, genders: dict) -> None:
@@ -495,8 +508,7 @@ def record_draw_match_result(
     dm = db.get(DrawMatch, draw_match_id)
     if not dm:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
-    draw = db.get(Draw, dm.draw_id)
-    gathering = _require_organizer(db, draw.gathering_id, current_user)
+    gathering = _require_scorer(db, dm, current_user)
 
     if dm.result_match_id is not None:
         raise HTTPException(
@@ -550,12 +562,11 @@ def record_draw_match_result(
 
 
 def _recorded(db: Session, draw_match_id: int, user: User) -> tuple[DrawMatch, Match, Gathering]:
-    """결과가 입력된 대진 경기와 그 결과, 모임. 결과를 입력할 수 있는 사람(주최자·관리자·오테식 모임 임원진)만."""
+    """결과가 입력된 대진 경기와 그 결과, 모임. 점수를 입력할 수 있는 사람(운영진, 그 경기에 뛴 선수)만."""
     dm = db.get(DrawMatch, draw_match_id)
     if not dm:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
-    draw = db.get(Draw, dm.draw_id)
-    gathering = _require_organizer(db, draw.gathering_id, user)
+    gathering = _require_scorer(db, dm, user)
     match = db.get(Match, dm.result_match_id) if dm.result_match_id else None
     if match is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="아직 결과가 입력되지 않은 경기예요.")

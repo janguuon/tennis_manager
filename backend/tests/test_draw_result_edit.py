@@ -1,4 +1,4 @@
-"""대진 결과 고치기·지우기: 결과를 입력할 수 있는 사람만, 전적·티어에 바로 반영된다."""
+"""대진 결과 고치기·지우기: 점수를 입력할 수 있는 사람만, 전적·티어에 바로 반영된다."""
 from test_ratings_api import PLAYERS, generate, record, setup_club
 
 
@@ -16,8 +16,9 @@ def test_edit_and_delete_recorded_result(club):
     assert _stats(club, t1[0])["wins"] == 1
 
     url = f"/draw-matches/{dm['id']}/result"
-    # 정회원은 못 고친다, 임원진(오테식 모임)은 고친다
-    assert club.c.patch(url, json={"team1_score": 3, "team2_score": 6}, headers=club.h(PLAYERS[0])).status_code == 403
+    # 이 경기에 안 뛴 정회원은 못 고친다, 임원진은 고친다
+    bench = next(n for n in PLAYERS if n not in t1 + [u["username"] for u in dm["team2"]])
+    assert club.c.patch(url, json={"team1_score": 3, "team2_score": 6}, headers=club.h(bench)).status_code == 403
     r = club.c.patch(url, json={"team1_score": 3, "team2_score": 6}, headers=club.h("off"))
     assert r.status_code == 200 and (r.json()["team1_score"], r.json()["team2_score"]) == (3, 6)
     # 승패가 뒤집혀 전적에 바로 반영

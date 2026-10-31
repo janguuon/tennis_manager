@@ -92,6 +92,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("court_bookings", "cancel_fee", "cancel_fee INTEGER NOT NULL DEFAULT 0"),
     # 코트 바닥 재질
     ("gatherings", "court_surface", "court_surface VARCHAR(20)"),
+    # 청백전 최종 승리팀
+    ("tournaments", "winner_team", "winner_team VARCHAR(10)"),
 ]
 
 

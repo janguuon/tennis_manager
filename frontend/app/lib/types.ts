@@ -437,6 +437,8 @@ export interface Notice {
 export type TournamentKind = "team_battle" | "singles" | "doubles";
 /** 청백전 팀: 청팀 · 백팀 */
 export type TeamColor = "blue" | "white";
+/** 청백전 최종 결과: 청팀 승 · 백팀 승 · 무승부 */
+export type TeamResult = TeamColor | "draw";
 
 export interface TournamentEntry {
   id: number;
@@ -486,6 +488,8 @@ export interface TournamentSummary {
   played: number;
   total: number;
   score: TeamBattleScore | null;
+  /** 청백전 최종 결과 (운영진이 정한다) */
+  winner_team: TeamResult | null;
   champion: UserBrief[] | null;
 }
 

@@ -17,6 +17,7 @@ import {
   TOURNAMENT_KIND_BADGE,
   TOURNAMENT_KIND_HINT,
   TOURNAMENT_KIND_LABEL,
+  TEAM_RESULT_LABEL,
   entryName,
   tournamentStatus,
 } from "~/lib/tournament";
@@ -134,6 +135,11 @@ function TournamentCard({ t }: { t: TournamentSummary }) {
           {t.score.draws ? (
             <span className="text-xs font-semibold text-slate-500">무승부 {t.score.draws}</span>
           ) : null}
+        </p>
+      ) : null}
+      {t.winner_team ? (
+        <p className="flex items-center gap-2 text-sm font-bold">
+          <Trophy size={16} className="text-[#C9A227]" /> 최종 {TEAM_RESULT_LABEL[t.winner_team]}
         </p>
       ) : null}
       {t.champion ? (

@@ -157,6 +157,9 @@ def test_team_battle_matches_and_scores(club):
     assert club.c.post(url, json=wrong, headers=club.h("blu1")).status_code == 400
     uneven = {"blue_ids": [club.ids["blu1"]], "white_ids": [club.ids["whi1"], club.ids["whi2"]]}
     assert club.c.post(url, json=uneven, headers=club.h("blu1")).status_code == 400
+    twice = {"blue_ids": [club.ids["blu1"], club.ids["blu1"]], "white_ids": [club.ids["whi1"], club.ids["whi2"]]}
+    r = club.c.post(url, json=twice, headers=club.h("blu1"))
+    assert r.status_code == 400 and "같은 사람" in r.json()["detail"]
     t = club.c.post(url, json=body, headers=club.h("blu1")).json()
     [first] = t["matches"]
     assert first["match_type"] == "mens_doubles"
@@ -347,3 +350,23 @@ def test_random_team_battle_round_avoids_mismatched_doubles(club):
         t = club.c.post(f"/tournaments/{t['id']}/matches/random", json={"match_type": "doubles"}, headers=club.admin).json()
     assert len(t["matches"]) == 10
     assert Counter(m["match_type"] for m in t["matches"])["open_doubles"] == 0
+
+
+def test_team_battle_final_winner(club):
+    """청백전 최종 승리팀은 운영진이 정한다 (승수와 상관없이, 무승부도). 지우면 다시 정하기 전으로."""
+    _join(club, "mem")
+    t = _create(club, "team_battle")
+    url = f"/tournaments/{t['id']}"
+    assert t["winner_team"] is None
+    assert club.c.patch(url, json={"winner_team": "white"}, headers=club.h("mem")).status_code == 403
+    assert club.c.patch(url, json={"winner_team": "red"}, headers=club.admin).status_code == 422
+    r = club.c.patch(url, json={"winner_team": "white"}, headers=club.admin)
+    assert r.status_code == 200 and r.json()["winner_team"] == "white"
+    assert club.c.get("/tournaments", headers=club.h("mem")).json()[0]["winner_team"] == "white"
+    # 다른 칸을 고쳐도 그대로, 무승부로 바꾸고 다시 지울 수 있다
+    assert club.c.patch(url, json={"title": "청백전"}, headers=club.admin).json()["winner_team"] == "white"
+    assert club.c.patch(url, json={"winner_team": "draw"}, headers=club.admin).json()["winner_team"] == "draw"
+    assert club.c.patch(url, json={"winner_team": None}, headers=club.admin).json()["winner_team"] is None
+    # 토너먼트에는 없다
+    s = _create(club, "singles")
+    assert club.c.patch(f"/tournaments/{s['id']}", json={"winner_team": "blue"}, headers=club.admin).status_code == 400

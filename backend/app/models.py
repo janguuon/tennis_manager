@@ -560,6 +560,8 @@ class Tournament(Base):
     # 청백전 팀별 인원 수: 랜덤 배정이 이만큼 채운다 (비우면 남은 사람을 반씩)
     blue_size: Mapped[int | None] = mapped_column(Integer)
     white_size: Mapped[int | None] = mapped_column(Integer)
+    # 청백전 최종 결과 (운영진이 정한다): blue 청팀 승 | white 백팀 승 | draw 무승부. 정하기 전엔 NULL
+    winner_team: Mapped[str | None] = mapped_column(String(10))
 
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

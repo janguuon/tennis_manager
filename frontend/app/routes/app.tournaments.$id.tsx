@@ -31,6 +31,7 @@ import { membersOrEmpty, requireMember } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
 import {
   TEAM_LABEL,
+  TEAM_RESULT_LABEL,
   numberOrNull,
   TOURNAMENT_KIND_BADGE,
   TOURNAMENT_KIND_LABEL,
@@ -41,6 +42,7 @@ import {
 import {
   MATCH_TYPE_LABEL,
   type TeamColor,
+  type TeamResult,
   type TournamentDetail,
   type TournamentEntry,
   type TournamentMatch,
@@ -99,6 +101,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
                 }
               : {}),
           },
+        });
+        break;
+      case "set_winner":
+        await api(base, {
+          method: "PATCH",
+          token,
+          body: { winner_team: String(formData.get("winner_team") ?? "") || null },
         });
         break;
       case "delete_tournament":
@@ -328,10 +337,31 @@ function TeamBattle({ t, members }: { t: TournamentDetail; members: UserBrief[] 
   const team = (color: TeamColor) => t.entries.filter((e) => e.team === color && e.players.length);
   const pool = t.entries.filter((e) => !e.team && e.players.length);
   const score = t.score!;
+  const finalChip = (color: TeamColor) =>
+    t.winner_team === color ? (
+      <span className="chip-ink mb-1">
+        <Trophy size={12} /> 최종 승리
+      </span>
+    ) : null;
   return (
     <>
+      {t.winner_team ? (
+        <section className="tile-yellow flex items-center gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink text-house-yellow">
+            <Trophy size={26} />
+          </span>
+          <div className="min-w-0">
+            <p className="eyebrow">FINAL</p>
+            <p className="tile-title">{TEAM_RESULT_LABEL[t.winner_team]}</p>
+            <p className="tile-sub">
+              청팀 {score.blue_wins}승 · 백팀 {score.white_wins}승{score.draws ? ` · 무승부 ${score.draws}` : ""}
+            </p>
+          </div>
+        </section>
+      ) : null}
       <section className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3" aria-label="청백전 점수">
         <div className="team-card-blue flex flex-col items-center justify-center !py-5 text-center">
+          {finalChip("blue")}
           <span className="text-[13px] font-bold">청팀</span>
           <strong className="font-display text-5xl font-extrabold">{score.blue_wins}</strong>
           <span className="text-xs font-semibold opacity-75">게임 {score.blue_games}</span>
@@ -341,11 +371,13 @@ function TeamBattle({ t, members }: { t: TournamentDetail; members: UserBrief[] 
           {score.draws ? <span>무 {score.draws}</span> : null}
         </div>
         <div className="team-card-white flex flex-col items-center justify-center !py-5 text-center">
+          {finalChip("white")}
           <span className="text-[13px] font-bold">백팀</span>
           <strong className="font-display text-5xl font-extrabold">{score.white_wins}</strong>
           <span className="text-xs font-semibold opacity-75">게임 {score.white_games}</span>
         </div>
       </section>
+      {t.can_manage ? <FinalWinnerForm t={t} /> : null}
 
       <section className="grid gap-4 md:grid-cols-2">
         {(["blue", "white"] as const).map((color) => (
@@ -408,6 +440,53 @@ function TeamBattle({ t, members }: { t: TournamentDetail; members: UserBrief[] 
         <AddPlayersModal t={t} members={members} onClose={() => setAdding(false)} />
       ) : null}
     </>
+  );
+}
+
+/** 운영진: 청백전 최종 승리팀 정하기 (경기 승수와 상관없이). 다시 누르면 바꾸고, 취소하면 정하기 전으로 */
+function FinalWinnerForm({ t }: { t: TournamentDetail }) {
+  const busy = useBusy("set_winner");
+  const score = t.score!;
+  const leading =
+    score.blue_wins > score.white_wins ? "청팀이" : score.white_wins > score.blue_wins ? "백팀이" : null;
+  const choose = (value: TeamResult | "", label: string, className: string) => (
+    <Form
+      method="post"
+      onSubmit={(e) => {
+        const ask = value ? `최종 결과를 '${label}'로 정할까요?` : "정한 최종 결과를 취소할까요?";
+        if (!confirm(ask)) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="intent" value="set_winner" />
+      <input type="hidden" name="winner_team" value={value} />
+      <button className={className} disabled={busy}>
+        {label}
+      </button>
+    </Form>
+  );
+  return (
+    <section className="card flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="section-title">최종 승리팀</h2>
+        <p className="mt-1 text-[13px] font-medium text-slate-500 dark:text-slate-400">
+          {t.winner_team
+            ? `'${TEAM_RESULT_LABEL[t.winner_team]}'로 정했어요. 회원 모두에게 보여요.`
+            : `경기 승수와 상관없이 운영진이 정해요.${
+                t.played ? (leading ? ` 지금은 ${leading} 앞서요.` : " 지금은 승수가 같아요.") : ""
+              }`}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {(["blue", "white", "draw"] as const).map((v) => (
+          <span key={v}>
+            {choose(v, TEAM_RESULT_LABEL[v], t.winner_team === v ? "btn-primary btn-sm" : "btn-ghost btn-sm")}
+          </span>
+        ))}
+        {t.winner_team
+          ? choose("", "선택 취소", "px-1 text-[12px] font-semibold text-slate-500 underline-offset-2 hover:underline")
+          : null}
+      </div>
+    </section>
   );
 }
 
@@ -604,7 +683,7 @@ function TeamBattleMatches({ t }: { t: TournamentDetail }) {
           </div>
         ) : null}
       </div>
-      {lineup && composing ? <ComposeMatch blue={blue} white={white} onDone={() => setComposing(false)} /> : null}
+      {lineup && composing ? <ComposeMatch blue={blue} white={white} matches={t.matches} onDone={() => setComposing(false)} /> : null}
       {t.matches.length === 0 ? (
         <p className="text-sm font-medium text-slate-500">
           {lineup
@@ -625,25 +704,57 @@ function TeamBattleMatches({ t }: { t: TournamentDetail }) {
 function ComposeMatch({
   blue,
   white,
+  matches,
   onDone,
 }: {
   blue: UserBrief[];
   white: UserBrief[];
+  matches: TournamentMatch[];
   onDone: () => void;
 }) {
   const [doubles, setDoubles] = useState(true);
+  // 자리마다 고른 선수 id ("" = 아직): 한 사람을 두 자리에 고를 수 없게 다른 자리에서 고른 사람은 목록에서 뺀다
+  const [picked, setPicked] = useState<Record<"blue_id" | "white_id", string[]>>({
+    blue_id: ["", ""],
+    white_id: ["", ""],
+  });
   const busy = useBusy("add_match");
   const seats = doubles ? [0, 1] : [0];
-  const picker = (name: string, players: UserBrief[], i: number, label: string) => (
-    <select key={`${name}${i}`} name={name} required className="input !h-10 !py-0 text-[13px] font-semibold" aria-label={`${label} ${i + 1}번`}>
-      <option value="">{label} 선수</option>
-      {players.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.name}
-        </option>
-      ))}
-    </select>
-  );
+  // 고를 때 참고: 지금까지 뛴 경기 수, 점수가 아직 없는 경기에 들어가 있으면 '경기 중'
+  const played = new Map<number, number>();
+  const playing = new Set<number>();
+  for (const m of matches) {
+    for (const p of [...m.team1, ...m.team2]) {
+      played.set(p.id, (played.get(p.id) ?? 0) + 1);
+      if (!m.recorded) playing.add(p.id);
+    }
+  }
+  const picker = (name: "blue_id" | "white_id", players: UserBrief[], i: number, label: string) => {
+    const others = new Set(picked[name].filter((v, j) => j !== i && j < seats.length && v));
+    return (
+      <select
+        key={`${name}${i}`}
+        name={name}
+        required
+        value={picked[name][i]}
+        onChange={(e) => {
+          const value = e.currentTarget.value;
+          setPicked((prev) => ({ ...prev, [name]: prev[name].map((v, j) => (j === i ? value : v)) }));
+        }}
+        className="input !h-10 !py-0 text-[13px] font-semibold"
+        aria-label={`${label} ${i + 1}번`}
+      >
+        <option value="">{label} 선수</option>
+        {players
+          .filter((p) => !others.has(String(p.id)))
+          .map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} · {playing.has(p.id) ? "경기 중" : `${played.get(p.id) ?? 0}경기`}
+            </option>
+          ))}
+      </select>
+    );
+  };
   return (
     <Form method="post" className="space-y-3 rounded-2xl bg-slate-100 p-4 dark:bg-slate-800" onSubmit={() => setTimeout(onDone, 0)}>
       <input type="hidden" name="intent" value="add_match" />

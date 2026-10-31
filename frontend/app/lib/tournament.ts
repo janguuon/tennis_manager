@@ -1,5 +1,5 @@
 // 대회(청백전 · 단식·복식 토너먼트) 표기 (서버 app/routers/tournaments.py 와 같은 규칙)
-import type { TeamColor, TournamentKind, TournamentSummary, UserBrief } from "~/lib/types";
+import type { TeamColor, TeamResult, TournamentKind, TournamentSummary, UserBrief } from "~/lib/types";
 
 export const TOURNAMENT_KIND_LABEL: Record<TournamentKind, string> = {
   team_battle: "청백전",
@@ -23,6 +23,12 @@ export const TOURNAMENT_KINDS: TournamentKind[] = ["team_battle", "singles", "do
 
 export const TEAM_LABEL: Record<TeamColor, string> = { blue: "청팀", white: "백팀" };
 
+export const TEAM_RESULT_LABEL: Record<TeamResult, string> = {
+  blue: "청팀 승리",
+  white: "백팀 승리",
+  draw: "무승부",
+};
+
 /** 토너먼트 라운드 이름: 마지막 = 결승, 그 앞 = 4강, 8강 … */
 export function roundLabel(round: number, rounds: number) {
   const left = 2 ** (rounds - round + 1);
@@ -35,7 +41,7 @@ export const entryName = (players: UserBrief[]) =>
 
 /** 목록·머리에 쓰는 진행 상태. 청백전은 경기를 더 짤 수 있어 "끝"이 없다 */
 export function tournamentStatus(t: TournamentSummary) {
-  if (t.champion) return { label: "끝", badge: "badge-ink" };
+  if (t.champion || t.winner_team) return { label: "끝", badge: "badge-ink" };
   if (t.total === 0) return { label: "준비 중", badge: "badge-gray" };
   return { label: `경기 ${t.played}/${t.total}`, badge: "badge-yellow" };
 }

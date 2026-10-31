@@ -1007,6 +1007,8 @@ class TournamentUpdate(BaseModel):
     note: str | None = Field(None, max_length=1000)
     blue_size: int | None = Field(None, ge=1, le=100)
     white_size: int | None = Field(None, ge=1, le=100)
+    # 청백전 최종 결과 (null 이면 다시 정하기 전으로)
+    winner_team: Literal["blue", "white", "draw"] | None = None
 
     @field_validator("title", mode="before")
     @classmethod
@@ -1101,6 +1103,7 @@ class TournamentSummary(BaseModel):
     played: int  # 결과가 나온 경기 (부전승 빼고)
     total: int  # 전체 경기 (부전승 빼고)
     score: TeamBattleScore | None = None  # 청백전
+    winner_team: Literal["blue", "white", "draw"] | None = None  # 청백전 최종 결과 (운영진이 정한다)
     champion: list[UserBrief] | None = None  # 토너먼트 우승 (결승 결과가 나오면)
 
 

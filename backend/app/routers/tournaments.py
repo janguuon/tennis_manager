@@ -232,6 +232,7 @@ def _summary_fields(t: Tournament, users: dict[int, UserBrief]) -> dict:
         played=sum(1 for m in games if m.recorded),
         total=len(games),
         score=score,
+        winner_team=t.winner_team,
         champion=[users[p] for p in champion if p in users] if champion else None,
     )
 
@@ -334,9 +335,13 @@ def update_tournament(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_member),
 ):
+    """대회 정보·팀 인원 수, 청백전 최종 승리팀(승수와 상관없이 운영진이 정한다) 고치기. 보낸 칸만 바꾼다."""
     t = _load(db, tournament_id)
     _require_manager(t, current_user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    if fields.get("winner_team") and t.kind != TournamentKind.TEAM_BATTLE:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="최종 승리팀은 청백전에서만 정해요.")
+    for field, value in fields.items():
         if field == "title" and value is None:
             continue
         setattr(t, field, value)

@@ -58,7 +58,7 @@ import {
 } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
 import { feeFieldsFromForm } from "~/lib/gathering-form";
-import { shareToKakao } from "~/lib/kakao";
+import { shareToKakao, withLink } from "~/lib/kakao";
 import { membersOrEmpty } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
 import { GATHERING_STATUS_LABEL, WEEKDAYS, formatOpenAt } from "~/lib/status";
@@ -201,8 +201,9 @@ function CancelGatheringModal({
           <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
             단톡방에도 알려 주세요. 이런 문구가 가요.
           </p>
-          <p className="whitespace-pre-line break-keep rounded-2xl rounded-tl-md bg-[#FEE500] px-4 py-3 text-[13px] font-medium leading-relaxed text-ink">
-            {shareText(gathering.cancel_reason ?? clean)}
+          <p className="whitespace-pre-line break-keep rounded-2xl rounded-tl-md bg-[#FEE500] [overflow-wrap:anywhere] px-4 py-3 text-[13px] font-medium leading-relaxed text-ink">
+            {/* 창은 브라우저에서만 열려 주소를 바로 쓴다 */}
+            {withLink(shareText(gathering.cancel_reason ?? clean), "모임 보기", `${window.location.origin}${path}`)}
           </p>
           <div className="flex gap-2">
             <button

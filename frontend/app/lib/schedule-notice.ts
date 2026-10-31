@@ -1,5 +1,6 @@
 // 새 일정을 올린 뒤(한 건 등록 · 엑셀 등록) 단톡방에 알릴 문구 (카톡 공유 · 복사)
 import { KIND_LABEL } from "~/lib/club";
+import { linkLine, linkSuffix } from "~/lib/kakao";
 import { WEEKDAYS, formatOpenAt } from "~/lib/status";
 import type { GatheringKind } from "~/lib/types";
 
@@ -88,18 +89,24 @@ export function scheduleNoticeText(items: NewSchedule[], url: string): string {
     ...items.map(scheduleLine),
     "",
     footer(items),
-    `👉 일정 보기: ${url}`,
+    linkLine("일정 보기", url),
   ].join("\n");
 }
 
 /**
  * 카톡 공유용 문구: limit 글자 안에 들도록 앞에서부터 일정을 넣고
- * 나머지는 "외 N건"으로 줄인다. 링크는 공유 메시지의 버튼으로 붙는다.
+ * 나머지는 "외 N건"으로 줄인다. 끝에 일정 보기 주소 줄이 붙는다(메시지 버튼과 같은 곳).
  */
 export function scheduleNoticeShort(
   items: NewSchedule[],
-  limit: number
+  limit: number,
+  url: string
 ): string {
+  const suffix = linkSuffix("일정 보기", url);
+  return scheduleNoticeBody(items, limit - suffix.length) + suffix;
+}
+
+function scheduleNoticeBody(items: NewSchedule[], limit: number): string {
   const lines = items.map(scheduleLine);
   const build = (k: number) =>
     [

@@ -17,7 +17,7 @@
 그 경기에 뛴 선수가 적는다. 게스트는 대회 화면을 보지 않는다.
 """
 import random
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -30,6 +30,7 @@ from ..models import (
     ApprovalStatus,
     Gender,
     MatchType,
+    Notice,
     Tournament,
     TournamentEntry,
     TournamentKind,
@@ -290,6 +291,7 @@ def _detail(db: Session, t: Tournament, user: User) -> TournamentDetail:
         else 0,
         can_manage=manage,
         captain_of=captain,
+        announced=t.notice_id is not None and db.get(Notice, t.notice_id) is not None,
     )
 
 
@@ -339,14 +341,64 @@ def update_tournament(
     t = _load(db, tournament_id)
     _require_manager(t, current_user)
     fields = payload.model_dump(exclude_unset=True)
+    announce = fields.pop("announce", False)
     if fields.get("winner_team") and t.kind != TournamentKind.TEAM_BATTLE:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="최종 승리팀은 청백전에서만 정해요.")
+    if "winner_team" in fields:
+        _announce_winner(db, t, fields["winner_team"], announce, current_user)
     for field, value in fields.items():
         if field == "title" and value is None:
             continue
         setattr(t, field, value)
     db.commit()
     return _detail(db, t, current_user)
+
+
+def _announce_winner(db: Session, t: Tournament, winner: str | None, announce: bool, user: User) -> None:
+    """청백전 최종 결과 축하 소식. 결과가 바뀌거나 취소되면(또는 알리지 않기로 하면) 전에 올린 소식을 지우고,
+    알리기로 했으면 새로 올린다 (같은 결과를 다시 눌러도 이미 올린 소식은 그대로 둔다)."""
+    old = db.get(Notice, t.notice_id) if t.notice_id else None
+    if old is not None and (winner != t.winner_team or not announce):
+        db.delete(old)
+        old = None
+    t.notice_id = old.id if old is not None else None
+    if winner is None or not announce or old is not None:
+        return
+
+    wins = {1: 0, 2: 0, None: 0}
+    for m in t.matches:
+        if m.recorded:
+            wins[m.winner] += 1
+    lines = []
+    if sum(wins.values()):
+        lines.append(f"청팀 {wins[1]}승 · 백팀 {wins[2]}승" + (f" · 무승부 {wins[None]}" if wins[None] else ""))
+    if winner == "draw":
+        title = f"{t.title}, 무승부!"
+        lines.append("두 팀 모두 수고 많으셨어요!")
+    else:
+        label = TEAM_LABEL[winner]
+        title = f"{t.title}, {label} 승리!"
+        team = sorted(
+            (e for e in t.entries if e.team == winner and e.player1_id is not None),
+            key=lambda e: not e.is_captain,
+        )
+        names = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_([e.player1_id for e in team])))}
+        captain = next((names.get(e.player1_id) for e in team if e.is_captain), None)
+        if captain:
+            lines.append(f"팀장 {captain}")
+        if team:
+            lines.append(f"함께한 {label}: {', '.join(names.get(e.player1_id, '') for e in team)}")
+        lines.append(f"{label} 여러분, 축하해요! 모두 수고 많으셨어요.")
+    notice = Notice(
+        kind="celebrate",
+        title=title[:100],
+        body="\n".join(lines)[:1000],
+        show_until=date.today() + timedelta(days=14),
+        created_by=user.id,
+    )
+    db.add(notice)
+    db.flush()
+    t.notice_id = notice.id
 
 
 @router.delete("/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)

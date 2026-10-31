@@ -107,7 +107,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         await api(base, {
           method: "PATCH",
           token,
-          body: { winner_team: String(formData.get("winner_team") ?? "") || null },
+          body: {
+            winner_team: String(formData.get("winner_team") ?? "") || null,
+            announce: formData.get("announce") === "1",
+          },
         });
         break;
       case "delete_tournament":
@@ -345,20 +348,7 @@ function TeamBattle({ t, members }: { t: TournamentDetail; members: UserBrief[] 
     ) : null;
   return (
     <>
-      {t.winner_team ? (
-        <section className="tile-yellow flex items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink text-house-yellow">
-            <Trophy size={26} />
-          </span>
-          <div className="min-w-0">
-            <p className="eyebrow">FINAL</p>
-            <p className="tile-title">{TEAM_RESULT_LABEL[t.winner_team]}</p>
-            <p className="tile-sub">
-              청팀 {score.blue_wins}승 · 백팀 {score.white_wins}승{score.draws ? ` · 무승부 ${score.draws}` : ""}
-            </p>
-          </div>
-        </section>
-      ) : null}
+      {t.winner_team ? <FinalBanner t={t} winners={t.winner_team === "draw" ? [] : team(t.winner_team)} /> : null}
       <section className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3" aria-label="청백전 점수">
         <div className="team-card-blue flex flex-col items-center justify-center !py-5 text-center">
           {finalChip("blue")}
@@ -443,9 +433,51 @@ function TeamBattle({ t, members }: { t: TournamentDetail; members: UserBrief[] 
   );
 }
 
+/** 청백전 최종 결과 띠: 축하 문구와 이긴 팀 명단(팀장 먼저), 경기 승수 */
+function FinalBanner({ t, winners }: { t: TournamentDetail; winners: TournamentEntry[] }) {
+  const score = t.score!;
+  const winner = t.winner_team!;
+  return (
+    <section className="tile-yellow space-y-4">
+      <div className="flex items-center gap-4">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink text-house-yellow">
+          <Trophy size={26} />
+        </span>
+        <div className="min-w-0">
+          <p className="eyebrow">FINAL</p>
+          <p className="tile-title">🎉 {TEAM_RESULT_LABEL[winner]}!</p>
+          <p className="tile-sub">
+            {winner === "draw"
+              ? "두 팀 모두 수고 많으셨어요!"
+              : `${TEAM_LABEL[winner]} 여러분, 축하해요! 모두 수고 많으셨어요.`}
+          </p>
+        </div>
+      </div>
+      {winners.length ? (
+        <ul className="flex flex-wrap gap-1.5" aria-label={`${TEAM_LABEL[winner as TeamColor]} 명단`}>
+          {[...winners]
+            .sort((a, b) => Number(b.is_captain) - Number(a.is_captain))
+            .map((e) => (
+              <li key={e.id} className="chip-white !h-7 !px-3">
+                {e.is_captain ? <Crown size={12} aria-label="팀장" /> : null}
+                {e.players[0].name}
+              </li>
+            ))}
+        </ul>
+      ) : null}
+      {t.played ? (
+        <p className="text-[13px] font-semibold">
+          청팀 {score.blue_wins}승 · 백팀 {score.white_wins}승{score.draws ? ` · 무승부 ${score.draws}` : ""}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 /** 운영진: 청백전 최종 승리팀 정하기 (경기 승수와 상관없이). 다시 누르면 바꾸고, 취소하면 정하기 전으로 */
 function FinalWinnerForm({ t }: { t: TournamentDetail }) {
   const busy = useBusy("set_winner");
+  const [announce, setAnnounce] = useState(true);
   const score = t.score!;
   const leading =
     score.blue_wins > score.white_wins ? "청팀이" : score.white_wins > score.blue_wins ? "백팀이" : null;
@@ -453,12 +485,15 @@ function FinalWinnerForm({ t }: { t: TournamentDetail }) {
     <Form
       method="post"
       onSubmit={(e) => {
-        const ask = value ? `최종 결과를 '${label}'로 정할까요?` : "정한 최종 결과를 취소할까요?";
+        const ask = value
+          ? `최종 결과를 '${label}'로 정할까요?${announce ? "\n클럽 소식으로 알려 회원이 들어올 때 축하 팝업이 떠요." : ""}`
+          : `정한 최종 결과를 취소할까요?${t.announced ? "\n올린 축하 소식도 지워져요." : ""}`;
         if (!confirm(ask)) e.preventDefault();
       }}
     >
       <input type="hidden" name="intent" value="set_winner" />
       <input type="hidden" name="winner_team" value={value} />
+      <input type="hidden" name="announce" value={announce ? "1" : ""} />
       <button className={className} disabled={busy}>
         {label}
       </button>
@@ -470,11 +505,22 @@ function FinalWinnerForm({ t }: { t: TournamentDetail }) {
         <h2 className="section-title">최종 승리팀</h2>
         <p className="mt-1 text-[13px] font-medium text-slate-500 dark:text-slate-400">
           {t.winner_team
-            ? `'${TEAM_RESULT_LABEL[t.winner_team]}'로 정했어요. 회원 모두에게 보여요.`
+            ? `'${TEAM_RESULT_LABEL[t.winner_team]}'로 정했어요. ${
+                t.announced ? "클럽 소식으로 알려 회원이 들어올 때 축하 팝업이 떠요." : "대회 화면에 보여요."
+              }`
             : `경기 승수와 상관없이 운영진이 정해요.${
                 t.played ? (leading ? ` 지금은 ${leading} 앞서요.` : " 지금은 승수가 같아요.") : ""
               }`}
         </p>
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-[13px] font-semibold">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-ink"
+            checked={announce}
+            onChange={(e) => setAnnounce(e.currentTarget.checked)}
+          />
+          클럽 소식으로도 알리기 (축하 팝업)
+        </label>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {(["blue", "white", "draw"] as const).map((v) => (

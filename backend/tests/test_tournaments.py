@@ -370,3 +370,48 @@ def test_team_battle_final_winner(club):
     # 토너먼트에는 없다
     s = _create(club, "singles")
     assert club.c.patch(f"/tournaments/{s['id']}", json={"winner_team": "blue"}, headers=club.admin).status_code == 400
+
+
+def test_final_winner_announced_as_club_notice(club):
+    """최종 승리팀을 정하며 알리면 클럽 소식(축하 팝업)이 올라간다. 결과를 바꾸면 소식도 바뀌고, 취소하면 지워진다."""
+    _join(club, "cap", "pla", "whi", "mem")
+    t = _create(club, "team_battle", title="가을 청백전")
+    _add(club, t["id"], "cap", "pla", team="blue")
+    t = _add(club, t["id"], "whi", team="white")
+    t = _patch_entry(club, t, "cap", is_captain=True).json()
+    m = club.c.post(
+        f"/tournaments/{t['id']}/matches",
+        json={"blue_ids": [club.ids["cap"]], "white_ids": [club.ids["whi"]]},
+        headers=club.admin,
+    ).json()["matches"][0]
+    club.c.put(f"/tournaments/{t['id']}/matches/{m['id']}/result", json={"team1_score": 6, "team2_score": 3}, headers=club.admin)
+    url = f"/tournaments/{t['id']}"
+
+    def notices():
+        return club.c.get("/notices", headers=club.h("mem")).json()
+
+    # 알리지 않으면 소식 없음
+    t = club.c.patch(url, json={"winner_team": "blue"}, headers=club.admin).json()
+    assert t["announced"] is False and notices() == []
+    # 알리면 축하 소식: 결과·팀장·이긴 팀 명단, 회원에게 새 소식(팝업)
+    t = club.c.patch(url, json={"winner_team": "blue", "announce": True}, headers=club.admin).json()
+    assert t["announced"] is True
+    [n] = notices()
+    assert (n["kind"], n["title"], n["is_new"]) == ("celebrate", "가을 청백전, 청팀 승리!", True)
+    assert n["body"].splitlines() == [
+        "청팀 1승 · 백팀 0승",
+        "팀장 cap",
+        "함께한 청팀: cap, pla",
+        "청팀 여러분, 축하해요! 모두 수고 많으셨어요.",
+    ]
+    assert n["show_until"]
+    # 같은 결과를 다시 눌러도 소식은 하나
+    club.c.patch(url, json={"winner_team": "blue", "announce": True}, headers=club.admin)
+    assert [x["id"] for x in notices()] == [n["id"]]
+    # 결과를 바꾸면 전 소식은 지우고 새로
+    club.c.patch(url, json={"winner_team": "draw", "announce": True}, headers=club.admin)
+    [d] = notices()
+    assert d["id"] != n["id"] and d["title"] == "가을 청백전, 무승부!" and "두 팀 모두" in d["body"]
+    # 취소하면 소식도 지운다
+    t = club.c.patch(url, json={"winner_team": None}, headers=club.admin).json()
+    assert t["announced"] is False and notices() == []

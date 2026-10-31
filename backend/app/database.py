@@ -94,6 +94,7 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "court_surface", "court_surface VARCHAR(20)"),
     # 청백전 최종 승리팀
     ("tournaments", "winner_team", "winner_team VARCHAR(10)"),
+    ("tournaments", "notice_id", "notice_id INTEGER REFERENCES notices(id)"),
 ]
 
 

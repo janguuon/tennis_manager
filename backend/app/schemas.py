@@ -1009,6 +1009,8 @@ class TournamentUpdate(BaseModel):
     white_size: int | None = Field(None, ge=1, le=100)
     # 청백전 최종 결과 (null 이면 다시 정하기 전으로)
     winner_team: Literal["blue", "white", "draw"] | None = None
+    # 최종 결과를 정하면서 클럽 소식(회원이 들어올 때 뜨는 축하 팝업)으로도 알리기
+    announce: bool = False
 
     @field_validator("title", mode="before")
     @classmethod
@@ -1117,3 +1119,4 @@ class TournamentDetail(TournamentSummary):
     rounds: int = 0  # 토너먼트 라운드 수 (대진표 전 0)
     can_manage: bool = False  # 참가자·팀·대진표를 꾸릴 수 있는지 (운영진)
     captain_of: TeamColor | None = None  # 지금 보는 회원이 팀장인 팀 (청백전 경기 짜기)
+    announced: bool = False  # 청백전 최종 결과를 클럽 소식으로 알렸는지

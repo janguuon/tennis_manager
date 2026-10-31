@@ -562,6 +562,8 @@ class Tournament(Base):
     white_size: Mapped[int | None] = mapped_column(Integer)
     # 청백전 최종 결과 (운영진이 정한다): blue 청팀 승 | white 백팀 승 | draw 무승부. 정하기 전엔 NULL
     winner_team: Mapped[str | None] = mapped_column(String(10))
+    # 최종 결과를 클럽 소식(축하 팝업)으로 알렸으면 그 소식. 결과를 바꾸거나 취소하면 지운다
+    notice_id: Mapped[int | None] = mapped_column(ForeignKey("notices.id"))
 
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

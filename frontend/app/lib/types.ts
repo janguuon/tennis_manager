@@ -504,4 +504,6 @@ export interface TournamentDetail extends TournamentSummary {
   rounds: number;
   can_manage: boolean;
   captain_of: TeamColor | null;
+  /** 청백전 최종 결과를 클럽 소식(축하 팝업)으로 알렸는지 */
+  announced: boolean;
 }

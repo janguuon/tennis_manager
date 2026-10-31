@@ -32,18 +32,26 @@ const header = (n: number) =>
 const FOOTER =
   "정회원 참석 투표는 전주 금요일 오전 10시부터, 게스트 투표는 모임 3일 전 0시부터 열려요.";
 
-/** 한 건이면 그 일정의 공개·투표 시각으로, 여러 건이면 공통 규칙으로 */
+/**
+ * 투표 안내 줄. 한 건 등록이든 엑셀 등록이든 같은 말투로, 실제 공개·투표 시각을 쓴다.
+ * 여러 건이라 시각이 일정마다 다르면 그 부분만 규칙("모임 3일 전 0시부터")으로 적는다.
+ */
 function footer(items: NewSchedule[]): string {
-  const g = items.length === 1 ? items[0] : null;
-  if (!g?.member_open_at || !g.guest_vote_open_at) return FOOTER;
-  const member = formatOpenAt(g.member_open_at);
-  const guest = formatOpenAt(g.guest_vote_open_at);
-  if (g.open_to_members && g.guest_vote_open)
+  if (!items.length || items.some((g) => !g.member_open_at || !g.guest_vote_open_at))
+    return FOOTER;
+  const common = (pick: (g: NewSchedule) => string) =>
+    new Set(items.map(pick)).size === 1 ? formatOpenAt(pick(items[0])) : null;
+  const member = common((g) => g.member_open_at!);
+  const guest = common((g) => g.guest_vote_open_at!);
+  const guestFrom = guest ? `${guest}부터` : "모임 3일 전 0시부터";
+  const membersOpen = items.every((g) => g.open_to_members);
+  if (membersOpen && items.every((g) => g.guest_vote_open))
     return "지금 바로 참석 투표할 수 있어요.";
-  if (g.open_to_members)
-    return `정회원은 지금 바로, 게스트는 ${guest}부터 참석 투표할 수 있어요.`;
+  if (membersOpen)
+    return `정회원은 지금 바로, 게스트는 ${guestFrom} 참석 투표할 수 있어요.`;
+  if (!member) return FOOTER;
   if (member === guest) return `${member}에 공개되고 참석 투표가 열려요.`;
-  return `${member}에 공개돼요. 게스트 투표는 ${guest}부터 열려요.`;
+  return `${member}에 공개돼요. 게스트 투표는 ${guestFrom} 열려요.`;
 }
 
 /** "3, 5" → "3·5번". 숫자가 아닌 이름이 섞이면 그대로 둔다. */

@@ -116,6 +116,12 @@ def test_court_sheet_import_end_to_end(club):
         ("오테식 벙개", "2099-01-26", "10:00", "시민 테니스장", "4"),
     ]
     assert [i["kind"] for i in r["items"]] == ["club_regular", "flash", "club_flash"]
+    # 한 건 등록과 같은 알림 문구가 나오도록 공개·게스트 투표 시각도 같이 (모임 화면 값과 같다)
+    keys = ("member_open_at", "guest_vote_open_at", "open_to_members", "guest_vote_open")
+    for i in r["items"]:
+        g = club.detail(i["id"])
+        assert {k: i[k] for k in keys} == {k: g[k] for k in keys}
+    assert r["items"][0]["open_to_members"] is True and r["items"][0]["guest_vote_open"] is False
     failed_rows = sorted(e["row"] for e in r["errors"])
     assert failed_rows == [6, 9, 10]
     assert "코트요정" in next(e for e in r["errors"] if e["row"] == 6)["error"]

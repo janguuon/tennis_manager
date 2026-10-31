@@ -870,9 +870,18 @@ def cancel_open_early(
 
 
 def _import_items(made: list[Gathering]) -> list[GatheringImportItem]:
-    """새로 등록한 일정을 날짜·시간 순으로 (카톡 알림 문구용)."""
+    """새로 등록한 일정을 날짜·시간 순으로 (카톡 알림 문구용). 한 건 등록처럼 공개·투표 시각을 함께."""
     made.sort(key=lambda g: (g.event_date, g.start_time or time.min, g.id))
-    return [GatheringImportItem.model_validate(g) for g in made]
+    now = visibility.now_kst()
+    items = []
+    for g in made:
+        item = GatheringImportItem.model_validate(g)
+        item.member_open_at = visibility.open_at(g)
+        item.guest_vote_open_at = visibility.guest_vote_at(g)
+        item.open_to_members = now >= item.member_open_at
+        item.guest_vote_open = now >= item.guest_vote_open_at
+        items.append(item)
+    return items
 
 
 @router.get("/import/template")

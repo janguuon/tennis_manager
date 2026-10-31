@@ -570,6 +570,11 @@ class GatheringImportItem(BaseModel):
     end_time: time | None = None
     location: str | None = None
     court_numbers: str | None = None
+    # 한 건 등록과 같은 알림 문구를 쓰도록: 공개·게스트 투표 시각과 지금 열려 있는지
+    member_open_at: datetime | None = None
+    guest_vote_open_at: datetime | None = None
+    open_to_members: bool = True
+    guest_vote_open: bool = True
 
 
 class GatheringImportResult(BaseModel):

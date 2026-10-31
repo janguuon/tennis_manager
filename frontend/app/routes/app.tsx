@@ -13,6 +13,7 @@ import {
   CalendarDays,
   House,
   LogOut,
+  Medal,
   Moon,
   ScrollText,
   ShieldCheck,
@@ -77,6 +78,13 @@ const allNavItems: NavItem[] = [
     short: "캘린더",
     icon: CalendarDays,
     color: "yellow",
+  },
+  {
+    to: "/app/tournaments",
+    label: "클럽 대회",
+    short: "대회",
+    icon: Medal,
+    color: "green",
   },
   {
     to: "/app/payments",

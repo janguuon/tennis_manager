@@ -24,6 +24,9 @@ from ..models import (
     MatchPlayer,
     MemberType,
     Participant,
+    Tournament,
+    TournamentEntry,
+    TournamentMatch,
     User,
 )
 from ..schemas import (
@@ -226,6 +229,10 @@ def _seat_filter(user_id: int):
     return or_(*(getattr(DrawMatch, c) == user_id for c in _SEATS))
 
 
+def _tournament_seat_filter(user_id: int):
+    return or_(*(getattr(TournamentMatch, c) == user_id for c in _SEATS))
+
+
 def _purge_preview(db: Session, user: User) -> PurgePreview:
     def count(stmt) -> int:
         return db.scalar(select(func.count()).select_from(stmt.subquery()))
@@ -257,7 +264,7 @@ def _purge(db: Session, user: User, admin: User) -> PurgePreview:
 
     - 그 회원이 뛴 경기는 통째로 지운다(탈퇴 후 이미 모든 전적·티어에서 빠져 있던 경기). 대진의 결과 연결도 끊는다.
     - 참석·입금 기록, 코트비 지급 내역(그 회원이 받을 것)을 지운다.
-    - 대진표의 그 회원 자리는 빈자리로, 그 회원이 만든 모임은 지우는 관리자에게 넘긴다.
+    - 대진표·대회의 그 회원 자리는 빈자리로, 그 회원이 만든 모임·대회는 지우는 관리자에게 넘긴다.
     - 기록자·지급 처리자로 남은 이름은 비운다.
     """
     preview = _purge_preview(db, user)
@@ -287,6 +294,19 @@ def _purge(db: Session, user: User, admin: User) -> PurgePreview:
         g.created_by = admin.id
     for n in db.scalars(select(Notice).where(Notice.created_by == uid)):
         n.created_by = None
+    # 대회: 그 회원 자리는 비우고(복식 짝은 남는다), 만든 대회는 지우는 관리자에게 넘긴다
+    for e in db.scalars(
+        select(TournamentEntry).where(or_(TournamentEntry.player1_id == uid, TournamentEntry.player2_id == uid))
+    ):
+        e.player1_id, e.player2_id = [p for p in (e.player1_id, e.player2_id) if p != uid] + [None]
+        if e.player1_id is None:
+            e.is_captain = False
+    for tm in db.scalars(select(TournamentMatch).where(_tournament_seat_filter(uid))):
+        for c in _SEATS:
+            if getattr(tm, c) == uid:
+                setattr(tm, c, None)
+    for t in db.scalars(select(Tournament).where(Tournament.created_by == uid)):
+        t.created_by = admin.id
     db.flush()
     for g in freed:
         promote_waiting(db, g)
@@ -353,7 +373,7 @@ def restore_member(user_id: int, db: Session = Depends(get_db)):
 
 
 def _has_history(db: Session, user_id: int) -> bool:
-    """지우면 다른 기록이 깨지는지: 경기·경기 기록자·대진·만든 모임·입금 기록·코트 예약(지급)."""
+    """지우면 다른 기록이 깨지는지: 경기·경기 기록자·대진·만든 모임·입금 기록·코트 예약(지급)·대회."""
     checks = [
         select(MatchPlayer.id).where(MatchPlayer.user_id == user_id),
         select(Match.id).where(Match.recorded_by == user_id),
@@ -370,6 +390,11 @@ def _has_history(db: Session, user_id: int) -> bool:
         select(CourtBooking.id).where(
             or_(CourtBooking.booker_id == user_id, CourtBooking.reimbursed_by == user_id)
         ),
+        select(TournamentEntry.id).where(
+            or_(TournamentEntry.player1_id == user_id, TournamentEntry.player2_id == user_id)
+        ),
+        select(TournamentMatch.id).where(_tournament_seat_filter(user_id)),
+        select(Tournament.id).where(Tournament.created_by == user_id),
     ]
     return any(db.scalar(q.limit(1)) is not None for q in checks)
 

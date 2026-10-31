@@ -44,6 +44,11 @@ const MENUS = [
   },
   { to: "/app/calendar", label: "캘린더", desc: "모든 일정과 참석 투표." },
   {
+    to: "/app/tournaments",
+    label: "클럽 대회",
+    desc: "청백전 팀·경기, 단식·복식 토너먼트 대진표와 점수.",
+  },
+  {
     to: "/app/payments",
     label: "회비 정산",
     desc: "내가 낼 금액 · 입금 계좌 확인.",

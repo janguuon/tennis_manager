@@ -10,6 +10,7 @@
 - Participant   : 모임 참여자 + 참석/불참 투표 상태
 - Draw / DrawMatch : 모임 참여자 기반 자동/수동 대진표
 - CourtBooking  : 오테식 모임의 코트 예약 내역 (예약자가 낸 코트비를 회비에서 돌려줌)
+- Tournament / TournamentEntry / TournamentMatch : 대회 (청백전, 단식·복식 토너먼트)
 
 설계 핵심
 ---------
@@ -528,3 +529,108 @@ class Notice(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     author: Mapped[User | None] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# 대회: 청백전 / 단식·복식 토너먼트
+# ---------------------------------------------------------------------------
+class TournamentKind(str, enum.Enum):
+    TEAM_BATTLE = "team_battle"  # 청백전: 청팀·백팀으로 나눠 경기마다 이긴 팀이 1승
+    SINGLES = "singles"          # 단식 토너먼트 (한 명이 한 엔트리)
+    DOUBLES = "doubles"          # 복식 토너먼트 (두 명이 한 엔트리)
+
+
+class Tournament(Base):
+    """
+    클럽 대회 한 개. 모임과 따로 운영진이 만든다.
+
+    - 청백전: 참가자를 청·백 팀에 넣는다(팀장·인원 수를 정하고, 나머지는 랜덤 배정). 경기는 청 대 백.
+    - 토너먼트: 참가 엔트리를 추첨해 대진표(1라운드 → 결승)를 만들고, 이긴 엔트리가 다음 라운드로 올라간다.
+    대회 경기는 전적·티어(Match)에 넣지 않는다.
+    """
+
+    __tablename__ = "tournaments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    kind: Mapped[TournamentKind] = mapped_column(Enum(TournamentKind), nullable=False)
+    event_date: Mapped[date | None] = mapped_column(Date, index=True)
+    location: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(Text)
+    # 청백전 팀별 인원 수: 랜덤 배정이 이만큼 채운다 (비우면 남은 사람을 반씩)
+    blue_size: Mapped[int | None] = mapped_column(Integer)
+    white_size: Mapped[int | None] = mapped_column(Integer)
+
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    entries: Mapped[list[TournamentEntry]] = relationship(
+        back_populates="tournament", cascade="all, delete-orphan", order_by="TournamentEntry.id"
+    )
+    matches: Mapped[list[TournamentMatch]] = relationship(
+        back_populates="tournament", cascade="all, delete-orphan"
+    )
+
+
+class TournamentEntry(Base):
+    """
+    대회 참가 엔트리.
+
+    - 청백전: 회원 한 명. team 이 비어 있으면 아직 팀이 없는 사람(랜덤 배정 대상).
+    - 단식: 회원 한 명. 복식: 두 명이 한 팀 (player2 가 비어 있으면 아직 짝이 없는 사람).
+    random_pick 은 랜덤으로 정해진 팀·짝이라는 표시: 랜덤을 다시 돌리면 이것만 다시 정한다.
+    선수 칸은 탈퇴 회원을 완전히 지울 때 비워질 수 있다.
+    """
+
+    __tablename__ = "tournament_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tournament_id: Mapped[int] = mapped_column(ForeignKey("tournaments.id"), nullable=False, index=True)
+    player1_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    player2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    team: Mapped[str | None] = mapped_column(String(10))  # 청백전: blue 청팀 | white 백팀
+    is_captain: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    random_pick: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+    tournament: Mapped[Tournament] = relationship(back_populates="entries")
+
+    @property
+    def player_ids(self) -> list[int]:
+        return [p for p in (self.player1_id, self.player2_id) if p is not None]
+
+
+class TournamentMatch(Base):
+    """
+    대회 경기 한 판. 점수를 적으면 이긴 쪽(1/2)이 정해진다.
+
+    - 청백전: 1쪽이 청팀, 2쪽이 백팀. 선수는 자리 칸에 바로 적는다. round_number 는 몇 번째 판.
+    - 토너먼트: round_number(1 = 1라운드 … 마지막 = 결승)와 라운드 안 자리(position).
+      1쪽·2쪽은 엔트리(entry1/entry2)로 적고, 이기면 다음 라운드 (position // 2) 경기의
+      (position % 2 + 1)쪽으로 올라간다. 1라운드에 한쪽이 비어 있으면 부전승.
+    """
+
+    __tablename__ = "tournament_matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tournament_id: Mapped[int] = mapped_column(ForeignKey("tournaments.id"), nullable=False, index=True)
+    round_number: Mapped[int] = mapped_column(Integer, default=1)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    match_type: Mapped[MatchType] = mapped_column(Enum(MatchType), nullable=False)
+
+    entry1_id: Mapped[int | None] = mapped_column(ForeignKey("tournament_entries.id"))
+    entry2_id: Mapped[int | None] = mapped_column(ForeignKey("tournament_entries.id"))
+    team1_player1_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    team1_player2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    team2_player1_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    team2_player2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    team1_score: Mapped[int | None] = mapped_column(Integer)
+    team2_score: Mapped[int | None] = mapped_column(Integer)
+    winner: Mapped[int | None] = mapped_column(Integer)  # 1 | 2, 무승부(청백전)·결과 전은 NULL
+    recorded_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    tournament: Mapped[Tournament] = relationship(back_populates="matches")
+
+    @property
+    def recorded(self) -> bool:
+        return self.recorded_at is not None

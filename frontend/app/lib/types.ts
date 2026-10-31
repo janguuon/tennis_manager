@@ -432,3 +432,72 @@ export interface Notice {
   author_name: string | null;
   is_new: boolean;
 }
+
+/** 대회: 청백전 · 단식 토너먼트 · 복식 토너먼트 */
+export type TournamentKind = "team_battle" | "singles" | "doubles";
+/** 청백전 팀: 청팀 · 백팀 */
+export type TeamColor = "blue" | "white";
+
+export interface TournamentEntry {
+  id: number;
+  /** 청백전·단식은 한 명, 복식은 두 명 (짝이 없으면 한 명) */
+  players: UserBrief[];
+  team: TeamColor | null;
+  is_captain: boolean;
+  /** 랜덤으로 정한 팀·짝 (랜덤을 다시 돌리면 이것만 다시) */
+  random_pick: boolean;
+}
+
+export interface TournamentMatch {
+  id: number;
+  round_number: number;
+  position: number;
+  match_type: MatchType;
+  entry1_id: number | null;
+  entry2_id: number | null;
+  /** 청백전: team1 = 청팀, team2 = 백팀 */
+  team1: UserBrief[];
+  team2: UserBrief[];
+  team1_score: number | null;
+  team2_score: number | null;
+  winner: 1 | 2 | null;
+  recorded: boolean;
+  /** 토너먼트 1라운드 부전승 */
+  bye: boolean;
+  can_score: boolean;
+}
+
+export interface TeamBattleScore {
+  blue_wins: number;
+  white_wins: number;
+  draws: number;
+  blue_games: number;
+  white_games: number;
+}
+
+export interface TournamentSummary {
+  id: number;
+  title: string;
+  kind: TournamentKind;
+  event_date: string | null;
+  location: string | null;
+  created_at: string;
+  players: number;
+  played: number;
+  total: number;
+  score: TeamBattleScore | null;
+  champion: UserBrief[] | null;
+}
+
+export interface TournamentDetail extends TournamentSummary {
+  note: string | null;
+  blue_size: number | null;
+  white_size: number | null;
+  created_by_name: string | null;
+  entries: TournamentEntry[];
+  matches: TournamentMatch[];
+  /** 토너먼트 라운드 수 (대진표 전 0) */
+  rounds: number;
+  can_manage: boolean;
+  captain_of: TeamColor | null;
+}

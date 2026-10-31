@@ -487,6 +487,40 @@
   .draw-player {
     @apply flex min-w-0 items-center gap-2 text-[13px] font-semibold;
   }
+  /* ---- 대회: 청팀(하우스 파랑) · 백팀(흰색) 은 다크 모드에서도 그대로, 토너먼트 대진표는 가로로 넘긴다 ---- */
+  .team-chip-blue {
+    @apply badge bg-house-blue text-ink;
+  }
+  .team-chip-white {
+    @apply badge border border-slate-300 bg-white text-ink;
+  }
+  .team-card-blue {
+    @apply tile-blue;
+  }
+  .team-card-white {
+    @apply tile bg-white ring-1 ring-inset ring-slate-200 dark:ring-0;
+  }
+  .team-row {
+    @apply flex min-h-12 items-center gap-2.5 border-b border-ink/15 py-2 text-[14px] font-semibold last:border-b-0;
+  }
+  .team-menu {
+    @apply h-8 w-[92px] shrink-0 cursor-pointer rounded-full border border-ink/25 bg-transparent pl-3 pr-6 text-[12px] font-bold text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink;
+  }
+  .bracket {
+    @apply -mx-1 flex gap-4 overflow-x-auto px-1 pb-2;
+  }
+  .bracket-round {
+    @apply flex min-w-[230px] flex-1 flex-col gap-3;
+  }
+  .bracket-col {
+    @apply flex flex-1 flex-col justify-around gap-3;
+  }
+  .bracket-match {
+    @apply rounded-2xl border border-slate-200 p-3 dark:border-slate-700;
+  }
+  .bracket-line {
+    @apply flex min-h-9 items-center gap-2 text-[13px] font-semibold;
+  }
   .member-grid {
     @apply grid grid-cols-2 gap-4 xl:grid-cols-4;
   }

@@ -19,6 +19,7 @@ from .models import (
     MatchType,
     MemberType,
     TeamSide,
+    TournamentKind,
 )
 
 # 오테식 모임의 게스트 기본 참가비 (회칙 제17조)
@@ -963,3 +964,153 @@ class NoticeRead(BaseModel):
     created_at: datetime
     author_name: str | None = None
     is_new: bool = False  # 이 회원이 아직 팝업에서 확인하지 않은 소식
+
+
+# --- 대회 (청백전 · 단식·복식 토너먼트) -------------------------------------
+TeamColor = Literal["blue", "white"]  # 청팀 · 백팀
+
+
+def _strip_or_none(v):
+    if isinstance(v, str):
+        v = v.strip()
+        return v or None
+    return v
+
+
+class TournamentCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    kind: TournamentKind
+    event_date: date | None = None
+    location: str | None = Field(None, max_length=200)
+    note: str | None = Field(None, max_length=1000)
+    # 청백전 팀별 인원 수 (비우면 랜덤 배정이 남은 사람을 반씩 나눈다)
+    blue_size: int | None = Field(None, ge=1, le=100)
+    white_size: int | None = Field(None, ge=1, le=100)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _strip_title(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("location", "note", mode="before")
+    @classmethod
+    def _strip_text(cls, v):
+        return _strip_or_none(v)
+
+
+class TournamentUpdate(BaseModel):
+    """대회 정보 고치기 (보낸 칸만 바꾼다)."""
+
+    title: str | None = Field(None, min_length=1, max_length=100)
+    event_date: date | None = None
+    location: str | None = Field(None, max_length=200)
+    note: str | None = Field(None, max_length=1000)
+    blue_size: int | None = Field(None, ge=1, le=100)
+    white_size: int | None = Field(None, ge=1, le=100)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _strip_title(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @field_validator("location", "note", mode="before")
+    @classmethod
+    def _strip_text(cls, v):
+        return _strip_or_none(v)
+
+
+class TournamentPlayersAdd(BaseModel):
+    """참가자 넣기. 청백전은 team 을 주면 그 팀으로 바로 넣는다."""
+
+    user_ids: list[int] = Field(min_length=1, max_length=200)
+    team: TeamColor | None = None
+
+
+class TournamentEntryUpdate(BaseModel):
+    """청백전: 팀 옮기기(null 이면 팀 없음)와 팀장 정하기. 보낸 칸만 바꾼다."""
+
+    team: TeamColor | None = None
+    is_captain: bool | None = None
+
+
+class TournamentPair(BaseModel):
+    """복식 토너먼트: 짝이 없는 두 사람을 한 팀으로."""
+
+    entry_ids: list[int] = Field(min_length=2, max_length=2)
+
+
+class TournamentMatchCreate(BaseModel):
+    """청백전 경기 한 판: 청팀 선수와 백팀 선수 (단식 1명씩, 복식 2명씩)."""
+
+    blue_ids: list[int] = Field(min_length=1, max_length=2)
+    white_ids: list[int] = Field(min_length=1, max_length=2)
+
+
+class TournamentRandomMatches(BaseModel):
+    """청백전 경기 랜덤으로 짜기: 경기를 덜 뛴 사람부터 청 대 백으로 한 판씩."""
+
+    match_type: Literal["singles", "doubles"] = "doubles"
+
+
+class TournamentScore(BaseModel):
+    team1_score: int = Field(..., ge=0, le=99)
+    team2_score: int = Field(..., ge=0, le=99)
+
+
+class TournamentEntryRead(BaseModel):
+    id: int
+    players: list[UserBrief]
+    team: TeamColor | None = None
+    is_captain: bool = False
+    random_pick: bool = False
+
+
+class TournamentMatchRead(BaseModel):
+    id: int
+    round_number: int
+    position: int
+    match_type: MatchType
+    entry1_id: int | None = None
+    entry2_id: int | None = None
+    team1: list[UserBrief] = []  # 청백전: 청팀
+    team2: list[UserBrief] = []  # 청백전: 백팀
+    team1_score: int | None = None
+    team2_score: int | None = None
+    winner: int | None = None
+    recorded: bool = False
+    bye: bool = False  # 토너먼트 1라운드 부전승
+    can_score: bool = False  # 지금 보는 회원이 점수를 적을 수 있는지
+
+
+class TeamBattleScore(BaseModel):
+    blue_wins: int = 0
+    white_wins: int = 0
+    draws: int = 0
+    blue_games: int = 0
+    white_games: int = 0
+
+
+class TournamentSummary(BaseModel):
+    id: int
+    title: str
+    kind: TournamentKind
+    event_date: date | None = None
+    location: str | None = None
+    created_at: datetime
+    players: int  # 참가자 수
+    played: int  # 결과가 나온 경기 (부전승 빼고)
+    total: int  # 전체 경기 (부전승 빼고)
+    score: TeamBattleScore | None = None  # 청백전
+    champion: list[UserBrief] | None = None  # 토너먼트 우승 (결승 결과가 나오면)
+
+
+class TournamentDetail(TournamentSummary):
+    note: str | None = None
+    blue_size: int | None = None
+    white_size: int | None = None
+    created_by_name: str | None = None
+    entries: list[TournamentEntryRead]
+    matches: list[TournamentMatchRead]
+    rounds: int = 0  # 토너먼트 라운드 수 (대진표 전 0)
+    can_manage: bool = False  # 참가자·팀·대진표를 꾸릴 수 있는지 (운영진)
+    captain_of: TeamColor | None = None  # 지금 보는 회원이 팀장인 팀 (청백전 경기 짜기)

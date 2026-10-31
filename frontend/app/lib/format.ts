@@ -20,3 +20,10 @@ export const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, "")}`;
 export function todayKST(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
 }
+
+/** "2026-10-31" → "10월 31일(토)" */
+export function formatDate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()];
+  return `${m}월 ${d}일(${wd})`;
+}

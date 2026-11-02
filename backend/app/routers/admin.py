@@ -35,9 +35,9 @@ from ..schemas import (
     AwardUpdate,
     MemberDeleteResult,
     MemberTypeUpdate,
-    MonthlyAttendance,
-    MonthlyAttendanceGathering,
-    MonthlyAttendanceRow,
+    AttendanceReport,
+    AttendanceReportGathering,
+    AttendanceReportRow,
     PasswordUpdate,
     PhoneUpdate,
     PurgePreview,
@@ -412,19 +412,30 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
     return user
 
 
-# --- 월별 참석 ----------------------------------------------------------------
-@router.get("/attendance", response_model=MonthlyAttendance)
-def monthly_attendance(
-    month: str = Query(..., description="볼 달 (YYYY-MM)"),
+# --- 참석 현황 (월별·연간) ---------------------------------------------------
+@router.get("/attendance", response_model=AttendanceReport)
+def attendance_report(
+    month: str | None = Query(None, description="볼 달 (YYYY-MM)"),
+    year: str | None = Query(None, description="볼 해 (YYYY). month 대신"),
     db: Session = Depends(get_db),
 ):
-    """회원마다 그 달에 참석한 모임 수와 모임 (관리자).
+    """회원마다 그 달(또는 그 해)에 참석한 모임 수와 모임 (관리자).
 
-    - 취소된 모임은 빼고, 참석(확정)만 센다. 대기·불참은 세지 않는다. 오늘 뒤 모임은 '예정'으로 따로 센다.
+    - 취소된 모임은 빼고, 참석(확정)만 센다. 대기·불참은 세지 않는다.
+    - 횟수(total·by_kind)는 오늘까지 지난 모임만 센다. 오늘 뒤 참석 예정은 upcoming 으로 따로 센다
+      (gathering_ids 에는 예정도 들어 있다).
     - 회원 목록에 있는 사람은 0회여도 나온다. 직함 없는 관리자 계정·탈퇴한 회원은 참석했을 때만 나온다.
     - 이름만 적어 초대한 게스트는 회원이 아니라 줄로 세지 않고, 모임별 참석 인원에만 들어간다.
     """
-    first, last = month_bounds(month)
+    if (month is None) == (year is None):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="month(YYYY-MM)나 year(YYYY) 중 하나를 주세요.")
+    if year is not None:
+        if not (len(year) == 4 and year.isdigit()):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="year는 YYYY 형식이어야 합니다.")
+        first, last, unit, period = date(int(year), 1, 1), date(int(year), 12, 31), "year", year
+    else:
+        first, last = month_bounds(month)
+        unit, period = "month", f"{first:%Y-%m}"
     gatherings = db.scalars(
         select(Gathering)
         .where(
@@ -454,24 +465,26 @@ def monthly_attendance(
     rows = []
     for u in people:
         mine = attended.get(u.id, [])
+        done = [g for g in mine if g.event_date <= today]
         by_kind = {kind: 0 for kind in GatheringKind}
-        for g in mine:
+        for g in done:
             by_kind[g.kind] += 1
         rows.append(
-            MonthlyAttendanceRow(
+            AttendanceReportRow(
                 user=UserBrief.model_validate(u),
-                total=len(mine),
-                upcoming=sum(1 for g in mine if g.event_date > today),
+                total=len(done),
+                upcoming=len(mine) - len(done),
                 by_kind=by_kind,
                 gathering_ids=[g.id for g in mine],
             )
         )
-    rows.sort(key=lambda r: (-r.total, r.user.name))
-    return MonthlyAttendance(
-        month=f"{first:%Y-%m}",
+    rows.sort(key=lambda r: (-r.total, -r.upcoming, r.user.name))
+    return AttendanceReport(
+        unit=unit,
+        period=period,
         today=today,
         gatherings=[
-            MonthlyAttendanceGathering(
+            AttendanceReportGathering(
                 id=g.id,
                 title=g.title,
                 kind=g.kind,

@@ -624,8 +624,8 @@ class AttendanceSummary(BaseModel):
     total: int = 0
 
 
-class MonthlyAttendanceGathering(BaseModel):
-    """월별 참석: 그 달 모임 하나 (취소 제외). attending 은 이름만 적은 초대 게스트까지 센 참석 인원."""
+class AttendanceReportGathering(BaseModel):
+    """참석 현황: 그 달·해의 모임 하나 (취소 제외). attending 은 이름만 적은 초대 게스트까지 센 참석 인원."""
 
     id: int
     title: str
@@ -636,8 +636,9 @@ class MonthlyAttendanceGathering(BaseModel):
     attending: int
 
 
-class MonthlyAttendanceRow(BaseModel):
-    """월별 참석: 회원 한 명. total 은 참석한 모임 수(오늘 뒤 예정 포함), upcoming 은 그중 예정."""
+class AttendanceReportRow(BaseModel):
+    """참석 현황: 회원 한 명. total·by_kind 는 오늘까지 지난 모임만, upcoming 은 오늘 뒤 참석 예정 수.
+    gathering_ids 는 예정까지 날짜 순."""
 
     user: UserBrief
     total: int
@@ -646,11 +647,14 @@ class MonthlyAttendanceRow(BaseModel):
     gathering_ids: list[int]  # 날짜 순
 
 
-class MonthlyAttendance(BaseModel):
-    month: str
+class AttendanceReport(BaseModel):
+    """관리자 참석 현황 (월별 또는 연간). 연간의 달별 횟수는 모임 날짜로 화면에서 나눈다."""
+
+    unit: Literal["month", "year"]
+    period: str  # "2026-11" 또는 "2026"
     today: date
-    gatherings: list[MonthlyAttendanceGathering]
-    rows: list[MonthlyAttendanceRow]
+    gatherings: list[AttendanceReportGathering]
+    rows: list[AttendanceReportRow]
 
 
 class AttendeeBrief(BaseModel):

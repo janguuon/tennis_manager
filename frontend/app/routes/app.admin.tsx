@@ -360,15 +360,15 @@ export default function AdminPage() {
         </Form>
       </section>
 
-      {/* 월별 참석 */}
+      {/* 참석 현황 (월별·연간) */}
       <Link to="/app/admin/attendance" className="card-link flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h2 className="section-title flex items-center gap-2">
             <CalendarCheck size={16} className="text-slate-400" />
-            월별 참석
+            참석 현황
           </h2>
           <p className="mt-1 text-[13px] font-medium text-slate-500">
-            회원마다 한 달에 모임에 몇 번 참석했는지, 어떤 모임에 갔는지 봐요. 관리자만 볼 수 있어요.
+            회원마다 한 달·한 해에 모임에 몇 번 참석했는지, 어떤 모임에 갔는지 봐요. 관리자만 볼 수 있어요.
           </p>
         </div>
         <ArrowUpRight size={18} className="shrink-0" />

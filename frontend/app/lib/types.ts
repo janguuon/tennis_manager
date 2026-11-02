@@ -508,8 +508,8 @@ export interface TournamentDetail extends TournamentSummary {
   announced: boolean;
 }
 
-/** 월별 참석 (관리자, GET /admin/attendance): 그 달 모임(취소 제외)과 회원마다 참석한 모임 */
-export interface MonthlyAttendanceGathering {
+/** 참석 현황 (관리자, GET /admin/attendance): 그 달·그 해 모임(취소 제외)과 회원마다 참석한 모임 */
+export interface AttendanceReportGathering {
   id: number;
   title: string;
   kind: GatheringKind;
@@ -520,7 +520,7 @@ export interface MonthlyAttendanceGathering {
   attending: number;
 }
 
-export interface MonthlyAttendanceRow {
+export interface AttendanceReportRow {
   user: UserBrief;
   /** 참석한 모임 수 (오늘 뒤 예정 포함) */
   total: number;
@@ -530,9 +530,11 @@ export interface MonthlyAttendanceRow {
   gathering_ids: number[];
 }
 
-export interface MonthlyAttendance {
-  month: string;
+export interface AttendanceReport {
+  unit: "month" | "year";
+  /** "2026-11" 또는 "2026" */
+  period: string;
   today: string;
-  gatherings: MonthlyAttendanceGathering[];
-  rows: MonthlyAttendanceRow[];
+  gatherings: AttendanceReportGathering[];
+  rows: AttendanceReportRow[];
 }

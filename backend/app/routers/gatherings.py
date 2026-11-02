@@ -123,6 +123,17 @@ def _summary(gathering: Gathering) -> AttendanceSummary:
     return s
 
 
+def month_bounds(month: str) -> tuple[date, date]:
+    """"YYYY-MM" → 그 달 첫날과 마지막 날 (정산·월별 참석)."""
+    try:
+        year, mon = (int(x) for x in month.split("-"))
+        first = date(year, mon, 1)
+        nxt = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
+    except (ValueError, TypeError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="month는 YYYY-MM 형식이어야 합니다.")
+    return first, nxt - timedelta(days=1)
+
+
 def _with_open_times(read: GatheringRead, gathering: Gathering) -> GatheringRead:
     """일정 공개 시각·게스트 투표 시각과 지금 열려 있는지 (안내·버튼 잠금용)."""
     now = visibility.now_kst()
@@ -1708,14 +1719,7 @@ def payment_summary(
     - 참가비: 받을 돈이 있는 모임만, 받을 돈·돌려줄 돈을 사람별로
     - 회비 지출: 오테식 모임 코트비 (예약자별 지급 여부)
     """
-    try:
-        year, mon = (int(x) for x in month.split("-"))
-        first = date(year, mon, 1)
-        nxt = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
-        last = nxt - timedelta(days=1)
-    except (ValueError, TypeError):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="month는 YYYY-MM 형식이어야 합니다.")
-
+    first, last = month_bounds(month)
     complete_finished(db)
 
     stmt = (

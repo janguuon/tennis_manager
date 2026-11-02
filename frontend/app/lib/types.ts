@@ -507,3 +507,32 @@ export interface TournamentDetail extends TournamentSummary {
   /** 청백전 최종 결과를 클럽 소식(축하 팝업)으로 알렸는지 */
   announced: boolean;
 }
+
+/** 월별 참석 (관리자, GET /admin/attendance): 그 달 모임(취소 제외)과 회원마다 참석한 모임 */
+export interface MonthlyAttendanceGathering {
+  id: number;
+  title: string;
+  kind: GatheringKind;
+  event_date: string;
+  start_time: string | null;
+  location: string | null;
+  /** 참석 인원 (이름만 적은 초대 게스트 포함) */
+  attending: number;
+}
+
+export interface MonthlyAttendanceRow {
+  user: UserBrief;
+  /** 참석한 모임 수 (오늘 뒤 예정 포함) */
+  total: number;
+  upcoming: number;
+  by_kind: Record<GatheringKind, number>;
+  /** 날짜 순 */
+  gathering_ids: number[];
+}
+
+export interface MonthlyAttendance {
+  month: string;
+  today: string;
+  gatherings: MonthlyAttendanceGathering[];
+  rows: MonthlyAttendanceRow[];
+}

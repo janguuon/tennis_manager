@@ -5,11 +5,11 @@
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, selectinload
 
-from .. import avatars
+from .. import avatars, visibility
 from ..database import get_db
 from ..deps import get_current_admin
 from ..models import (
@@ -19,10 +19,12 @@ from ..models import (
     CourtBooking,
     DrawMatch,
     Gathering,
+    GatheringKind,
     GatheringStatus,
     Match,
     MatchPlayer,
     MemberType,
+    OFFICER_TYPES,
     Participant,
     Tournament,
     TournamentEntry,
@@ -33,14 +35,18 @@ from ..schemas import (
     AwardUpdate,
     MemberDeleteResult,
     MemberTypeUpdate,
+    MonthlyAttendance,
+    MonthlyAttendanceGathering,
+    MonthlyAttendanceRow,
     PasswordUpdate,
     PhoneUpdate,
     PurgePreview,
     PurgeResult,
+    UserBrief,
     UserRead,
 )
 from ..security import hash_password
-from .gatherings import promote_waiting
+from .gatherings import month_bounds, promote_waiting
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 
@@ -404,3 +410,77 @@ def _get_user_or_404(db: Session, user_id: int) -> User:
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="회원을 찾을 수 없습니다.")
     return user
+
+
+# --- 월별 참석 ----------------------------------------------------------------
+@router.get("/attendance", response_model=MonthlyAttendance)
+def monthly_attendance(
+    month: str = Query(..., description="볼 달 (YYYY-MM)"),
+    db: Session = Depends(get_db),
+):
+    """회원마다 그 달에 참석한 모임 수와 모임 (관리자).
+
+    - 취소된 모임은 빼고, 참석(확정)만 센다. 대기·불참은 세지 않는다. 오늘 뒤 모임은 '예정'으로 따로 센다.
+    - 회원 목록에 있는 사람은 0회여도 나온다. 직함 없는 관리자 계정·탈퇴한 회원은 참석했을 때만 나온다.
+    - 이름만 적어 초대한 게스트는 회원이 아니라 줄로 세지 않고, 모임별 참석 인원에만 들어간다.
+    """
+    first, last = month_bounds(month)
+    gatherings = db.scalars(
+        select(Gathering)
+        .where(
+            Gathering.event_date >= first,
+            Gathering.event_date <= last,
+            Gathering.status != GatheringStatus.CANCELED,
+        )
+        .options(selectinload(Gathering.participants))
+        .order_by(Gathering.event_date, Gathering.start_time, Gathering.id)
+    ).all()
+    today = visibility.now_kst().date()
+
+    attended: dict[int, list[Gathering]] = {}
+    for g in gatherings:
+        for p in g.participants:
+            if p.status == AttendanceStatus.ATTENDING:
+                attended.setdefault(p.user_id, []).append(g)
+
+    listed = or_(~User.is_admin, User.member_type.in_(OFFICER_TYPES))
+    people = db.scalars(
+        select(User).where(
+            User.approval_status == ApprovalStatus.APPROVED,
+            or_(and_(User.is_active, listed), User.id.in_(list(attended))),
+        )
+    ).all()
+
+    rows = []
+    for u in people:
+        mine = attended.get(u.id, [])
+        by_kind = {kind: 0 for kind in GatheringKind}
+        for g in mine:
+            by_kind[g.kind] += 1
+        rows.append(
+            MonthlyAttendanceRow(
+                user=UserBrief.model_validate(u),
+                total=len(mine),
+                upcoming=sum(1 for g in mine if g.event_date > today),
+                by_kind=by_kind,
+                gathering_ids=[g.id for g in mine],
+            )
+        )
+    rows.sort(key=lambda r: (-r.total, r.user.name))
+    return MonthlyAttendance(
+        month=f"{first:%Y-%m}",
+        today=today,
+        gatherings=[
+            MonthlyAttendanceGathering(
+                id=g.id,
+                title=g.title,
+                kind=g.kind,
+                event_date=g.event_date,
+                start_time=g.start_time,
+                location=g.location,
+                attending=sum(1 for p in g.participants if p.status == AttendanceStatus.ATTENDING),
+            )
+            for g in gatherings
+        ],
+        rows=rows,
+    )

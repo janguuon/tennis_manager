@@ -624,6 +624,35 @@ class AttendanceSummary(BaseModel):
     total: int = 0
 
 
+class MonthlyAttendanceGathering(BaseModel):
+    """월별 참석: 그 달 모임 하나 (취소 제외). attending 은 이름만 적은 초대 게스트까지 센 참석 인원."""
+
+    id: int
+    title: str
+    kind: GatheringKind
+    event_date: date
+    start_time: time | None = None
+    location: str | None = None
+    attending: int
+
+
+class MonthlyAttendanceRow(BaseModel):
+    """월별 참석: 회원 한 명. total 은 참석한 모임 수(오늘 뒤 예정 포함), upcoming 은 그중 예정."""
+
+    user: UserBrief
+    total: int
+    upcoming: int
+    by_kind: dict[GatheringKind, int]
+    gathering_ids: list[int]  # 날짜 순
+
+
+class MonthlyAttendance(BaseModel):
+    month: str
+    today: date
+    gatherings: list[MonthlyAttendanceGathering]
+    rows: list[MonthlyAttendanceRow]
+
+
 class AttendeeBrief(BaseModel):
     """캘린더 목록에 보여 줄 참석자 (이름·사진만)."""
 

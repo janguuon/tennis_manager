@@ -431,9 +431,7 @@ export default function CalendarPage() {
     p.set("month", m);
     return `?${p}`;
   };
-  const swipeRef = useSwipeNav(monthHref(shiftMonth(month, -1)), monthHref(shiftMonth(month, 1)), {
-    preventScrollReset: true,
-  });
+  const swipeRef = useSwipeNav(monthHref(shiftMonth(month, -1)), monthHref(shiftMonth(month, 1)));
   const [yy, mm] = month.split("-");
 
   // 리스트 뷰: 일정이 있는 날짜만 오름차순으로

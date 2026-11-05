@@ -23,6 +23,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import { Fragment } from "react";
 
 import { MemberAvatar } from "~/components/Club";
 import { GenderPrompt } from "~/components/GenderPrompt";
@@ -266,11 +267,14 @@ export default function AppLayout() {
           </span>
           <span>오순도순 테니스 식구</span>
         </div>
+        {/* 이전·다음 일정, 전날·다음 날처럼 같은 화면끼리 넘어갈 땐 깜빡이지 않는다. 내용은 주소마다 새로 그린다 */}
         <div
-          key={location.pathname}
+          key={location.pathname.replace(/^(\/app\/(?:gatherings|day))\/.*$/, "$1")}
           className="animate-fade-in motion-reduce:animate-none"
         >
-          <Outlet context={{ user }} />
+          <Fragment key={location.pathname}>
+            <Outlet context={{ user }} />
+          </Fragment>
         </div>
         <footer className="club-footer">
           <span className="font-display text-2xl font-extrabold tracking-[-0.07em]">

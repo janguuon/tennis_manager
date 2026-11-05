@@ -142,6 +142,7 @@ function GatheringPager({
       <Link
         to={pagerHref(g, from)!}
         prefetch="intent"
+        preventScrollReset
         className={`gathering-pager ${dir === "next" ? "justify-end text-right" : ""}`}
         aria-label={`${dir === "prev" ? "이전" : "다음"} 일정: ${label(g)} ${g.title}`}
       >

@@ -10,6 +10,10 @@ const EDGE = 24;
 // 넘어가는 동안 내용이 밀려나는 거리
 const OUT = 48;
 
+// 넘어가는 중인 방향. 모임·날짜 화면은 주소마다 새로 그려지므로(app.tsx) 새 화면이 이어받게 모듈에 둔다
+let going: "prev" | "next" | null = null;
+let giveUp: ReturnType<typeof setTimeout> | undefined;
+
 /** 가로로 스크롤되는 영역·입력칸 안에서 시작한 터치는 그 영역의 몫이다 */
 function ignored(target: EventTarget | null, root: HTMLElement): boolean {
   for (let el = target instanceof Element ? target : null; el && el !== root; el = el.parentElement) {
@@ -26,19 +30,15 @@ function ignored(target: EventTarget | null, root: HTMLElement): boolean {
  * 휴대폰에서 좌우로 밀어 이전·다음으로 넘기기: 왼쪽으로 밀면 다음(next), 오른쪽으로 밀면 이전(prev).
  * 손가락을 따라 내용이 밀리고, 넘어가면 새 내용이 반대쪽에서 들어온다. 넘어갈 곳이 없으면 살짝만 밀리고 돌아온다.
  * 돌려준 ref를 밀릴 영역(div)에 단다. 세로 스크롤·가로 스크롤 영역·입력칸·글자 선택은 방해하지 않는다.
+ * 넘겨도 보던 스크롤 위치는 그대로다.
  */
-export function useSwipeNav(
-  prev: string | null,
-  next: string | null,
-  { preventScrollReset = false }: { preventScrollReset?: boolean } = {}
-) {
+export function useSwipeNav(prev: string | null, next: string | null) {
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { key } = useLocation();
-  const links = useRef({ prev, next, preventScrollReset });
-  links.current = { prev, next, preventScrollReset };
-  // 넘어가는 중인 방향과, 새 내용을 기다리며 밀려나 있는 애니메이션
-  const going = useRef<"prev" | "next" | null>(null);
+  const links = useRef({ prev, next });
+  links.current = { prev, next };
+  // 새 내용을 기다리며 밀려나 있는 애니메이션
   const held = useRef<Animation | null>(null);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function useSwipeNav(
     };
     const onStart = (e: TouchEvent) => {
       start = null;
-      if (e.touches.length !== 1 || going.current) return;
+      if (e.touches.length !== 1 || going) return;
       const t = e.touches[0];
       if (t.clientX < EDGE || t.clientX > window.innerWidth - EDGE) return;
       if (ignored(e.target, el) || !document.getSelection()?.isCollapsed) return;
@@ -101,7 +101,7 @@ export function useSwipeNav(
       if (!to || (Math.abs(dx) < THRESHOLD && !flick)) return reset();
       start = null;
       dragging = false;
-      going.current = dir;
+      going = dir;
       el.style.transform = "";
       if (!still.matches)
         held.current = el.animate(
@@ -112,13 +112,12 @@ export function useSwipeNav(
           { duration: 160, easing: "ease-out", fill: "forwards" }
         );
       shift = 0;
-      navigate(to, { preventScrollReset: links.current.preventScrollReset });
+      navigate(to, { preventScrollReset: true });
       // 넘어가지 못했으면(오류 등) 밀려난 채로 두지 않는다
-      setTimeout(() => {
-        if (going.current !== dir) return;
+      giveUp = setTimeout(() => {
         held.current?.cancel();
         held.current = null;
-        going.current = null;
+        going = null;
       }, 6000);
     };
 
@@ -137,8 +136,9 @@ export function useSwipeNav(
   // 넘어가면 새 내용이 반대쪽에서 들어온다
   useEffect(() => {
     const el = ref.current;
-    const dir = going.current;
-    going.current = null;
+    const dir = going;
+    going = null;
+    clearTimeout(giveUp);
     held.current?.cancel();
     held.current = null;
     if (!el || !dir || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;

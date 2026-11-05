@@ -60,10 +60,10 @@ export default function DayPage() {
         }
         actions={
           <>
-            <Link to={prevDay} className="icon-btn" aria-label="전날">
+            <Link to={prevDay} preventScrollReset className="icon-btn" aria-label="전날">
               <ChevronLeft size={20} />
             </Link>
-            <Link to={nextDay} className="icon-btn" aria-label="다음 날">
+            <Link to={nextDay} preventScrollReset className="icon-btn" aria-label="다음 날">
               <ChevronRight size={20} />
             </Link>
           </>

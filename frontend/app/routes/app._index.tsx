@@ -467,7 +467,7 @@ function NextGatheringTile({
   // ‹ › 와 같은 곳: 휴대폰에서는 카드를 좌우로 밀어 넘긴다
   const prevHref = index > 0 ? (index - 1 === 0 ? "/app" : `/app?n=${index - 1}`) : null;
   const nextHref = index < total - 1 ? `/app?n=${index + 1}` : null;
-  const swipeRef = useSwipeNav(prevHref, nextHref, { preventScrollReset: true });
+  const swipeRef = useSwipeNav(prevHref, nextHref);
   if (!next)
     return (
       <section className="tile-orange home-next">

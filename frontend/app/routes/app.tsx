@@ -28,7 +28,7 @@ import { Fragment } from "react";
 import { MemberAvatar } from "~/components/Club";
 import { GenderPrompt } from "~/components/GenderPrompt";
 import { NoticePopup } from "~/components/NoticePopup";
-import { Wordmark } from "~/components/Logo";
+import { EmblemBadge, Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
 import { isGuest } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
@@ -193,9 +193,10 @@ export default function AppLayout() {
       </a>
       <aside className="club-sidebar">
         <NavLink to="/app" className="club-wordmark">
+          <EmblemBadge className="mb-3 h-12 w-12" />
           <Wordmark />
         </NavLink>
-        <p className="eyebrow mb-4 mt-12 text-slate-500">OUR CLUBHOUSE</p>
+        <p className="eyebrow mb-4 mt-8 text-slate-500">OUR CLUBHOUSE</p>
         <nav aria-label="주 메뉴" className="space-y-2">
           {items.map(({ to, label, icon: Icon, color, end }, i) => (
             <NavLink
@@ -248,7 +249,8 @@ export default function AppLayout() {
         </div>
       </aside>
       <header className="club-mobile-header">
-        <NavLink to="/app">
+        <NavLink to="/app" className="flex items-center gap-2.5">
+          <EmblemBadge className="h-10 w-10 !rounded-[10px]" />
           <Wordmark size="sm" tagline={false} />
         </NavLink>
         <div className="flex items-center gap-1">

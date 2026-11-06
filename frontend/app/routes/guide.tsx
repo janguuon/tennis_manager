@@ -5,7 +5,7 @@ import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Eyebrow } from "~/components/Club";
-import { Wordmark } from "~/components/Logo";
+import { EmblemBadge, Wordmark } from "~/components/Logo";
 import { getToken } from "~/lib/session.server";
 
 /**
@@ -104,7 +104,8 @@ export default function GuidePage() {
     <div className="guide-shell">
       <header className="guide-topbar">
         <div className="guide-topbar-inner">
-          <Link to={loggedIn ? "/app" : "/login"} aria-label="오테식 매니저">
+          <Link to={loggedIn ? "/app" : "/login"} aria-label="오테식 매니저" className="flex items-center gap-2.5">
+            <EmblemBadge className="h-10 w-10 !rounded-[10px]" />
             <Wordmark size="sm" tagline={false} />
           </Link>
           <div className="flex items-center gap-2">

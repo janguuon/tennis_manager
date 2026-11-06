@@ -9,7 +9,6 @@ import {
   useRouteLoaderData,
 } from "@remix-run/react";
 
-import { LOGO_FAVICON } from "~/components/Logo";
 import { getTheme } from "~/lib/theme.server";
 import stylesheet from "~/tailwind.css?url";
 
@@ -29,8 +28,10 @@ export const links: LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap",
   },
   { rel: "stylesheet", href: stylesheet },
-  // 로고 마크 파비콘 (별도 파일 없이 /favicon.ico 자동요청 404 방지)
-  { rel: "icon", href: LOGO_FAVICON },
+  // 팀 엠블럼: 브라우저 탭, 아이폰 홈 화면, 안드로이드 홈 화면(매니페스트)
+  { rel: "icon", type: "image/png", href: "/favicon-64.png" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+  { rel: "manifest", href: "/site.webmanifest" },
 ];
 
 /** 링크 미리보기(카톡 등) 문구 */

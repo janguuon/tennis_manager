@@ -20,11 +20,24 @@ export function Wordmark({
   );
 }
 
-/** 파비콘: 검정 사각형 안의 노란 테니스공 (data URI) */
-export const LOGO_FAVICON =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#121212"/>' +
-      '<circle cx="16" cy="16" r="9.5" fill="#F7C32E"/>' +
-      '<path d="M10 9.5c3.6 3.4 3.6 9.6 0 13M22 9.5c-3.6 3.4-3.6 9.6 0 13" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+/*
+ * 팀 엠블럼 (초안). 바탕이 흰색인 그림이라 흰 카드·배지에 얹어 쓴다.
+ * 파일: public/emblem.png(화면), icon-192·512.png(배지·홈 화면), apple-touch-icon.png, favicon-64.png,
+ * 링크 미리보기 og-image.png. 엠블럼이 바뀌면 scripts/make_emblem_assets.py 로 이 파일들을 새로 만든다.
+ */
+export function Emblem({ className = "" }: { className?: string }) {
+  return (
+    <img src="/emblem.png" alt="오테식 엠블럼" width={720} height={673} className={`block h-auto w-full ${className}`} />
   );
+}
+
+/** 머리(사이드바·휴대폰·이용 안내)의 작은 엠블럼: 흰 둥근 네모. 옆에 워드마크가 있어 그림은 읽지 않는다 */
+export function EmblemBadge({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-ink/10 dark:ring-white/15 ${className}`}
+    >
+      <img src="/icon-192.png" alt="" width={192} height={192} className="h-full w-full" />
+    </span>
+  );
+}

@@ -1,15 +1,23 @@
 import { Link } from "@remix-run/react";
 import { BookOpen } from "lucide-react";
 import type { ReactNode } from "react";
-import { ClubIllustration, Eyebrow } from "~/components/Club";
-import { Wordmark } from "~/components/Logo";
+import { Eyebrow } from "~/components/Club";
+import { Emblem, Wordmark } from "~/components/Logo";
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="auth-shell">
       <section className="auth-intro">
         <Wordmark size="lg" className="!text-ink" />
-        <ClubIllustration />
+        {/* 팀 엠블럼: 흰 카드에 얹어 살짝 기울인 스티커처럼 */}
+        <div className="auth-emblem">
+          <Emblem />
+          <span className="club-sticker" aria-hidden="true">
+            SEE YOU
+            <br />
+            ON COURT!
+          </span>
+        </div>
         <div className="relative z-10 mt-auto max-w-[70%] pt-14 md:max-w-full md:pt-80">
           <Eyebrow>GOOD GAMES. BETTER TOGETHER.</Eyebrow>
           <p className="mt-4 font-display text-[28px] font-bold leading-tight tracking-[-0.05em] md:text-[38px]">

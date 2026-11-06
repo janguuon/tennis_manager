@@ -23,6 +23,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MemberAvatar } from "~/components/Club";
+import { EmblemBadge } from "~/components/Logo";
 import { Modal } from "~/components/Modal";
 import { BackLink, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
@@ -440,11 +441,11 @@ function FinalBanner({ t, winners }: { t: TournamentDetail; winners: TournamentE
   return (
     <section className="tile-yellow space-y-4">
       <div className="flex items-center gap-4">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink text-house-yellow">
-          <Trophy size={26} />
-        </span>
+        <EmblemBadge className="h-14 w-14 !rounded-2xl !ring-ink/15" />
         <div className="min-w-0">
-          <p className="eyebrow">FINAL</p>
+          <p className="eyebrow flex items-center gap-1">
+            <Trophy size={12} /> FINAL
+          </p>
           <p className="tile-title">🎉 {TEAM_RESULT_LABEL[winner]}!</p>
           <p className="tile-sub">
             {winner === "draw"
@@ -974,11 +975,11 @@ function Knockout({ t, members }: { t: TournamentDetail; members: UserBrief[] })
     <>
       {t.champion ? (
         <section className="tile-yellow flex items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-ink text-house-yellow">
-            <Trophy size={26} />
-          </span>
+          <EmblemBadge className="h-14 w-14 !rounded-2xl !ring-ink/15" />
           <div className="min-w-0">
-            <p className="eyebrow">CHAMPION</p>
+            <p className="eyebrow flex items-center gap-1">
+              <Trophy size={12} /> CHAMPION
+            </p>
             <p className="tile-title truncate">{entryName(t.champion)}</p>
             <p className="tile-sub">우승을 축하해요!</p>
           </div>

@@ -23,6 +23,7 @@ import {
   TennisCourt,
 } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
+import { Emblem } from "~/components/Logo";
 import { MyVotePill } from "~/components/MyVote";
 import { NOTICE_ICON } from "~/components/NoticePopup";
 import { PageBody, PageHeader } from "~/components/Page";
@@ -472,7 +473,15 @@ function NextGatheringTile({
     return (
       <section className="tile-orange home-next">
         <Eyebrow>NEXT MATCH</Eyebrow>
-        <ClubIllustration />
+        {/* 다음 일정이 없을 땐 팀 엠블럼 (일정 카드는 바구니 그림) */}
+        <div className="home-emblem">
+          <Emblem />
+          <span className="club-sticker" aria-hidden="true">
+            SEE YOU
+            <br />
+            ON COURT!
+          </span>
+        </div>
         <div className="mt-auto pt-40">
           <h2 className="font-display text-3xl font-bold leading-tight tracking-tight">
             다음 만남을

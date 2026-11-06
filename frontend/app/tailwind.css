@@ -596,6 +596,14 @@
   .auth-emblem .club-sticker {
     @apply -bottom-5 -right-5 hidden md:grid;
   }
+  /* 홈 NEXT MATCH 의 다음 일정이 없을 때: 바구니 그림 자리에 팀 엠블럼 */
+  .home-emblem {
+    @apply pointer-events-none absolute right-[5%] top-16 w-[150px] -rotate-3 rounded-2xl bg-white p-2.5 shadow-pop
+      sm:top-[72px] sm:w-[190px] sm:p-3;
+  }
+  .home-next .home-emblem .club-sticker {
+    @apply -bottom-5 -right-4 h-[60px] w-[60px] text-[10px];
+  }
 }
 .mini-tennis-ball {
   position: relative;

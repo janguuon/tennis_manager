@@ -9,6 +9,7 @@ import {
   useRouteLoaderData,
 } from "@remix-run/react";
 
+import { publicOrigin } from "~/lib/origin.server";
 import { getTheme } from "~/lib/theme.server";
 import stylesheet from "~/tailwind.css?url";
 
@@ -37,14 +38,6 @@ export const links: LinksFunction = () => [
 /** 링크 미리보기(카톡 등) 문구 */
 const SITE_NAME = "오테식 매니저";
 const SITE_DESCRIPTION = "오순도순 테니스 식구의 일정 · 전적 · 회비";
-
-/** 접속한 주소의 origin. nginx 뒤에서는 X-Forwarded-Proto로 https를 알아낸다. */
-function publicOrigin(request: Request): string {
-  const url = new URL(request.url);
-  const proto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
-  const host = request.headers.get("host") ?? url.host;
-  return `${proto}://${host}`;
-}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   return json({

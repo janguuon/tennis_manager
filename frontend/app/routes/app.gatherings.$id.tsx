@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { AddToCalendar } from "~/components/AddToCalendar";
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
@@ -1189,8 +1190,12 @@ export default function GatheringDetailPage() {
               {weekday}요일
             </span>
           </p>
-          <p className="relative z-10 mt-4 text-base font-semibold">
+          <p className="relative z-10 mt-4 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-base font-semibold">
             {timeText}
+            {/* 폰 캘린더에 넣기: 예정·진행 중인 모임만 */}
+            {gathering.status === "planned" || gathering.status === "ongoing" ? (
+              <AddToCalendar id={gathering.id} />
+            ) : null}
           </p>
           <div className="relative z-10 mt-6 max-w-[72%] space-y-2 text-[13px]">
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -977,6 +977,17 @@
   .kind-option.is-locked {
     @apply cursor-not-allowed opacity-50 hover:border-slate-200 dark:hover:border-slate-700;
   }
+  /* 내 캘린더에 추가 (모임 화면) */
+  .add-calendar-option {
+    @apply flex items-center justify-between gap-3 rounded-2xl border-[1.5px] border-slate-200 bg-paper px-4 py-3.5 transition-colors
+      hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500;
+  }
+  .add-calendar-option strong {
+    @apply block text-[14px] font-bold;
+  }
+  .add-calendar-option small {
+    @apply mt-0.5 block text-xs font-medium text-slate-500 dark:text-slate-400;
+  }
   /* 코트 바닥 고르기 (일정 등록·수정) */
   .surface-option {
     @apply inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] border-slate-200 bg-paper px-3.5 text-[13px] font-bold transition-colors

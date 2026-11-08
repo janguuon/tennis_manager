@@ -26,6 +26,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import calendar_export
 from .. import pickups as pickup_sync
 from .. import schedule_import as sheet
 from .. import visibility
@@ -1312,6 +1313,38 @@ def get_gathering(
     detail.court_bookings = [court_booking_read(b, current_user) for b in g.court_bookings]
     detail.pickups = [PickupRead.model_validate(r) for r in g.pickups] if pickups_active(g) else []
     return detail
+
+
+# --- 폰 캘린더에 넣기 (app/calendar_export.py) --------------------------------
+@router.get("/{gathering_id}/calendar.ics")
+def gathering_ics(
+    gathering_id: int,
+    link: str | None = Query(None, max_length=300, description="설명에 넣을 모임 화면 주소"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """모임 일정을 .ics(iCalendar) 파일로. 아이폰·맥 캘린더, 삼성 캘린더 등에 추가한다."""
+    g = _load_gathering(db, gathering_id)
+    _require_open(g, current_user)
+    body = calendar_export.ics(g, calendar_export.safe_link(link))
+    return Response(
+        content=body,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="otesik-{g.id}.ics"'},
+    )
+
+
+@router.get("/{gathering_id}/calendar/google")
+def gathering_google_calendar(
+    gathering_id: int,
+    link: str | None = Query(None, max_length=300, description="설명에 넣을 모임 화면 주소"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """구글 캘린더 일정 추가 화면 주소 (안드로이드). {"url": ...}"""
+    g = _load_gathering(db, gathering_id)
+    _require_open(g, current_user)
+    return {"url": calendar_export.google_url(g, calendar_export.safe_link(link))}
 
 
 @router.patch("/{gathering_id}", response_model=GatheringRead)

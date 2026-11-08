@@ -326,6 +326,8 @@ export default function CalendarPage() {
   // 방금 올린 일정: 단톡방 알림 창
   const [created, setCreated] = useState<NewSchedule | null>(null);
   const [importing, setImporting] = useState(false);
+  // 엑셀에서 읽을 달: 시트가 여러 개면 이 달 이름의 시트('11월')를 올린다
+  const [importMonth, setImportMonth] = useState(month);
   const [fileName, setFileName] = useState("");
   // 엑셀 파일 끌어다 놓기
   const [dragging, setDragging] = useState(false);
@@ -358,6 +360,7 @@ export default function CalendarPage() {
   // 엑셀 창을 열 때마다 고른 파일 초기화
   useEffect(() => {
     if (importing) {
+      setImportMonth(month); // 보고 있는 달부터
       setFileName("");
       setDropError("");
       setDragging(false);
@@ -1174,11 +1177,37 @@ export default function CalendarPage() {
               <li>
                 <span>3</span>
                 <div className="min-w-0 flex-1">
-                  <strong>파일 올리기</strong>
+                  <strong>달 고르고 파일 올리기</strong>
                   <p>
-                    예약대기·우천 취소 같은 행과 이미 등록된 일정은
-                    건너뛰어요.
+                    달마다 시트를 나눴다면 고른 달 이름의 시트(
+                    {Number(importMonth.slice(5))}월)를 읽어요. 예약대기·우천
+                    취소 같은 행과 이미 등록된 일정은 건너뛰어요.
                   </p>
+                  <div className="mt-2.5 inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-paper p-1 dark:border-slate-700 dark:bg-slate-900">
+                    <button
+                      type="button"
+                      className="icon-btn !h-8 !w-8"
+                      aria-label="이전 달"
+                      onClick={() => setImportMonth(shiftMonth(importMonth, -1))}
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <strong
+                      className="min-w-[96px] text-center !text-[13px] tabular-nums"
+                      aria-live="polite"
+                    >
+                      {importMonth.slice(0, 4)}년 {Number(importMonth.slice(5))}월
+                    </strong>
+                    <button
+                      type="button"
+                      className="icon-btn !h-8 !w-8"
+                      aria-label="다음 달"
+                      onClick={() => setImportMonth(shiftMonth(importMonth, 1))}
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </div>
+                  <input type="hidden" name="month" value={importMonth} />
                 </div>
               </li>
             </ol>

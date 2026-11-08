@@ -16,6 +16,8 @@
 - 최대 인원을 비우면 오테식 모임은 코트 수 × SEATS_PER_COURT(회칙 제10조, 1면당 6명)로 정한다.
   정원이 있어야 다 찼을 때 대기 신청이 된다. 일반 벙개는 비우면 인원 제한이 없다.
 - 날짜만 미리 채워 두고 나머지가 빈 행(양식 기본값)은 빈 행으로 본다.
+- 달마다 시트를 나눠 쓰면 올릴 때 고른 달 이름의 시트('11월', '2026년 11월', '2026-11')를 읽는다.
+  숨긴 시트와 '작성 안내' 시트는 읽지 않는다.
 
 헤더는 띄어쓰기와 "(선택)" 을 무시하고 찾는다("날 짜", "사용 여부", "캔볼비(선택)" 모두 인식).
 """
@@ -104,6 +106,34 @@ def normalize_header(value) -> str:
 def is_court_sheet(header: tuple) -> bool:
     names = {normalize_header(h) for h in header}
     return {"예약자명", "코트요정", "사용여부"} <= names
+
+
+def is_guide_sheet(title: str) -> bool:
+    """양식의 '작성 안내' 시트 (예시 행이 있어 올려도 읽지 않는다)."""
+    return re.sub(r"\s+", "", title or "") == "작성안내"
+
+
+def sheet_month(title: str) -> tuple[int | None, int] | None:
+    """시트 이름에 적힌 달: '11월'·'11'·'2026년 11월'·'2026-11'·'26.11' → (연도 또는 None, 11). 없으면 None."""
+    t = re.sub(r"\s+", "", title or "")
+    found = re.search(r"(?<!\d)(\d{4}|\d{2})[년.\-/_](\d{1,2})(?!\d)", t)
+    if found:
+        year: int | None = int(found.group(1))
+        mon = int(found.group(2))
+        if year < 100:
+            year += 2000
+    else:
+        found = re.search(r"(?<!\d)(\d{1,2})월", t) or re.fullmatch(r"(\d{1,2})", t)
+        if not found:
+            return None
+        year, mon = None, int(found.group(1))
+    return (year, mon) if 1 <= mon <= 12 else None
+
+
+def sheet_matches(title: str, year: int, month: int) -> bool:
+    """시트 이름이 그 달인가 (연도를 안 적었으면 달만 본다)."""
+    got = sheet_month(title)
+    return got is not None and got[1] == month and got[0] in (None, year)
 
 
 def column_map(header: tuple) -> dict[str, int]:

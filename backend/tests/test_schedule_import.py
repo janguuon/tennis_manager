@@ -326,3 +326,90 @@ def test_reservers_text_groups_courts_by_name(club):
     assert r.json()["court_reservers"] == "3번 김수현"
     r = club.c.patch(f"/gatherings/{gid}", json={"court_reservers": None}, headers=club.admin)
     assert r.json()["court_reservers"] is None
+
+
+# --- 달마다 나눈 시트 -----------------------------------------------------------
+def _book(sheets: dict[str, list[list] | None], hidden: tuple[str, ...] = ()) -> bytes:
+    """시트 이름 → 행 (None 이면 머리글 없는 빈 시트)."""
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for title, rows in sheets.items():
+        ws = wb.create_sheet(title)
+        if title in hidden:
+            ws.sheet_state = "hidden"
+        if rows is None:
+            continue
+        ws.append(HEADER)
+        for r in rows:
+            ws.append(r)
+    bio = io.BytesIO()
+    wb.save(bio)
+    return bio.getvalue()
+
+
+def _upload_month(club, data: bytes, month: str | None):
+    files = {"file": ("schedule.xlsx", data, "application/octet-stream")}
+    form = {"month": month} if month else {}
+    return club.c.post("/gatherings/import", files=files, data=form, headers=club.admin)
+
+
+def _row(day: int, month: int = 1, place: str = "시민 테니스장") -> list:
+    return [datetime(2099, month, day), "10:00~12:00", 3, "장미주", "홍길동", 20000, None, "오테식 정모", None, place, None]
+
+
+def test_sheet_month_names():
+    assert S.sheet_month("11월") == (None, 11)
+    assert S.sheet_month(" 11 월 ") == (None, 11)
+    assert S.sheet_month("11월 (최종)") == (None, 11)
+    assert S.sheet_month("11") == (None, 11)
+    assert S.sheet_month("2026년 11월") == (2026, 11)
+    assert S.sheet_month("2026-11") == (2026, 11)
+    assert S.sheet_month("26.11") == (2026, 11)
+    assert S.sheet_month("1월") == (None, 1) and S.sheet_month("01월") == (None, 1)
+    assert S.sheet_month("템플릿") is None and S.sheet_month("13월") is None and S.sheet_month("시트4") is None
+    assert S.sheet_matches("11월", 2026, 11) and S.sheet_matches("2026년 11월", 2026, 11)
+    assert not S.sheet_matches("2025년 11월", 2026, 11) and not S.sheet_matches("1월", 2026, 11)
+    assert S.is_guide_sheet("작성 안내") and not S.is_guide_sheet("템플릿")
+
+
+def test_import_picks_sheet_of_month(club):
+    # 12월·1월 시트가 함께 있는 파일: 고른 달(2099-01) 시트만 읽는다 (왼쪽 시트가 아니라)
+    data = _book({"12월": [_row(20, 12)], "1월": [_row(17), _row(24)], "작성 안내": [_row(3)]})
+    r = _upload_month(club, data, "2099-01")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["created"] == 2 and body["notices"][0] == "'1월' 시트를 올렸어요."
+    assert sorted(g["event_date"] for g in _month(club)) == ["2099-01-17", "2099-01-24"]
+    assert _month(club, "2099-12") == []
+
+    # 연도까지 적은 이름도 찾는다 (다른 해의 같은 달 시트는 아니다)
+    data = _book({"2098년 12월": [_row(21, 12)], "2099년 12월": [_row(20, 12)]})
+    r = _upload_month(club, data, "2099-12")
+    assert r.json()["created"] == 1 and r.json()["notices"][0] == "'2099년 12월' 시트를 올렸어요."
+    assert [g["event_date"] for g in _month(club, "2099-12")] == ["2099-12-20"]
+
+
+def test_import_month_sheet_missing(club):
+    # 고른 달의 시트가 없으면 등록하지 않고 있는 시트를 알려 준다
+    r = _upload_month(club, _book({"12월": [_row(20, 12)], "2월": [_row(7, 2)]}), "2099-01")
+    assert r.status_code == 400 and "1월 시트가 없어요" in r.json()["detail"] and "12월, 2월" in r.json()["detail"]
+    # 시트가 하나여도 이름이 다른 달이면 멈춘다
+    r = _upload_month(club, _book({"12월": [_row(20, 12)]}), "2099-01")
+    assert r.status_code == 400
+    # 그 달 이름의 시트가 있는데 머리글이 없으면 그렇게 알려 준다
+    r = _upload_month(club, _book({"1월": None, "템플릿": [_row(17)], "템플릿 (2)": [_row(18)]}), "2099-01")
+    assert r.status_code == 400 and "'1월' 시트 첫 줄" in r.json()["detail"]
+    assert _month(club) == []
+
+
+def test_import_single_sheet_and_hidden_sheets(club):
+    # 시트 하나('템플릿')는 이름과 상관없이 그 시트, 숨긴 시트·작성 안내는 읽지 않는다
+    data = _book({"시트4": None, "1월": [_row(10)], "템플릿": [_row(17)], "작성 안내": [_row(3)]}, hidden=("1월",))
+    r = _upload_month(club, data, "2099-01")
+    assert r.status_code == 200 and r.json()["created"] == 1 and r.json()["notices"] == []
+    assert [g["event_date"] for g in _month(club)] == ["2099-01-17"]
+    # 달을 안 보내면(예전 화면) 첫 번째 코트 예약 시트
+    r = _upload_month(club, _book({"작성 안내": [_row(3)], "템플릿": [_row(24)]}), None)
+    assert r.json()["created"] == 1
+    # 달 형식이 틀리면 400
+    assert _upload_month(club, data, "2099-1월").status_code == 400

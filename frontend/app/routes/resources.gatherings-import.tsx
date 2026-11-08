@@ -30,6 +30,9 @@ export async function action({ request }: ActionFunctionArgs) {
   fd.append("file", file, file.name);
   // 운영진: 올린 일정을 금요일 오전 10시 전에 바로 공개
   if (form.get("open_now") === "on") fd.append("open_now", "true");
+  // 달마다 나눈 시트 중 이 달('2026-11' → '11월' 시트)을 읽는다
+  const month = form.get("month");
+  if (typeof month === "string" && /^\d{4}-\d{2}$/.test(month)) fd.append("month", month);
 
   try {
     const result = await api<{

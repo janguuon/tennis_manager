@@ -716,17 +716,19 @@ def _cell_value(field: str, value) -> str | int:
 async def import_gatherings(
     file: UploadFile = File(...),
     open_now: bool = Form(False),
+    month: str | None = Form(None, description="등록할 달 YYYY-MM: 그 달 이름의 시트를 읽는다"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_member),
 ):
     """엑셀(.xlsx)로 일정을 한꺼번에 등록한다. 오류 행은 건너뛰고 보고한다.
 
     - 코트 예약 시트(새 양식, schedule_import.py): 한 행 = 코트 한 면 예약. 같은 날짜·시간·장소·종류는
-      한 모임으로 묶고, 이미 등록된 일정은 건너뛴다.
+      한 모임으로 묶고, 이미 등록된 일정은 건너뛴다. 달마다 시트를 나눠 쓰면 month 의 시트('11월')를 읽는다.
     - 예전 양식: 한 행 = 한 모임.
     """
     if not (file.filename or "").lower().endswith(".xlsx"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=".xlsx 파일만 업로드할 수 있습니다.")
+    target = month_bounds(month)[0] if month else None
 
     content = await file.read()
     try:
@@ -734,14 +736,16 @@ async def import_gatherings(
     except Exception:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="엑셀 파일을 읽을 수 없습니다.")
 
-    # 코트 예약 시트(새 양식)가 있는 시트를 먼저 찾는다 — 첫 시트가 빈 시트일 수 있다
-    for candidate in wb.worksheets:
-        first = next(candidate.iter_rows(max_row=1, values_only=True), None)
-        if first and sheet.is_court_sheet(first):
-            rows = candidate.iter_rows(values_only=True)
-            header = next(rows)
-            result = _import_court_sheet(db, header, rows, current_user)
-            return _open_imported(db, result, current_user) if open_now else result
+    # 코트 예약 시트(새 양식)를 먼저 찾는다 — 첫 시트가 빈 시트일 수 있다
+    picked = _pick_court_sheet(wb, target)
+    if picked is not None:
+        candidate, by_name = picked
+        rows = candidate.iter_rows(values_only=True)
+        header = next(rows)
+        result = _import_court_sheet(db, header, rows, current_user)
+        if by_name:
+            result.notices.insert(0, f"'{candidate.title}' 시트를 올렸어요.")
+        return _open_imported(db, result, current_user) if open_now else result
 
     # 예전 양식: 한 행 = 한 모임 (제목·종류·시작시간… 열)
     ws = wb.active
@@ -988,7 +992,9 @@ def import_template(
         "· 주소(선택)를 적으면 모임 화면의 지도 버튼이 장소 이름 대신 이 주소로 찾아요.",
         "  한 번 적어 두면 같은 장소의 다른 일정에도 들어가요(다음부터는 비워도 돼요).",
         "· 오테식 모임의 캔볼비는 회비에서 나가므로 반영하지 않아요. 게스트비는 5,000원으로 들어가요.",
-        "· 이 '작성 안내' 시트는 올려도 읽지 않아요. '템플릿' 시트에 적어 주세요.",
+        "· 이 '작성 안내' 시트와 숨긴 시트는 올려도 읽지 않아요. '템플릿' 시트에 적어 주세요.",
+        "· 달마다 시트를 나눠 쓰려면 '템플릿' 시트를 복사해 시트 이름을 '11월'처럼 달로 지어요.",
+        "  올릴 때 고른 달의 시트만 읽어요(시트가 하나뿐이면 '템플릿'처럼 달 이름이 아니어도 그 시트를 읽어요).",
     ):
         guide.append([line])
 
@@ -1016,6 +1022,43 @@ def _reservers_text(rows: list[sheet.SheetRow]) -> str | None:
         where = "·".join(courts) + "번" if all(c.isdigit() for c in courts) else ", ".join(map(_court_label, courts))
         parts.append(f"{where} {name}")
     return ", ".join(parts)[:300] or None
+
+
+def _pick_court_sheet(wb, target: date | None):
+    """올릴 코트 예약 시트와, 시트 이름(달)으로 찾았는지. 코트 예약 시트가 없으면 None(예전 양식).
+
+    숨긴 시트와 '작성 안내'(예시 행) 시트는 읽지 않는다. 달(target)을 주면:
+    - 그 달 이름의 시트('11월', '2026년 11월' …)가 있으면 그 시트
+    - 없으면 시트가 하나뿐이고 이름이 다른 달이 아닐 때만 그 시트('템플릿'), 아니면 안내하고 멈춘다.
+    """
+    court, others = [], []
+    for ws in wb.worksheets:
+        if ws.sheet_state != "visible" or sheet.is_guide_sheet(ws.title):
+            continue
+        first = next(ws.iter_rows(max_row=1, values_only=True), None)
+        (court if first and sheet.is_court_sheet(first) else others).append(ws)
+    if target is None:
+        return (court[0], False) if court else None
+
+    named = [ws for ws in court if sheet.sheet_matches(ws.title, target.year, target.month)]
+    if named:
+        return named[0], True
+    wrong = next((ws for ws in others if sheet.sheet_matches(ws.title, target.year, target.month)), None)
+    if wrong is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"'{wrong.title}' 시트 첫 줄이 양식 머리글이 아니에요. "
+            "첫 줄에 날짜·시간·코트 번호·예약자명·코트요정·사용 여부 같은 열 이름을 적어 주세요.",
+        )
+    if not court:
+        return None
+    if len(court) == 1 and sheet.sheet_month(court[0].title) is None:
+        return court[0], False
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        detail=f"{target.month}월 시트가 없어요. 올릴 시트 이름을 '{target.month}월'로 지어 주세요. "
+        f"(있는 시트: {', '.join(ws.title for ws in court)})",
+    )
 
 
 def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) -> GatheringImportResult:

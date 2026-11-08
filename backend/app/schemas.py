@@ -789,6 +789,12 @@ class GatheringDetail(GatheringRead):
     pickups: list[PickupRead] = []                   # 픽업 요청 (예정·진행 중인 모임만)
 
 
+class GuestGenderUpdate(BaseModel):
+    """이름만 적어 초대한 게스트의 성별 고치기."""
+
+    gender: Gender
+
+
 class GuestInvite(BaseModel):
     """모임 참석자가 가입하지 않은 게스트를 이름으로 초대한다."""
 

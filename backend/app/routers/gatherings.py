@@ -69,6 +69,7 @@ from ..schemas import (
     GatheringRead,
     GatheringUpdate,
     FeeWaiverUpdate,
+    GuestGenderUpdate,
     GuestInvite,
     MonthlyPaymentSummary,
     MyPaymentDue,
@@ -1712,6 +1713,33 @@ def invite_guest(
     db.add(guest)
     db.flush()
     participant = _set_attendance(db, gathering, None, guest.id, "attending")
+    db.commit()
+    db.refresh(participant)
+    return ParticipantRead.model_validate(participant)
+
+
+@router.put("/{gathering_id}/guests/{user_id}", response_model=ParticipantRead)
+def update_guest_gender(
+    gathering_id: int,
+    user_id: int,
+    payload: GuestGenderUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """초대한 게스트 성별 고치기: 초대한 회원, 벙주, 운영진 (초대 취소와 같은 사람). 끝난 모임도 고칠 수 있다."""
+    gathering = db.get(Gathering, gathering_id)
+    guest = db.get(User, user_id)
+    participant = db.scalar(
+        select(Participant).where(Participant.gathering_id == gathering_id, Participant.user_id == user_id)
+    )
+    if gathering is None or guest is None or not guest.is_invited or participant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="초대한 게스트를 찾을 수 없어요.")
+    manages = current_user.is_staff or gathering.created_by == current_user.id
+    if not (manages or guest.invited_by_id == current_user.id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="게스트를 초대한 회원과 운영진만 고칠 수 있어요."
+        )
+    guest.gender = payload.gender
     db.commit()
     db.refresh(participant)
     return ParticipantRead.model_validate(participant)

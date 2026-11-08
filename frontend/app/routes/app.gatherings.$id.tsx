@@ -499,6 +499,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
           gender: formData.get("gender") || null,
         },
       });
+    } else if (intent === "guest_gender") {
+      await api(`/gatherings/${id}/guests/${formData.get("user_id")}`, {
+        method: "PUT",
+        token,
+        body: { gender: formData.get("gender") },
+      });
     } else if (intent === "remove_guest") {
       await api(`/gatherings/${id}/guests/${formData.get("user_id")}`, {
         method: "DELETE",
@@ -1475,6 +1481,12 @@ export default function GatheringDetailPage() {
                                 .join(" · ")}
                             </span>
                           </ProfileLink>
+                          {/* 초대한 게스트 성별 고치기: 초대한 회원·벙주·운영진 (서버와 같음) */}
+                          {p.user.invited_by_id &&
+                          !guest &&
+                          (isOrganizer || staff || p.user.invited_by_id === user.id) ? (
+                            <GuestGenderButton guest={p.user} />
+                          ) : null}
                           {p.user.invited_by_id &&
                           !canceled &&
                           (canManageAttendance || p.user.invited_by_id === user.id) &&
@@ -2472,6 +2484,67 @@ function GuestInviteBox({
         </p>
       ) : null}
     </fetcher.Form>
+  );
+}
+
+/** 이름만 적어 초대한 게스트의 성별 고치기 (성별이 없으면 눈에 띄게 '성별 정하기') */
+function GuestGenderButton({ guest }: { guest: UserBrief }) {
+  const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const [open, setOpen] = useState(false);
+  const busy = fetcher.state !== "idle";
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) setOpen(false);
+  }, [fetcher.state, fetcher.data]);
+  const missing = !guest.gender;
+  return (
+    <>
+      <button
+        type="button"
+        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+          missing
+            ? "border-house-orange bg-house-orange/15 text-[#8A3A12] hover:bg-house-orange/30 dark:text-orange-200"
+            : "border-slate-300 text-slate-600 hover:border-slate-500 dark:border-slate-600 dark:text-slate-300"
+        }`}
+        aria-label={`${guest.name} 성별 ${missing ? "정하기" : "고치기"}`}
+        onClick={() => setOpen(true)}
+      >
+        {missing ? "성별 정하기" : "성별 고치기"}
+      </button>
+      {open ? (
+        <Modal title={`${guest.name}님 성별`} onClose={() => setOpen(false)}>
+          <fetcher.Form method="post" className="space-y-4">
+            <input type="hidden" name="intent" value="guest_gender" />
+            <input type="hidden" name="user_id" value={guest.id} />
+            <p className="text-[13px] font-medium text-slate-500 dark:text-slate-400">
+              명단에 보이고, 혼복·여복 대진을 짤 때 쓰여요.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["male", "female"] as const).map((g) => (
+                <button
+                  key={g}
+                  name="gender"
+                  value={g}
+                  disabled={busy}
+                  className={`h-14 rounded-2xl border-[1.5px] text-[15px] font-bold transition-colors ${
+                    guest.gender === g
+                      ? "border-ink bg-white dark:border-white dark:bg-slate-800"
+                      : "border-slate-200 bg-paper hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900"
+                  }`}
+                  aria-pressed={guest.gender === g}
+                >
+                  {g === "male" ? "남성" : "여성"}
+                </button>
+              ))}
+            </div>
+            {fetcher.state === "idle" && fetcher.data?.error ? (
+              <p role="alert" className="alert-error">
+                {fetcher.data.error}
+              </p>
+            ) : null}
+          </fetcher.Form>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 

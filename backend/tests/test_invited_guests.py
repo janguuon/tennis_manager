@@ -156,3 +156,28 @@ def test_games_with_guests_are_not_rated(club):
     assert {r["user"]["name"]: r["games"] for r in board["rows"] if r["games"]} == {
         "aaa": 1, "bbb": 1, "ccc": 1, "ddd": 1,
     }
+
+
+def test_fix_invited_guest_gender(club):
+    """초대한 게스트 성별 고치기: 초대한 회원·벙주·운영진. 가입한 회원은 이 경로로 못 고친다."""
+    club.add_members("amy", "ben", "off")
+    club.set_type("off", "officer")
+    gid = club.gathering(fee=0)
+    club.vote(gid, "amy")
+    club.vote(gid, "ben")
+    guest = _invite(club, gid, "amy").json()["user"]
+    assert guest["gender"] is None  # 예전처럼 성별 없이 초대된 게스트
+    url = f"/gatherings/{gid}/guests/{guest['id']}"
+
+    assert club.c.put(url, json={"gender": "female"}, headers=club.h("ben")).status_code == 403
+    r = club.c.put(url, json={"gender": "female"}, headers=club.h("amy"))
+    assert r.status_code == 200 and r.json()["user"]["gender"] == "female"
+    assert _people(club, gid)["홍길동"]["user"]["gender"] == "female"
+    r = club.c.put(url, json={"gender": "male"}, headers=club.h("off"))
+    assert r.status_code == 200 and r.json()["user"]["gender"] == "male"
+
+    # 성별은 꼭 골라야 하고, 가입한 회원·없는 모임은 404
+    assert club.c.put(url, json={}, headers=club.h("amy")).status_code == 422
+    assert club.c.put(url, json={"gender": "x"}, headers=club.h("amy")).status_code == 422
+    assert club.c.put(f"/gatherings/{gid}/guests/{club.ids['ben']}", json={"gender": "male"}, headers=club.h("off")).status_code == 404
+    assert club.c.put(f"/gatherings/99999/guests/{guest['id']}", json={"gender": "male"}, headers=club.h("off")).status_code == 404

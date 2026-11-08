@@ -55,6 +55,7 @@ import {
   KIND_LABEL,
   canSettle,
   GATHERING_KINDS,
+  genderShort,
   guestsByInvite,
   hasEntryFee,
   payMode,
@@ -1459,12 +1460,19 @@ export default function GatheringDetailPage() {
                                 </small>
                               )}
                             </strong>
+                            {/* 성별(남·여)은 회원·게스트·이름만 적은 초대 게스트 모두 */}
                             <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                              {p.user.invited_by_id
-                                ? `게스트 · ${p.user.invited_by_name ?? ""} 초대`
-                                : `${p.user.member_type === "guest" ? "게스트 · " : ""}${
-                                    p.user.ntrp ? `NTRP ${p.user.ntrp}` : "NTRP 미입력"
-                                  }`}
+                              {[
+                                p.user.member_type === "guest" ? "게스트" : null,
+                                genderShort(p.user.gender),
+                                p.user.invited_by_id
+                                  ? `${p.user.invited_by_name ?? ""} 초대`
+                                  : p.user.ntrp
+                                  ? `NTRP ${p.user.ntrp}`
+                                  : "NTRP 미입력",
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </span>
                           </ProfileLink>
                           {p.user.invited_by_id &&
@@ -2440,8 +2448,11 @@ function GuestInviteBox({
           aria-label="게스트 이름"
           className="input"
         />
-        <select name="gender" aria-label="게스트 성별" className="input w-24" defaultValue="">
-          <option value="">성별</option>
+        {/* 성별은 명단에 보이고 혼복·여복 대진에 쓰여 꼭 고른다 */}
+        <select name="gender" aria-label="게스트 성별" className="input w-24" defaultValue="" required>
+          <option value="" disabled>
+            성별
+          </option>
           <option value="male">남성</option>
           <option value="female">여성</option>
         </select>

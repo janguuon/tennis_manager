@@ -1,5 +1,10 @@
 // 모임 종류·회원 등급 표기와 권한 (서버·클라이언트 공용)
-import type { CourtSurface, GatheringKind, MemberType, User } from "~/lib/types";
+import type { CourtSurface, Gender, GatheringKind, MemberType, User } from "~/lib/types";
+
+/** 성별 짧은 표기 (명단·프로필): 남 / 여. 모르면 null */
+export const GENDER_SHORT: Record<Gender, string> = { male: "남", female: "여" };
+export const genderShort = (gender: Gender | null | undefined) =>
+  gender ? GENDER_SHORT[gender] : null;
 
 /*
  * 교류전(다른 클럽과 겨루는 모임)은 정산 방식에 따라 둘로 저장한다:

@@ -17,6 +17,7 @@ import { Eyebrow, MemberAvatar, awardText } from "~/components/Club";
 import { BackLink, PageBody } from "~/components/Page";
 
 import { ApiError, api } from "~/lib/api.server";
+import { genderShort } from "~/lib/club";
 import { canSeeRecords } from "~/lib/features";
 import { telHref } from "~/lib/format";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
@@ -88,15 +89,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 }
 
-const GENDER_LABEL = { male: "남", female: "여" } as const;
-
 export default function MemberDetailPage() {
   const { user: u, records, isAdmin } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const saving = useNavigation().state !== "idle";
   const meta = [
     MEMBER_TYPE_LABEL[u.member_type],
-    u.gender ? GENDER_LABEL[u.gender] : null,
+    genderShort(u.gender),
     u.ntrp ? `NTRP ${u.ntrp}` : null,
   ].filter(Boolean);
 

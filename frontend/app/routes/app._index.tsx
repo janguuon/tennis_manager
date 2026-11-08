@@ -30,7 +30,7 @@ import { NOTICE_ICON } from "~/components/NoticePopup";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
-import { COURT_SURFACE_LABEL, KIND_DOT, isGuest, isStaff, naverMapUrl } from "~/lib/club";
+import { COURT_SURFACE_LABEL, KIND_DOT, guestsByInvite, isGuest, isStaff, naverMapUrl } from "~/lib/club";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { todayKST, won } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
@@ -525,6 +525,13 @@ function NextGatheringTile({
   // 게스트는 일정은 정회원과 함께 보지만, 참석 투표는 모임 3일 전 0시부터 (직접 만든 일정은 바로)
   const guestVoteLocked =
     !me.is_admin && me.member_type === "guest" && !next.guest_vote_open && next.created_by !== me.id;
+  // 교류전: 게스트는 임원진이 초대해야 참가한다 (초대받아 참석·대기 중이면 직접 빠질 수 있다)
+  const guestInviteLocked =
+    !me.is_admin &&
+    me.member_type === "guest" &&
+    guestsByInvite(next.kind) &&
+    myVote !== "attending" &&
+    myVote !== "waiting";
   const href = `/app/gatherings/${next.id}?from=${next.event_date}`;
   return (
     <section ref={swipeRef} className="tile-orange home-next">
@@ -648,7 +655,7 @@ function NextGatheringTile({
                   type={myVote === "attending" && locked ? "button" : "submit"}
                   name="status"
                   value={myVote === "attending" ? "cancel" : "attending"}
-                  disabled={guestVoteLocked || fetcher.state !== "idle"}
+                  disabled={guestVoteLocked || guestInviteLocked || fetcher.state !== "idle"}
                   aria-pressed={shownVote === "attending"}
                   title={
                     myVote === "attending"
@@ -667,7 +674,9 @@ function NextGatheringTile({
                 <button
                   name="status"
                   value="absent"
-                  disabled={guestVoteLocked || (locked && myVote === "attending") || fetcher.state !== "idle"}
+                  disabled={
+                    guestVoteLocked || guestInviteLocked || (locked && myVote === "attending") || fetcher.state !== "idle"
+                  }
                   aria-pressed={shownVote === "absent"}
                   title={
                     locked && myVote === "attending"
@@ -688,12 +697,15 @@ function NextGatheringTile({
             {fetcher.data.error}
           </p>
         )}
-        {(!me.is_admin && (guestVoteLocked || myVote === "waiting" || full || myVote === "attending")) ||
+        {(!me.is_admin &&
+          (guestInviteLocked || guestVoteLocked || myVote === "waiting" || full || myVote === "attending")) ||
         myDue > 0 ? (
           <div className="mt-3 flex flex-wrap justify-between gap-2 text-[11px]">
             <span>
               {me.is_admin
                 ? ""
+                : guestInviteLocked
+                ? "교류전은 임원진이 초대한 게스트만 참가해요."
                 : guestVoteLocked && next.guest_vote_open_at
                 ? `게스트 투표는 ${formatOpenAt(next.guest_vote_open_at)}부터 열려요.`
                 : myVote === "waiting"

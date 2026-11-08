@@ -42,6 +42,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
+import { CourtCountInput } from "~/components/CourtCountInput";
 import { CourtSurfaceField, CourtSurfaceTag } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
@@ -53,6 +54,9 @@ import {
   KIND_LABEL,
   canSettle,
   GATHERING_KINDS,
+  guestsByInvite,
+  hasEntryFee,
+  payMode,
   isClubKind,
   isOtesikKind,
   isStaffKind,
@@ -60,6 +64,7 @@ import {
   isStaff,
   naverMapUrl,
 } from "~/lib/club";
+import { courtLabels } from "~/lib/courts";
 import { accountText, won } from "~/lib/format";
 import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao, withLink } from "~/lib/kakao";
@@ -316,7 +321,12 @@ function CancelFeeModal({
   }, [fetcher.state, fetcher.data, onClose]);
   const perPerson = attending > 0 && amount > 0 ? Math.ceil(amount / attending / 100) * 100 : 0;
   // 빠른 선택: 원래 금액 그대로(우천이라도 코트비를 못 돌려받는 경우), 0원(낼 돈 없음)
-  const original = club ? gathering.guest_fee : gathering.fee;
+  // 교류전(참가비)은 나눌 총액이 없어 기록해 둔 코트비를 원래 금액으로 보여 준다
+  const original = club
+    ? gathering.guest_fee
+    : hasEntryFee(gathering.kind)
+    ? gathering.court_fee
+    : gathering.fee;
   const quick = [
     ...(original > 0 ? [{ label: `원래 금액 ${won(original)}`, value: original }] : []),
     { label: "0원 (낼 돈 없음)", value: 0 },
@@ -630,7 +640,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             : {}),
           court_reservers: get("court_reservers") || null,
           court_count: courtNumbers
-            ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
+            ? courtLabels(courtNumbers).length || 1
             : Number(get("court_count") || 1),
           max_participants: maxParticipants ? Number(maxParticipants) : null,
           ...feeFieldsFromForm(formData),
@@ -707,6 +717,8 @@ export default function GatheringDetailPage() {
   // club: 회비에서 지출 (정산), staffRun: 운영진이 여는 클럽 일정 (오테식 정모·벙개, 교류전 — 권한)
   const club = isClubKind(gathering.kind);
   const staffRun = isStaffKind(gathering.kind);
+  // 교류전(참가비): 참석자마다 정한 1인 참가비 (코트비는 기록만)
+  const entry = hasEntryFee(gathering.kind);
   const staff = isStaff(user);
   // 지도 버튼: 주소가 있으면 주소로, 없으면 장소 이름으로 네이버 지도 검색
   const mapUrl = naverMapUrl(gathering);
@@ -800,14 +812,27 @@ export default function GatheringDetailPage() {
   );
   const me = gathering.participants.find((p) => p.user.id === user.id);
   const myAttending = me?.status === "attending";
+  // 교류전: 게스트는 임원진이 초대해야 참가한다 (서버와 같음)
+  const inviteOnly = guestsByInvite(gathering.kind);
   // 게스트 초대(이름만): 참석·대기 중인 회원, 벙주, 운영진. 회칙대로 게스트 투표 시각부터(운영진은 언제든)
+  // 교류전은 임원진만 (가입한 게스트를 골라 참가시킬 수도 있다)
   const canInvite =
     !guest &&
     (gathering.status === "planned" || gathering.status === "ongoing") &&
-    (staff ||
-      gathering.created_by === user.id ||
-      myAttending ||
-      me?.status === "waiting");
+    (inviteOnly
+      ? staff
+      : staff ||
+        gathering.created_by === user.id ||
+        myAttending ||
+        me?.status === "waiting");
+  const joinedIds = new Set(
+    gathering.participants
+      .filter((p) => p.status === "attending" || p.status === "waiting")
+      .map((p) => p.user.id)
+  );
+  const invitableGuests = inviteOnly
+    ? members.filter((m) => m.member_type === "guest" && !joinedIds.has(m.id))
+    : [];
   const inviteOpensAt =
     !staff && !gathering.guest_vote_open ? gathering.guest_vote_open_at : null;
   // 대기열: 정원이 차면 참석 신청은 대기, 자리가 나면 순서대로 참석
@@ -822,6 +847,13 @@ export default function GatheringDetailPage() {
     user.member_type === "guest" &&
     !gathering.guest_vote_open &&
     gathering.created_by !== user.id;
+  // 교류전 게스트는 임원진이 초대해야 참가한다. 초대받아 참석·대기 중이면 직접 빠질 수는 있다
+  const guestInviteLocked =
+    !user.is_admin &&
+    user.member_type === "guest" &&
+    inviteOnly &&
+    !myAttending &&
+    me?.status !== "waiting";
   const myDue = me ? dueOf.get(me.user.id) ?? 0 : 0;
   const myRefund = me ? refundOf.get(me.user.id) ?? 0 : 0;
   // 게스트비를 면제한 참석 게스트 수 (관리자·총무가 면제)
@@ -841,7 +873,14 @@ export default function GatheringDetailPage() {
     gathering.court_fee || gathering.ball_fee
       ? `코트 ${won(gathering.court_fee)} + 볼 ${won(gathering.ball_fee)}`
       : won(gathering.fee);
-  // n빵(일반 벙개·n빵 교류전) ↔ 회비 지출(오테식 모임·회비 교류전) 전환은 정리할 기록이 없을 때만 (서버 규칙과 같음)
+  // 교류전(참가비) 한 줄: "1인 20,000원 · 코트비 80,000원"
+  const entryLine = [
+    gathering.entry_fee > 0 ? `1인 ${won(gathering.entry_fee)}` : "",
+    gathering.court_fee > 0 ? `코트비 ${won(gathering.court_fee)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // 정산 방식(회비 지출 / 1인 참가비 / n빵)이 바뀌는 전환은 정리할 기록이 없을 때만 (서버 규칙과 같음)
   const switchBlock = gathering.participants.some((p) => p.paid)
     ? "입금 기록이 있어요"
     : gathering.court_bookings.length
@@ -849,7 +888,7 @@ export default function GatheringDetailPage() {
     : undefined;
   const kindLocks: Partial<Record<GatheringKind, string>> = switchBlock
     ? Object.fromEntries(
-        GATHERING_KINDS.filter((k) => isClubKind(k) !== club).map((k) => [k, switchBlock])
+        GATHERING_KINDS.filter((k) => payMode(k) !== payMode(gathering.kind)).map((k) => [k, switchBlock])
       )
     : {};
   const account = accountText(gathering);
@@ -880,6 +919,10 @@ export default function GatheringDetailPage() {
             ? ` (게스트 참가비 ${won(gathering.guest_fee)})`
             : ""
         }`
+      : entry
+      ? gathering.entry_fee > 0
+        ? `💰 참가비 1인 ${won(gathering.entry_fee)}`
+        : ""
       : gathering.fee > 0
       ? `💰 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})`
       : "",
@@ -1191,6 +1234,8 @@ export default function GatheringDetailPage() {
                   ? ` · 코트비 ${won(gathering.court_total)}`
                   : ""}
               </p>
+            ) : entry ? (
+              entryLine ? <p className="pl-6">참가비 {entryLine}</p> : null
             ) : gathering.fee > 0 ? (
               <p className="pl-6">참가비 총 {feeBreakdown}</p>
             ) : null}
@@ -1256,7 +1301,7 @@ export default function GatheringDetailPage() {
                       type={myAttending && absentLocked ? "button" : "submit"}
                       name="status"
                       value={myAttending ? "cancel" : "attending"}
-                      disabled={guestVoteLocked || navigation.state !== "idle"}
+                      disabled={guestVoteLocked || guestInviteLocked || navigation.state !== "idle"}
                       aria-pressed={myAttending}
                       title={
                         myAttending
@@ -1277,7 +1322,9 @@ export default function GatheringDetailPage() {
                     <button
                       name="status"
                       value="absent"
-                      disabled={guestVoteLocked || absentLocked || navigation.state !== "idle"}
+                      disabled={
+                        guestVoteLocked || guestInviteLocked || absentLocked || navigation.state !== "idle"
+                      }
                       title={
                         absentLocked
                           ? `모임 ${ATTENDANCE_LOCK_DAYS}일 전부터는 불참으로 바꿀 수 없어요`
@@ -1294,7 +1341,13 @@ export default function GatheringDetailPage() {
                   </>
                 )}
               </Form>
-              {guestVoteLocked && gathering.guest_vote_open_at ? (
+              {guestInviteLocked ? (
+                <p className="mt-3 flex items-center gap-1.5 text-xs font-bold">
+                  <Lock size={12} className="shrink-0" />
+                  교류전은 임원진이 초대한 게스트만 참가해요. 참가하고 싶으면
+                  임원진에게 말해 주세요.
+                </p>
+              ) : guestVoteLocked && gathering.guest_vote_open_at ? (
                 <p className="mt-3 flex items-center gap-1.5 text-xs font-bold">
                   <Lock size={12} className="shrink-0" />
                   게스트 투표는 {formatOpenAt(gathering.guest_vote_open_at)}부터 열려요. 지금은
@@ -1348,7 +1401,13 @@ export default function GatheringDetailPage() {
               취소 요청을 받으면 이름 아래 ‘참석 취소’를 눌러 주세요.
             </p>
           ) : null}
-          {canInvite ? <GuestInviteBox opensAt={inviteOpensAt} /> : null}
+          {canInvite ? (
+            <GuestInviteBox
+              opensAt={inviteOpensAt}
+              inviteOnly={inviteOnly}
+              guests={invitableGuests}
+            />
+          ) : null}
           {!gathering.participants.length ? (
             <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
               아직 투표한 사람이 없어요.
@@ -1512,6 +1571,10 @@ export default function GatheringDetailPage() {
                               .filter(Boolean)
                               .join(" · ")
                           : "참석한 게스트가 없어요"
+                        : entry
+                        ? `1인 참가비 · 참석 ${payment.attending}명${
+                            gathering.court_fee > 0 ? ` · 코트비 ${won(gathering.court_fee)}` : ""
+                          }`
                         : payment.attending > 0
                         ? `${feeBreakdown} ÷ ${payment.attending}명`
                         : "참석자가 정해지면 계산돼요"}
@@ -1996,6 +2059,7 @@ export default function GatheringDetailPage() {
                   (gathering.ball_fee ? 0 : gathering.fee),
                 ball_fee: gathering.ball_fee,
                 guest_fee: club ? gathering.guest_fee : 5000,
+                entry_fee: gathering.entry_fee,
                 // 지금 종류의 계좌만 채우고, 다른 종류로 바꾸면 비운다
                 accounts: {
                   flash: club ? NO_ACCOUNT : gathering,
@@ -2130,7 +2194,7 @@ export default function GatheringDetailPage() {
                         id="e_courts"
                         name="court_numbers"
                         className="input"
-                        placeholder="예: 3, 5"
+                        placeholder="예: 3, 5 또는 1~4"
                         defaultValue={gathering.court_numbers ?? ""}
                       />
                     </div>
@@ -2143,13 +2207,9 @@ export default function GatheringDetailPage() {
                         <label className="label" htmlFor="e_count">
                           코트 면수
                         </label>
-                        <input
+                        <CourtCountInput
                           id="e_count"
-                          name="court_count"
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          className="input"
+                          numbersId="e_courts"
                           defaultValue={gathering.court_count}
                         />
                       </div>
@@ -2261,9 +2321,26 @@ const shortDate = (iso: string) =>
 /**
  * 이름만 적어 게스트 초대 (가입하지 않은 분). 게스트와 똑같이 자리를 쓰고(꽉 차면 대기)
  * 오테식 모임은 게스트비를 낸다. 게스트 투표 시각 전이면 언제부터인지 안내만 한다.
+ * 교류전(inviteOnly)은 임원진만 열고, 가입한 게스트를 골라 참가시킬 수도 있다(guests).
  */
-function GuestInviteBox({ opensAt }: { opensAt: string | null }) {
+function GuestInviteBox({
+  opensAt,
+  inviteOnly = false,
+  guests = [],
+}: {
+  opensAt: string | null;
+  inviteOnly?: boolean;
+  /** 교류전: 아직 참가하지 않은 가입한 게스트 */
+  guests?: UserBrief[];
+}) {
   const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
+  const picker = useFetcher<{ ok: boolean; error: string | null }>();
+  const [picked, setPicked] = useState("");
+  const pickBusy = picker.state !== "idle";
+  // 참가시키면 고른 칸을 비운다 (그 게스트는 목록에서 빠진다)
+  useEffect(() => {
+    if (picker.state === "idle" && picker.data?.ok) setPicked("");
+  }, [picker.state, picker.data]);
   const formRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const busy = fetcher.state !== "idle";
@@ -2299,6 +2376,52 @@ function GuestInviteBox({ opensAt }: { opensAt: string | null }) {
       className="mt-4 space-y-2.5 rounded-2xl bg-slate-100 p-3.5 dark:bg-slate-800/60"
     >
       <input type="hidden" name="intent" value="invite_guest" />
+      {inviteOnly ? (
+        <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
+          교류전 게스트는 임원진이 초대해요. 게스트가 직접 참석 투표를 할 수
+          없어요.
+        </p>
+      ) : null}
+      {inviteOnly && guests.length ? (
+        <div className="space-y-1.5">
+          <label className="label !mb-0" htmlFor="invite_member_guest">
+            가입한 게스트 참가시키기
+          </label>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <select
+              id="invite_member_guest"
+              className="input"
+              value={picked}
+              onChange={(e) => setPicked(e.target.value)}
+            >
+              <option value="">게스트 고르기</option>
+              {guests.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn-primary btn-sm h-auto"
+              disabled={!picked || pickBusy}
+              onClick={() =>
+                picker.submit(
+                  { intent: "set_attendance", user_id: picked, status: "attending" },
+                  { method: "post" }
+                )
+              }
+            >
+              {pickBusy ? "참가시키는 중…" : "참가시키기"}
+            </button>
+          </div>
+          {picker.state === "idle" && picker.data?.error ? (
+            <p role="alert" className="alert-error">
+              {picker.data.error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
         가입하지 않은 분을 이름으로 초대해요. 게스트와 똑같이 자리를 쓰고(꽉 차면
         대기), 오테식 모임은 게스트비를 내요.

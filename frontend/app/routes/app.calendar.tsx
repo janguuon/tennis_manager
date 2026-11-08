@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { CourtCountInput } from "~/components/CourtCountInput";
 import { CourtSurfaceField } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
@@ -48,6 +49,7 @@ import {
   isOtesikKind,
   isStaff,
 } from "~/lib/club";
+import { courtLabels } from "~/lib/courts";
 import { todayKST } from "~/lib/format";
 import { bookingsFromForm, feeFieldsFromForm } from "~/lib/gathering-form";
 import type { NewSchedule } from "~/lib/schedule-notice";
@@ -213,7 +215,7 @@ export async function action({ request }: ActionFunctionArgs) {
     court_reservers: get("court_reservers") || null,
     // 코트 번호를 적었으면 면수는 자동(백엔드 계산), 아니면 직접 입력값 사용
     court_count: courtNumbers
-      ? courtNumbers.split(",").filter((s) => s.trim()).length || 1
+      ? courtLabels(courtNumbers).length || 1
       : Number(get("court_count") || 1),
     max_participants: maxParticipants ? Number(maxParticipants) : null,
     ...feeFieldsFromForm(formData),
@@ -850,6 +852,7 @@ export default function CalendarPage() {
                 court_fee: 0,
                 ball_fee: 0,
                 guest_fee: 5000,
+                entry_fee: 0,
                 accounts: {
                   // 일반 벙개는 보통 만든 사람이 받으므로 내 환급 계좌
                   flash: {
@@ -985,10 +988,11 @@ export default function CalendarPage() {
                         id="court_numbers"
                         name="court_numbers"
                         className="input"
-                        placeholder="예: 3, 5"
+                        placeholder="예: 3, 5 또는 1~4"
                       />
                       <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                        쉼표로 나눠 적으면 그 수만큼 동시에 경기를 진행해요.
+                        쉼표로 나누거나 1~4처럼 적으면 그 수만큼 동시에 경기를
+                        진행해요.
                       </p>
                     </div>
                     <CourtSurfaceField hint="모름으로 두면 같은 장소에서 골랐던 바닥이 들어가요." />
@@ -997,15 +1001,7 @@ export default function CalendarPage() {
                         <label className="label" htmlFor="court_count">
                           코트 면수
                         </label>
-                        <input
-                          id="court_count"
-                          name="court_count"
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          defaultValue={1}
-                          className="input"
-                        />
+                        <CourtCountInput id="court_count" numbersId="court_numbers" />
                       </div>
                       <div>
                         <label className="label" htmlFor="max_participants">
@@ -1172,7 +1168,7 @@ export default function CalendarPage() {
                     날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요.
                     무료 코트는 코트비에 0을 적어요. 최대 인원을 비우면 오테식
                     정모·벙개는 코트 수 × 6명이에요. 교류전은 사용 여부에
-                    ‘교류전 (회비)’나 ‘교류전 (n빵)’을 골라요.
+                    ‘교류전 (회비)’나 ‘교류전 (참가비)’를 골라요.
                   </p>
                 </div>
               </li>

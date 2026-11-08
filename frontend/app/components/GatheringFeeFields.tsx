@@ -8,6 +8,7 @@ import {
   KIND_HINT,
   KIND_LABEL,
   KIND_ORDER,
+  hasEntryFee,
   isClubKind,
   isExchangeKind,
   isStaffKind,
@@ -27,6 +28,8 @@ export type FeeDefaults = {
   court_fee: number;
   ball_fee: number;
   guest_fee: number;
+  /** 교류전(참가비) 1인 참가비 */
+  entry_fee: number;
   /** 입금 계좌 기본값: 일반 벙개(받는 사람 계좌) / 오테식 모임(회비 통장) */
   accounts: { flash: AccountDefaults; club: AccountDefaults };
 };
@@ -42,7 +45,8 @@ type BookingRow = {
  * 일정 등록·수정 폼의 "종류 · 정산" 칸.
  * - 일반 벙개: 코트비 + 캔볼값 (참석자 n빵), 입금 받을 계좌
  * - 오테식 정모·벙개: 게스트비, 게스트비 입금 계좌(회비 통장), 코트 예약자(등록할 때)
- * - 교류전: 정산 방식을 고른다. 회비에서 지출이면 오테식 정모처럼, 참석자끼리 n빵이면 일반 벙개처럼
+ * - 교류전: 정산 방식을 고른다. 회비에서 지출이면 오테식 정모처럼, 1인 참가비면 코트비는 기록만 하고
+ *   참석자마다 정한 참가비를 받는다(입금 받을 계좌는 일반 벙개처럼)
  *
  * members를 주면 코트 예약 줄을 함께 입력받는다(등록). 올린 뒤에는 모임 화면 '회비 지출' 카드에서 고친다.
  * children: 종류 선택과 금액 칸 사이에 들어갈 칸(날짜·코트 등). 고른 종류를 받는다.
@@ -192,6 +196,45 @@ export function GatheringFeeFields({
               defaultValue={defaults.guest_fee}
             />
           </div>
+        </FieldGroup>
+      ) : hasEntryFee(kind) ? (
+        <FieldGroup title="코트비 · 1인 참가비">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor={id("court_fee")}>
+                코트비 (원)
+              </label>
+              <input
+                id={id("court_fee")}
+                name="court_fee"
+                type="number"
+                min="0"
+                className="input"
+                placeholder="0"
+                value={courtFee}
+                onChange={(e) => setCourtFee(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor={id("entry_fee")}>
+                1인 참가비 (원)
+              </label>
+              <input
+                id={id("entry_fee")}
+                name="entry_fee"
+                type="number"
+                min="0"
+                step="1000"
+                className="input"
+                placeholder="예: 20000"
+                defaultValue={defaults.entry_fee || ""}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            코트비는 기록으로 남기고, 참석자는 한 사람마다 1인 참가비를 내요
+            (나누지 않아요). 0원이면 받을 돈이 없어요.
+          </p>
         </FieldGroup>
       ) : (
         <FieldGroup title="참가비 (n빵)">

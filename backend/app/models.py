@@ -134,7 +134,7 @@ class GatheringKind(str, enum.Enum):
     CLUB_REGULAR = "club_regular"  # 오테식 정모: 회비에서 지출 (코트비는 예약자에게 돌려줌)
     CLUB_FLASH = "club_flash"      # 오테식 벙개: 회비에서 지출
     EXCHANGE = "exchange"          # 교류전 (회비): 회비에서 지출
-    EXCHANGE_SPLIT = "exchange_split"  # 교류전 (n빵): 코트비 + 캔볼값을 참석자끼리 n빵
+    EXCHANGE_SPLIT = "exchange_split"  # 교류전 (참가비): 코트비는 기록만, 참석자마다 정한 1인 참가비(entry_fee)
     FLASH = "flash"                # 일반 벙개: 코트비 + 캔볼값을 참석자끼리 n빵
 
 
@@ -145,6 +145,8 @@ STAFF_KINDS = CLUB_KINDS + (GatheringKind.EXCHANGE_SPLIT,)
 # 오테식 정모·벙개 (교류전 제외): 대진 결과가 레이팅에 들어가고(점수 필수),
 # 회칙 제10조 정원(코트 1면당 6명)을 기본으로 채운다. 교류전은 상대 클럽과 겨루고 인원도 상대와 정해서 뺀다
 OTESIK_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH)
+# 교류전 (회비·참가비): 게스트는 직접 투표하지 못하고 임원진이 초대해야 참가한다
+EXCHANGE_KINDS = (GatheringKind.EXCHANGE, GatheringKind.EXCHANGE_SPLIT)
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +334,8 @@ class Gathering(Base):
     ball_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # 오테식 모임: 게스트 1인 참가비 (회칙 제17조). 일반 벙개는 0.
     guest_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # 교류전(참가비): 참석자 한 사람이 내는 정해진 참가비 (n빵이 아니다). 다른 종류는 0
+    entry_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # 입금 계좌 (참가자 공개) — 은행/계좌번호/예금주
     bank: Mapped[str | None] = mapped_column(String(50))
     account_number: Mapped[str | None] = mapped_column(String(50))
@@ -380,6 +384,16 @@ class Gathering(Base):
     def is_staff_run(self) -> bool:
         """오테식 정모·벙개, 교류전: 운영진이 만들고 임원진이 함께 관리하는 클럽 일정."""
         return self.kind in STAFF_KINDS
+
+    @property
+    def has_entry_fee(self) -> bool:
+        """교류전(참가비): 참석자마다 정해진 1인 참가비(entry_fee)를 낸다. 코트비는 기록만 한다."""
+        return self.kind == GatheringKind.EXCHANGE_SPLIT
+
+    @property
+    def guests_by_invite(self) -> bool:
+        """교류전: 게스트는 임원진이 초대해야 참가한다(직접 참석 투표 X, 회원의 이름 초대 X)."""
+        return self.kind in EXCHANGE_KINDS
 
     @property
     def is_rated(self) -> bool:

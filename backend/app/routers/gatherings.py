@@ -8,7 +8,8 @@
 - 일반 벙개: 코트비 + 캔볼값을 참석자끼리 n빵
 - 오테식 정모·벙개: 회비에서 지출. 회원은 낼 돈이 없고 게스트만 게스트비를 낸다.
   코트비는 예약자(CourtBooking)에게 총무가 돌려준다 (routers/court_bookings.py).
-- 교류전: 모임마다 정한다. 회비로 하면(exchange) 오테식 정모와 같고, n빵이면(exchange_split) 일반 벙개와 같다.
+- 교류전: 모임마다 정한다. 회비로 하면(exchange) 오테식 정모와 같고, 참가비로 하면(exchange_split)
+  코트비는 기록만 하고 참석자마다 정한 1인 참가비(entry_fee)를 낸다 (n빵이 아니다).
   어느 쪽이든 운영진만 만들고 임원진이 함께 관리한다(STAFF_KINDS). 대진 결과는 레이팅에 넣지 않는다.
 """
 import io
@@ -95,6 +96,7 @@ IMPORT_HEADER_MAP = {
     "캔볼값": "ball_fee",
     "게스트비": "guest_fee",
     "참가비": "fee",  # 예전 양식(총액 한 칸) 호환
+    "1인참가비": "entry_fee",  # 교류전(참가비)
     "은행": "bank",
     "계좌번호": "account_number",
     "예금주": "account_holder",
@@ -112,7 +114,7 @@ KIND_LABELS = {
     "일반벙개": GatheringKind.FLASH,
     "벙개": GatheringKind.FLASH,
 }
-INT_FIELDS = ("fee", "court_fee", "ball_fee", "guest_fee")
+INT_FIELDS = ("fee", "court_fee", "ball_fee", "guest_fee", "entry_fee")
 
 
 # --- 내부 헬퍼 --------------------------------------------------------------
@@ -203,6 +205,10 @@ def _require_open(gathering: Gathering, user: User) -> None:
         )
 
 
+EXCHANGE_GUEST_INVITE = "교류전은 임원진이 초대한 게스트만 참가할 수 있어요. 참가하고 싶으면 임원진에게 말해 주세요."
+EXCHANGE_INVITE_STAFF = "교류전 게스트는 임원진만 초대할 수 있어요."
+
+
 def _require_vote_open(gathering: Gathering, user: User) -> None:
     """일정은 보이지만 아직 투표 전(게스트, 모임 3일 전 0시 전)이면 투표를 막는다."""
     if not visibility.can_vote(user, gathering):
@@ -272,9 +278,12 @@ def _guest_fee(gathering: Gathering) -> int:
 
 
 def _per_person(gathering: Gathering) -> int:
-    """일반 벙개의 현재 1인 금액. 오테식 모임(회비 지출)은 0."""
+    """일반 벙개의 현재 1인 금액, 교류전(참가비)은 정한 1인 참가비. 오테식 모임(회비 지출)은 0.
+    취소된 교류전(참가비)은 일반 벙개처럼 취소 정산 금액을 참석자끼리 나눈다."""
     if gathering.is_club:
         return 0
+    if gathering.has_entry_fee and gathering.status != GatheringStatus.CANCELED:
+        return gathering.entry_fee
     return per_person_fee(_split_total(gathering), len(_attendees(gathering)))
 
 
@@ -294,7 +303,8 @@ def _has_payment(gathering: Gathering) -> bool:
     이미 낸 사람이 있으면 돌려줄 돈 때문에 남긴다.
     """
     if not gathering.is_club:
-        return gathering.fee > 0 or _split_total(gathering) > 0
+        # 교류전(참가비)은 정한 1인 참가비가 있으면 (취소돼도 낸 사람에게 돌려줄 돈 때문에 남긴다)
+        return gathering.fee > 0 or gathering.entry_fee > 0 or _split_total(gathering) > 0
     return any(p.paid for p in gathering.participants) or (
         _guest_fee(gathering) > 0
         and any(
@@ -439,18 +449,32 @@ def sync_court_fairy(db: Session, gathering_id: int) -> None:
         g.court_fairy = court_fairy_text([b.payee_name for b in g.court_bookings])
 
 
+def _pay_mode(kind: GatheringKind) -> str:
+    """정산 방식: 회비 지출(오테식 모임·회비 교류전) / 1인 참가비(교류전) / n빵(일반 벙개)."""
+    if kind in CLUB_KINDS:
+        return "club"
+    return "entry" if kind == GatheringKind.EXCHANGE_SPLIT else "split"
+
+
 def _apply_kind_rules(g: Gathering) -> None:
     """
     종류별 금액 정리.
     - 일반 벙개: 코트비·캔볼값을 입력했으면 n빵 총액 = 코트비 + 캔볼값. 게스트비는 없음.
     - 오테식 모임: 회비에서 지출하므로 n빵 금액이 없다(코트비는 예약 내역으로 관리).
+    - 교류전(참가비): 코트비는 기록만 하고, 참석자마다 1인 참가비를 낸다. n빵 총액·캔볼값·게스트비는 없음.
     """
     if g.is_club:
         g.fee = 0
         g.court_fee = 0
         g.ball_fee = 0
+        g.entry_fee = 0
+    elif g.has_entry_fee:
+        g.fee = 0
+        g.ball_fee = 0
+        g.guest_fee = 0
     else:
         g.guest_fee = 0
+        g.entry_fee = 0
         if g.court_fee or g.ball_fee:
             g.fee = g.court_fee + g.ball_fee
 
@@ -550,10 +574,10 @@ def _share_place(db: Session, g: Gathering) -> None:
 
 
 def _normalize_courts(data: dict) -> None:
-    """court_numbers가 주어지면 정리하고 court_count를 그 개수로 맞춘다."""
+    """court_numbers가 주어지면 정리하고 court_count를 그 개수로 맞춘다. '1~4'처럼 범위로 적어도 된다."""
     raw = data.get("court_numbers")
     if raw:
-        labels = [s.strip() for s in str(raw).split(",") if s.strip()]
+        labels = sheet.court_labels(raw)
         if labels:
             data["court_numbers"] = ", ".join(labels)
             data["court_count"] = len(labels)
@@ -720,7 +744,7 @@ def _cell_value(field: str, value) -> str | int:
             return KIND_LABELS[key].value
         if key in {k.value for k in GatheringKind}:
             return key
-        raise ValueError("종류: 오테식 정모 / 오테식 벙개 / 교류전(회비) / 교류전(n빵) / 일반 벙개 중 하나로 적어 주세요.")
+        raise ValueError("종류: 오테식 정모 / 오테식 벙개 / 교류전(회비) / 교류전(참가비) / 일반 벙개 중 하나로 적어 주세요.")
     if field == "account_number":
         # 엑셀이 계좌번호를 숫자로 인식(예: 1234567890.0)해도 정수 문자열로 보정
         if isinstance(value, float) and value.is_integer():
@@ -999,8 +1023,10 @@ def import_template(
         "· 무료 코트는 코트비에 0을 적어요. 0원 코트는 보낼 코트비가 없어 정산 목록에 올라가지 않아요.",
         "· 날짜 칸은 날짜만 받아요. 구글 시트에서는 칸을 두 번 누르면 달력이 떠요.",
         "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
-        "· 사용 여부가 오테식 정모 / 오테식 벙개 / 교류전 (회비) / 교류전 (n빵) / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
-        "· 교류전 (회비)는 오테식 정모처럼 회비에서, 교류전 (n빵)은 일반 벙개처럼 참석자끼리 나눠요. 교류전은 최대 인원을 비우면 제한이 없어요.",
+        "· 사용 여부가 오테식 정모 / 오테식 벙개 / 교류전 (회비) / 교류전 (참가비) / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
+        "· 교류전 (회비)는 오테식 정모처럼 회비에서 내요. 교류전 (참가비)는 코트비만 기록되고, 1인 참가비는 등록한 뒤 모임 수정에서 정해요.",
+        "  교류전은 최대 인원을 비우면 제한이 없어요.",
+        "· 코트 번호는 한 행에 한 면씩 적거나, '1~4'처럼 범위로 적어도 돼요.",
         "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
         f"· 최대 인원을 비우면 오테식 정모·벙개는 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명).",
         "  정원이 차면 다음 신청자는 대기로 들어가요. 일반 벙개는 비우면 인원 제한이 없어요.",
@@ -1210,6 +1236,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
                 )
         else:
             # 일반 벙개: 참석자끼리 코트비+캔볼비 n빵. 회원인 첫 코트요정이 벙주(환급 계좌가 있으면 그 계좌).
+            # 교류전(참가비)은 코트비만 기록하고 1인 참가비는 모임 수정에서 정한다(_apply_kind_rules).
             # 회원인 코트요정이 없으면 올린 사람이 벙주이고 계좌는 비워 둔다(모임 수정에서 채운다)
             gathering.court_fee = sum(r.court_fee for r in group.rows)
             gathering.ball_fee = sum(r.ball_fee for r in group.rows)
@@ -1298,15 +1325,15 @@ def update_gathering(
     _require_organizer(g, current_user)
     data = payload.model_dump(exclude_unset=True)
     # 비울 수 없는 칸은 null이면 무시
-    for key in ("kind", "fee", "court_fee", "ball_fee", "guest_fee"):
+    for key in ("kind", "fee", "court_fee", "ball_fee", "guest_fee", "entry_fee"):
         if key in data and data[key] is None:
             del data[key]
 
     new_kind = data.get("kind")
     if new_kind is not None and new_kind != g.kind:
         _require_club_creator(new_kind, current_user)
-        # n빵(일반 벙개·n빵 교류전) ↔ 회비 지출(오테식 모임·회비 교류전)은 정산 방식이 달라 정리할 기록이 없을 때만 바꾼다
-        if (new_kind in CLUB_KINDS) != g.is_club:
+        # 정산 방식(회비 지출 / n빵 / 1인 참가비)이 바뀌면 정리할 기록이 없을 때만 바꾼다
+        if _pay_mode(new_kind) != _pay_mode(g.kind):
             if any(p.paid for p in g.participants):
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
@@ -1462,14 +1489,21 @@ def vote_attendance(
     if not gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
     _require_open(gathering, current_user)
-    _require_vote_open(gathering, current_user)
-
     participant = db.scalar(
         select(Participant).where(
             Participant.gathering_id == gathering_id,
             Participant.user_id == current_user.id,
         )
     )
+    # 교류전: 게스트는 임원진이 초대해야 참가한다. 초대받은 게스트는 불참·취소만 직접 한다
+    if (
+        payload.status == "attending"
+        and current_user.is_guest
+        and gathering.guests_by_invite
+        and (participant is None or participant.status not in (AttendanceStatus.ATTENDING, AttendanceStatus.WAITING))
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=EXCHANGE_GUEST_INVITE)
+    _require_vote_open(gathering, current_user)
 
     # 마감 제한: 모임 3일 전부터는 참석자가 불참으로 바꿀 수 없음(운영진에게 요청). 대기 취소는 언제든.
     # 관리자·임원진·총무는 회원 참석도 취소해 주므로 본인 것도 막지 않는다.
@@ -1500,7 +1534,8 @@ def set_member_attendance(
     current_user: User = Depends(get_current_user),
 ):
     """운영진이 회원의 참석을 바꾼다(3일 전 마감 뒤 참석 취소 요청 처리 등). 불참이 되면 대기자가 올라간다.
-    관리자·임원진·총무는 모든 모임에서, 그 밖에는 모임을 만든 사람(벙주)만."""
+    관리자·임원진·총무는 모든 모임에서, 그 밖에는 모임을 만든 사람(벙주)만.
+    교류전에 가입한 게스트를 참가시킬 때도 쓴다(임원진만)."""
     gathering = db.get(Gathering, gathering_id)
     if not gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
@@ -1511,8 +1546,18 @@ def set_member_attendance(
     )
     if participant is None and payload.status == "absent":
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="참석 투표한 회원이 아닙니다.")
-    if participant is None and not db.get(User, user_id):
+    target = db.get(User, user_id)
+    if participant is None and not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="회원을 찾을 수 없습니다.")
+    # 교류전 게스트를 참가시키는 건 임원진만 (게스트 초대와 같다)
+    if (
+        payload.status == "attending"
+        and gathering.guests_by_invite
+        and target is not None
+        and target.member_type == MemberType.GUEST
+        and not current_user.is_staff
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=EXCHANGE_INVITE_STAFF)
     participant = _set_attendance(db, gathering, participant, user_id, payload.status)
     db.commit()
     db.refresh(participant)
@@ -1601,11 +1646,14 @@ def invite_guest(
 
     초대 게스트는 게스트와 똑같이 자리를 쓴다: 정원이 찼으면 대기, 오테식 모임은 게스트비.
     회칙대로 게스트 자리는 게스트 투표 시각(모임 3일 전 0시)부터라 그 전에는 운영진만 초대할 수 있다.
+    교류전은 임원진(운영진)만 초대한다.
     """
     gathering = _load_gathering(db, gathering_id)
     _require_open(gathering, current_user)
     if gathering.status not in (GatheringStatus.PLANNED, GatheringStatus.ONGOING):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="끝났거나 취소된 모임에는 게스트를 초대할 수 없어요.")
+    if gathering.guests_by_invite and not current_user.is_staff:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=EXCHANGE_INVITE_STAFF)
     mine = next((p for p in gathering.participants if p.user_id == current_user.id), None)
     manages = current_user.is_staff or gathering.created_by == current_user.id
     joined = mine is not None and mine.status in (AttendanceStatus.ATTENDING, AttendanceStatus.WAITING)
@@ -1743,7 +1791,7 @@ def my_payment_dues(
         .where(
             Participant.user_id == current_user.id,
             Participant.status == AttendanceStatus.ATTENDING,
-            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS), Gathering.cancel_fee > 0),
+            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS), Gathering.cancel_fee > 0, Gathering.entry_fee > 0),
             # 취소된 모임은 취소 정산 금액이 있을 때만
             or_(Gathering.status != GatheringStatus.CANCELED, Gathering.cancel_fee > 0),
         )
@@ -1792,7 +1840,7 @@ def payment_summary(
             Gathering.event_date >= first,
             Gathering.event_date <= last,
             # 무료 일반 벙개는 정산 대상 아님 (취소 정산 금액이 있으면 대상)
-            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS), Gathering.cancel_fee > 0),
+            or_(Gathering.fee > 0, Gathering.kind.in_(CLUB_KINDS), Gathering.cancel_fee > 0, Gathering.entry_fee > 0),
         )
         .options(*gathering_load_options())
         .order_by(Gathering.event_date, Gathering.start_time)

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { MemberAvatar } from "~/components/Club";
 import { MyVotePill } from "~/components/MyVote";
-import { COURT_SURFACE_LABEL, KIND_BADGE, KIND_DOT, KIND_LABEL, isClubKind } from "~/lib/club";
+import { COURT_SURFACE_LABEL, KIND_BADGE, KIND_DOT, KIND_LABEL, hasEntryFee, isClubKind } from "~/lib/club";
 import { won } from "~/lib/format";
 import { GATHERING_STATUS_BADGE, GATHERING_STATUS_LABEL } from "~/lib/status";
 import type { AttendeeBrief, Gathering, Me } from "~/lib/types";
@@ -22,6 +22,10 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
       : g.status === "canceled"
         ? g.per_person > 0
           ? `취소 정산 1인 ${won(g.per_person)}`
+          : ""
+        : hasEntryFee(g.kind)
+        ? g.entry_fee > 0
+          ? `1인 ${won(g.entry_fee)}`
           : ""
         : g.fee > 0 && g.per_person > 0
         ? `1인 ${won(g.per_person)}`

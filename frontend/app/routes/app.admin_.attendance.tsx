@@ -92,7 +92,7 @@ export default function AttendancePage() {
   const span = yearly ? "한 해" : "이 달";
 
   const byId = new Map(data.gatherings.map((g) => [g.id, g]));
-  // 교류전은 회비·n빵을 함께 센다
+  // 교류전은 회비·참가비를 함께 센다
   const shown = data.gatherings.filter((g) => filter === "all" || kindGroup(g.kind) === filter);
   const kindCount = (kind: GatheringKind) => data.gatherings.filter((g) => kindGroup(g.kind) === kind).length;
 

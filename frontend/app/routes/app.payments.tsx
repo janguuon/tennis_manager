@@ -27,7 +27,7 @@ import { CopyButton } from "~/components/CopyButton";
 import { Eyebrow, SectionHeading } from "~/components/Club";
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_BADGE, KIND_LABEL, canSettle, isClubKind } from "~/lib/club";
+import { KIND_BADGE, KIND_LABEL, canSettle, hasEntryFee, isClubKind } from "~/lib/club";
 import { accountText, won } from "~/lib/format";
 import { requireMember } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
@@ -516,6 +516,8 @@ export default function PaymentsPage() {
                     {g.status === "canceled" ? "취소 정산 " : ""}
                     {isClubKind(g.kind)
                       ? `게스트 1인 ${won(g.guest_fee)}`
+                      : hasEntryFee(g.kind) && g.status !== "canceled"
+                      ? `참가비 1인 ${won(g.per_person)}`
                       : `총 ${won(g.fee)} · 1인 ${won(g.per_person)}`}{" "}
                     · 입금 {g.paid_count}/{g.payer_count}명
                   </p>

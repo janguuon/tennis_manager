@@ -23,12 +23,12 @@ export type MatchType =
 /** maybe(미정)는 예전 투표 표시용. waiting = 정원이 차서 대기 중 */
 export type AttendanceStatus = "attending" | "absent" | "waiting" | "maybe";
 export type GatheringStatus = "planned" | "ongoing" | "completed" | "canceled";
-/** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 교류전 (회비 또는 n빵) / 일반 벙개 (n빵) */
+/** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 교류전 (회비 또는 1인 참가비) / 일반 벙개 (n빵) */
 export type GatheringKind =
   | "club_regular"
   | "club_flash"
   | "exchange" // 교류전 (회비에서 지출)
-  | "exchange_split" // 교류전 (참석자끼리 n빵)
+  | "exchange_split" // 교류전 (1인 참가비: 코트비는 기록만)
   | "flash";
 /** 코트 바닥 재질: 하드 · 인조잔디 · 클레이 · 카펫 */
 export type CourtSurface = "hard" | "turf" | "clay" | "carpet";
@@ -142,6 +142,8 @@ export interface Gathering {
   ball_fee: number;
   /** 오테식 모임: 게스트 1인 참가비 */
   guest_fee: number;
+  /** 교류전(참가비): 참석자 1인 참가비 (n빵 아님). 다른 종류는 0 */
+  entry_fee: number;
   bank: string | null;
   account_number: string | null;
   account_holder: string | null;
@@ -149,7 +151,7 @@ export interface Gathering {
   created_by: number;
   created_at: string;
   attendance: AttendanceSummary | null;
-  /** 1인 참가비 (총액 ÷ 참석 인원, 100원 단위 올림). 서버가 계산. 오테식 모임은 0. */
+  /** 1인 참가비 (총액 ÷ 참석 인원, 100원 단위 올림. 교류전(참가비)은 정한 금액). 서버가 계산. 오테식 모임은 0. */
   per_person: number;
   /** 일정 공개 시각(정회원·게스트, 한국 시간, 전주 금요일 오전 10시에 다음 주 월~일 일정) */
   member_open_at: string | null;

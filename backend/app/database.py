@@ -95,6 +95,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     # 청백전 최종 승리팀
     ("tournaments", "winner_team", "winner_team VARCHAR(10)"),
     ("tournaments", "notice_id", "notice_id INTEGER REFERENCES notices(id)"),
+    # 교류전(참가비) 1인 참가비
+    ("gatherings", "entry_fee", "entry_fee INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

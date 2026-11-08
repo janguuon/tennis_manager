@@ -241,7 +241,8 @@ export default function GuidePage() {
               <dt className="bg-house-blue">교류전</dt>
               <dd>
                 다른 클럽과 겨루는 모임이에요. 운영진이 모임마다{" "}
-                <b>회비에서 지출</b>하거나 <b>참석자끼리 n분의 1</b>로 나눠요.
+                <b>회비에서 지출</b>하거나 <b>1인 참가비</b>를 정해 받아요.
+                게스트는 <b>임원진이 초대해야</b> 참가할 수 있어요.
               </dd>
             </div>
             <div>

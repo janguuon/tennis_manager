@@ -3,7 +3,7 @@ import type { CourtSurface, GatheringKind, MemberType, User } from "~/lib/types"
 
 /*
  * 교류전(다른 클럽과 겨루는 모임)은 정산 방식에 따라 둘로 저장한다:
- * exchange = 회비에서 지출 (오테식 정모처럼), exchange_split = 참석자끼리 n빵 (일반 벙개처럼).
+ * exchange = 회비에서 지출 (오테식 정모처럼), exchange_split = 1인 참가비 (코트비는 기록만).
  * 이름·색·필터에서는 한 종류(교류전)로 보인다 — kindGroup.
  */
 export const KIND_LABEL: Record<GatheringKind, string> = {
@@ -60,7 +60,7 @@ export const KIND_HINT: Record<GatheringKind, string> = {
   club_regular: "회비에서 지출 · 게스트만 참가비",
   club_flash: "회비에서 지출 · 게스트만 참가비",
   exchange: "다른 클럽과 교류 · 회비에서 지출 · 게스트만 참가비",
-  exchange_split: "다른 클럽과 교류 · 코트비 + 캔볼값을 참석자끼리 n빵",
+  exchange_split: "다른 클럽과 교류 · 코트비는 기록만 · 참석자마다 1인 참가비",
   flash: "코트비 + 캔볼값을 참석자끼리 n빵",
 };
 
@@ -84,13 +84,23 @@ export const KIND_ORDER: GatheringKind[] = [
 /** 교류전 정산 방식 고르기 */
 export const EXCHANGE_PAY_LABEL: Record<"exchange" | "exchange_split", string> = {
   exchange: "회비에서 지출",
-  exchange_split: "참석자끼리 n빵",
+  exchange_split: "1인 참가비",
 };
 
 export const isExchangeKind = (kind: GatheringKind) =>
   kind === "exchange" || kind === "exchange_split";
 
-/** 화면에 보이는 종류로 묶기: n빵 교류전도 교류전 */
+/** 교류전(참가비): 코트비는 기록만 하고, 참석자마다 정한 1인 참가비(entry_fee)를 낸다 (n빵 아님) */
+export const hasEntryFee = (kind: GatheringKind) => kind === "exchange_split";
+
+/** 교류전: 게스트는 임원진이 초대해야 참가한다 (직접 참석 투표 X, 정회원의 이름 초대 X — 서버와 같음) */
+export const guestsByInvite = (kind: GatheringKind) => isExchangeKind(kind);
+
+/** 정산 방식: 회비 지출 / 1인 참가비(교류전) / n빵(일반 벙개). 바꾸려면 정리할 기록이 없어야 한다 (서버와 같음) */
+export const payMode = (kind: GatheringKind) =>
+  isClubKind(kind) ? "club" : hasEntryFee(kind) ? "entry" : "split";
+
+/** 화면에 보이는 종류로 묶기: 참가비 교류전도 교류전 */
 export const kindGroup = (kind: GatheringKind): GatheringKind =>
   kind === "exchange_split" ? "exchange" : kind;
 

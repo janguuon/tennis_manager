@@ -67,7 +67,8 @@ USAGE_KINDS = {
     "오테식벙개": GatheringKind.CLUB_FLASH,
     "교류전": GatheringKind.EXCHANGE,  # 정산 방식을 안 적으면 회비
     "교류전회비": GatheringKind.EXCHANGE,
-    "교류전n빵": GatheringKind.EXCHANGE_SPLIT,
+    "교류전참가비": GatheringKind.EXCHANGE_SPLIT,  # 코트비는 기록만, 1인 참가비는 모임 수정에서
+    "교류전n빵": GatheringKind.EXCHANGE_SPLIT,  # 예전 이름
     "교류전엔빵": GatheringKind.EXCHANGE_SPLIT,
     "일반벙개": GatheringKind.FLASH,
 }
@@ -91,7 +92,7 @@ TIME_SLOTS = [
     "15:00~17:00", "16:00~18:00", "17:00~19:00", "18:00~20:00", "19:00~21:00", "20:00~22:00",
 ]
 USAGE_OPTIONS = [
-    "오테식 정모", "오테식 벙개", "교류전 (회비)", "교류전 (n빵)", "일반 벙개", "예약대기", "결재 대기", "예약취소", "우천 취소",
+    "오테식 정모", "오테식 벙개", "교류전 (회비)", "교류전 (참가비)", "일반 벙개", "예약대기", "결재 대기", "예약취소", "우천 취소",
     "최코치님 사용", "예약 (비고에 예약자 작성)", "개인 사용 (비고에 사용자)",
 ]
 # 양식의 예약자명 선택지: 코트 예약에 쓰는 이름 (목록에 없는 이름도 적을 수 있다)
@@ -196,10 +197,28 @@ def parse_time_range(v) -> tuple[time, time]:
     return time(sh, sm), end
 
 
+# 코트 번호 범위: '1~4', '1-4' (한 번에 펼치는 건 30면까지)
+_COURT_RANGE = re.compile(r"^(\d{1,3})\s*[~\-–]\s*(\d{1,3})$")
+
+
+def court_labels(raw) -> list[str]:
+    """코트 번호 칸 → 코트 하나씩: '3, 5'·'3/5'·'3·5' → ['3', '5'], '1~4'·'1-4' → ['1', '2', '3', '4']."""
+    out: list[str] = []
+    for part in re.split(r"[,/·]", str(raw or "")):
+        part = part.strip()
+        if not part:
+            continue
+        m = _COURT_RANGE.match(part)
+        if m and int(m[1]) < int(m[2]) and int(m[2]) - int(m[1]) < 30:
+            out.extend(str(n) for n in range(int(m[1]), int(m[2]) + 1))
+        else:
+            out.append(part)
+    return out
+
+
 def parse_court(v) -> str:
-    """'3', 3, '3번', '3번 코트' → '3'. 여러 면은 '3, 5'."""
-    raw = _text(v).replace("코트", "").replace("번", "")
-    parts = [p.strip() for p in re.split(r"[,/·]", raw) if p.strip()]
+    """'3', 3, '3번', '3번 코트' → '3'. 여러 면은 '3, 5', 범위 '1~4번'은 '1, 2, 3, 4'."""
+    parts = court_labels(_text(v).replace("코트", "").replace("번", ""))
     if not parts:
         raise ValueError("코트 번호를 적어 주세요.")
     return ", ".join(parts)

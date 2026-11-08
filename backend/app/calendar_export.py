@@ -6,6 +6,8 @@
 - 시간은 한국 시간. 시작 시각이 없으면 하루 종일 일정, 끝 시각이 없으면 2시간으로 잡는다.
 - 알림은 1시간 전(하루 종일 일정은 전날 오전 9시). 구글 링크는 알림을 정할 수 없어 그 사람의 기본 알림을 쓴다.
 - 저장한 뒤 모임이 바뀌거나 취소돼도 폰 캘린더에는 반영되지 않는다(다시 추가하면 같은 일정 UID 라 덮어쓰는 앱도 있다).
+- 참석 일정 구독(feed): 내가 참석·대기 중인 모임을 한 캘린더로. 캘린더 앱이 주기적으로 다시 받아
+  시간 변경·취소·불참이 따라온다 (routers/calendar_feed.py).
 """
 from __future__ import annotations
 
@@ -96,18 +98,14 @@ def _day(d: date) -> str:
     return d.strftime("%Y%m%d")
 
 
-def ics(g: Gathering, link: str | None = None, now: datetime | None = None) -> str:
+def _event(g: Gathering, link: str | None, now: datetime, prefix: str = "") -> list[str]:
+    """VEVENT 한 개. prefix: 제목 앞에 붙일 말(구독의 '(대기) ')."""
     start, end, all_day = span(g)
-    title = summary(g)
+    title = prefix + summary(g)
     lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//Otesik//Tennis Manager//KO",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
         "BEGIN:VEVENT",
         f"UID:gathering-{g.id}@otesik",
-        f"DTSTAMP:{_utc(now or datetime.now(timezone.utc))}",
+        f"DTSTAMP:{_utc(now)}",
     ]
     if all_day:
         lines += [f"DTSTART;VALUE=DATE:{_day(start)}", f"DTEND;VALUE=DATE:{_day(end)}"]
@@ -128,8 +126,47 @@ def ics(g: Gathering, link: str | None = None, now: datetime | None = None) -> s
             f"TRIGGER:{ALL_DAY_ALARM if all_day else ALARM_BEFORE}",
             "END:VALARM",
         ]
-    lines += ["END:VEVENT", "END:VCALENDAR"]
+    lines.append("END:VEVENT")
+    return lines
+
+
+def _calendar(events: list[list[str]], extra: list[str] | None = None) -> str:
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Otesik//Tennis Manager//KO",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        *(extra or []),
+    ]
+    for e in events:
+        lines += e
+    lines.append("END:VCALENDAR")
     return "\r\n".join(_fold(x) for x in lines) + "\r\n"
+
+
+def ics(g: Gathering, link: str | None = None, now: datetime | None = None) -> str:
+    """모임 하나를 .ics 파일로."""
+    return _calendar([_event(g, link, now or datetime.now(timezone.utc))])
+
+
+FEED_NAME = "오테식 참석 일정"
+
+
+def feed(
+    entries: list[tuple[Gathering, str]], base: str | None = None, now: datetime | None = None
+) -> str:
+    """참석 일정 구독: (모임, 제목 앞말) 목록을 캘린더 하나로. base 가 있으면 일정마다 모임 화면 링크."""
+    now = now or datetime.now(timezone.utc)
+    events = [_event(g, f"{base}/app/gatherings/{g.id}" if base else None, now, prefix) for g, prefix in entries]
+    extra = [
+        f"X-WR-CALNAME:{FEED_NAME}",
+        "X-WR-TIMEZONE:Asia/Seoul",
+        # 다시 받아 갈 주기 힌트 (따르는 앱만: 아이폰은 기기 설정, 구글은 몇 시간~하루)
+        "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+        "X-PUBLISHED-TTL:PT1H",
+    ]
+    return _calendar(events, extra)
 
 
 # --- 구글 캘린더 -------------------------------------------------------------

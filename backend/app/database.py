@@ -97,6 +97,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("tournaments", "notice_id", "notice_id INTEGER REFERENCES notices(id)"),
     # 교류전(참가비) 1인 참가비
     ("gatherings", "entry_fee", "entry_fee INTEGER NOT NULL DEFAULT 0"),
+    # 참석 일정 구독(폰 캘린더) 비밀 링크
+    ("users", "calendar_token", "calendar_token VARCHAR(64)"),
 ]
 
 

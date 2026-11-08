@@ -16,6 +16,7 @@ from .routers import (
     admin,
     auth,
     avatars,
+    calendar_feed,
     club,
     court_bookings,
     draws,
@@ -74,6 +75,7 @@ app.include_router(club.router)
 app.include_router(notices.router)
 app.include_router(tournaments.router)
 app.include_router(pickups.router)
+app.include_router(calendar_feed.router)
 
 
 @app.get("/")

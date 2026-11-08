@@ -1,3 +1,4 @@
+import { Link } from "@remix-run/react";
 import { CalendarPlus, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -76,6 +77,13 @@ export function AddToCalendar({ id }: { id: number }) {
             날짜·시간·장소와 모임 화면 링크가 들어가고, 1시간 전 알림이 함께 들어가요(시간 미정이면
             전날 오전 9시, 구글은 내 기본 알림). 저장한 뒤 시간이 바뀌거나 모임이 취소되면 폰 캘린더는
             그대로라 다시 추가하거나 지워 주세요.
+          </p>
+          <p className="mt-3 text-xs font-semibold">
+            매번 추가하지 않으려면{" "}
+            <Link to="/app/mypage#calendar-feed" className="underline underline-offset-2">
+              마이페이지 › 참석 일정 구독
+            </Link>
+            을 해 두세요. 참석한 모임이 알아서 들어오고 바뀌어요.
           </p>
         </Modal>
       ) : null}

@@ -190,6 +190,8 @@ class User(Base):
     award_note: Mapped[str | None] = mapped_column(String(100))  # 짧은 이력 (예: "2026 OO오픈 우승")
     # 클럽 소식 팝업을 마지막으로 확인한 시각. 이보다 나중에 올라온 소식이 "새 소식"이다
     notice_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 참석 일정 구독(폰 캘린더) 비밀 링크 토큰. 만들지 않았거나 끊었으면 NULL (routers/calendar_feed.py)
+    calendar_token: Mapped[str | None] = mapped_column(String(64))
 
     # 코트비 등을 돌려받을 계좌 (본인과 관리자·임원진에게만 공개)
     bank: Mapped[str | None] = mapped_column(String(50))

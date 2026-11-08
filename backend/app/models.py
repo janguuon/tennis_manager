@@ -10,6 +10,7 @@
 - Participant   : 모임 참여자 + 참석/불참 투표 상태
 - Draw / DrawMatch : 모임 참여자 기반 자동/수동 대진표
 - CourtBooking  : 오테식 모임의 코트 예약 내역 (예약자가 낸 코트비를 회비에서 돌려줌)
+- PickupRequest : 픽업 요청 (차가 없는 참석자를 차 있는 참석자가 태워 간다)
 - Tournament / TournamentEntry / TournamentMatch : 대회 (청백전, 단식·복식 토너먼트)
 
 설계 핵심
@@ -355,11 +356,47 @@ class Gathering(Base):
     court_bookings: Mapped[list[CourtBooking]] = relationship(
         back_populates="gathering", cascade="all, delete-orphan", order_by="CourtBooking.id"
     )
+    pickups: Mapped[list[PickupRequest]] = relationship(
+        back_populates="gathering", cascade="all, delete-orphan", order_by="PickupRequest.id"
+    )
 
     @property
     def is_club(self) -> bool:
         """오테식 정모·벙개: 회비에서 지출하는 모임."""
         return self.kind in CLUB_KINDS
+
+
+class PickupRequest(Base):
+    """픽업 요청: 차가 없어 오기 어려운 참석자가 태워 갈 사람을 찾는다.
+
+    - 그 모임에 '참석'인 사람만 요청하고(모임당 한 건), '참석'인 다른 사람이 운전자로 수락한다.
+    - driver_id 가 비어 있으면 아직 찾는 중. 한 운전자가 여러 요청을 맡을 수 있다.
+    - 요청자가 참석을 취소하면 요청이 지워지고, 운전자가 참석을 취소하면 다시 찾는 중이 된다(app/pickups.py).
+    - 만날 곳·시각은 선택이다(부담 없이 요청하고, 짝이 된 뒤 단톡방에서 정해도 된다). 집 주소 대신 동네·역 정도로 적는다.
+    """
+
+    __tablename__ = "pickup_requests"
+    __table_args__ = (
+        UniqueConstraint("gathering_id", "requester_id", name="uq_pickup_gathering_requester"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    gathering_id: Mapped[int] = mapped_column(
+        ForeignKey("gatherings.id"), nullable=False, index=True
+    )
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    meet_place: Mapped[str | None] = mapped_column(String(100))  # 만날 곳 (선택, 예: 영통 근처)
+    meet_time: Mapped[time | None] = mapped_column(Time)  # 만날 시각 (선택)
+    going: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")  # 갈 때
+    coming_back: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")  # 올 때
+    note: Mapped[str | None] = mapped_column(String(200))
+    driver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    gathering: Mapped[Gathering] = relationship(back_populates="pickups")
+    requester: Mapped[User] = relationship(foreign_keys=[requester_id])
+    driver: Mapped["User | None"] = relationship(foreign_keys=[driver_id])
 
 
 class CourtBooking(Base):

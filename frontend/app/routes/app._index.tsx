@@ -3,6 +3,7 @@ import { json } from "@remix-run/node";
 import { Link, useFetcher, useLoaderData, useRouteLoaderData } from "@remix-run/react";
 import {
   ArrowUpRight,
+  Car,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -343,9 +344,17 @@ export default function HomePage() {
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1.5">
                       <MyVotePill g={g} />
-                      <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                        <Users size={13} />
-                        {g.attendance?.attending ?? 0}
+                      <span className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400">
+                        {g.pickup_open ? (
+                          <span className="flex items-center gap-1" title={`픽업 요청 ${g.pickup_open}건`}>
+                            <Car size={13} />
+                            {g.pickup_open}
+                          </span>
+                        ) : null}
+                        <span className="flex items-center gap-1">
+                          <Users size={13} />
+                          {g.attendance?.attending ?? 0}
+                        </span>
                       </span>
                     </span>
                   </Link>
@@ -704,8 +713,46 @@ function NextGatheringTile({
             )}
           </div>
         ) : null}
+        <PickupNote next={next} me={me} href={href} attending={myVote === "attending"} />
       </div>
     </section>
+  );
+}
+
+/** 다음 모임의 픽업: 내 요청·내가 태워 갈 사람, 또는 (참석자에게) 태워 갈 사람을 찾는 요청 수 */
+function PickupNote({
+  next,
+  me,
+  href,
+  attending,
+}: {
+  next: GatheringDetail;
+  me: { id: number };
+  href: string;
+  attending: boolean;
+}) {
+  const pickups = next.pickups ?? [];
+  const mine = pickups.find((p) => p.requester.id === me.id);
+  const driving = pickups.filter((p) => p.driver?.id === me.id);
+  const open = pickups.filter((p) => !p.driver && p.requester.id !== me.id);
+  const text = mine
+    ? mine.driver
+      ? `${mine.driver.name}님이 태워 가요`
+      : "픽업 요청 중 · 태워 갈 사람을 찾고 있어요"
+    : driving.length
+    ? `${driving.map((p) => p.requester.name).join(", ")}님을 태워 가요`
+    : attending && open.length
+    ? `픽업 요청 ${open.length}건 · 태워 갈 수 있나요?`
+    : "";
+  if (!text) return null;
+  return (
+    <Link
+      to={`${href}#pickups`}
+      className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/55 px-3 py-1.5 text-xs font-bold text-ink transition-colors hover:bg-white/80"
+    >
+      <Car size={14} className="shrink-0" />
+      <span className="truncate">{text}</span>
+    </Link>
   );
 }
 function CourtTile({

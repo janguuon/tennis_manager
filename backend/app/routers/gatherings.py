@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import pickups as pickup_sync
 from .. import schedule_import as sheet
 from .. import visibility
 from ..club_account import default_club_account, fill_club_account
@@ -39,6 +40,7 @@ from ..models import (
     GatheringStatus,
     Participant,
     MemberType,
+    PickupRequest,
     User,
 )
 from ..schemas import (
@@ -67,6 +69,7 @@ from ..schemas import (
     ParticipantRead,
     ParticipantVote,
     PaymentLine,
+    PickupRead,
     PaymentUpdate,
     UserBrief,
 )
@@ -146,11 +149,18 @@ def _with_open_times(read: GatheringRead, gathering: Gathering) -> GatheringRead
     return read
 
 
+def pickups_active(gathering: Gathering) -> bool:
+    """픽업 요청을 받고 보여 주는 모임: 예정·진행 중 (끝났거나 취소된 모임은 숨긴다)."""
+    return gathering.status in (GatheringStatus.PLANNED, GatheringStatus.ONGOING)
+
+
 def _to_read(gathering: Gathering) -> GatheringRead:
     read = GatheringRead.model_validate(gathering)
     read.attendance = _summary(gathering)
     read.per_person = _per_person(gathering)
     read.court_total = sum(b.payable for b in gathering.court_bookings)
+    if pickups_active(gathering):
+        read.pickup_open = sum(1 for r in gathering.pickups if r.driver_id is None)
     return _with_open_times(read, gathering)
 
 
@@ -360,11 +370,13 @@ def _payment_summary(gathering: Gathering) -> GatheringPaymentSummary:
 
 
 def gathering_load_options():
-    """모임 조회 시 함께 읽을 관계: 참석자, 코트 예약(예약자·지급 처리자)."""
+    """모임 조회 시 함께 읽을 관계: 참석자, 코트 예약(예약자·지급 처리자), 픽업 요청(요청자·운전자)."""
     return (
         selectinload(Gathering.participants).selectinload(Participant.user),
         selectinload(Gathering.court_bookings).selectinload(CourtBooking.booker),
         selectinload(Gathering.court_bookings).selectinload(CourtBooking.reimburser),
+        selectinload(Gathering.pickups).selectinload(PickupRequest.requester),
+        selectinload(Gathering.pickups).selectinload(PickupRequest.driver),
     )
 
 
@@ -618,6 +630,7 @@ def _set_attendance(db: Session, gathering: Gathering, participant: Participant 
         participant.waiting_since = None
         if was == AttendanceStatus.ATTENDING:
             promote_waiting(db, gathering)
+    pickup_sync.sync_pickups(db, gathering.id)  # 참석이 아니게 된 요청자·운전자 정리
     return participant
 
 
@@ -1264,6 +1277,7 @@ def get_gathering(
     detail.participants = [ParticipantRead.model_validate(p) for p in g.participants]
     detail.payment = _payment_summary(g) if _has_payment(g) else None
     detail.court_bookings = [court_booking_read(b, current_user) for b in g.court_bookings]
+    detail.pickups = [PickupRead.model_validate(r) for r in g.pickups] if pickups_active(g) else []
     return detail
 
 
@@ -1535,6 +1549,7 @@ def cancel_attendance(
         db.delete(participant)
     if was_attending:
         promote_waiting(db, gathering)
+    pickup_sync.sync_pickups(db, gathering_id)  # 픽업 요청을 지우거나, 태워 가기로 한 요청을 다시 찾는 중으로
     db.commit()
 
 

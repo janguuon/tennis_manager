@@ -462,6 +462,10 @@
   .detail-payments {
     @apply lg:col-start-2 lg:row-start-1 lg:row-span-2;
   }
+  /* 같이 타고 가요(픽업): 넓은 화면에선 식구들 아래. 홈에서 #pickups 로 바로 온다 */
+  .detail-pickups {
+    @apply scroll-mt-4 lg:col-start-1 lg:row-start-2;
+  }
   .detail-draws {
     @apply lg:col-span-2;
   }

@@ -71,16 +71,19 @@ function fitNames(label: string, names: string[], budget: number): string {
 /**
  * 모임 관련 메시지를 카카오톡 공유창으로 보낸다(사용자가 톡방을 고른다).
  * 메시지 끝에 모임 링크가 붙고, 메시지를 누르면 그 모임 상세로 이동한다.
+ * extra: 자리가 남을 때만 요약 다음에 붙이는 줄 (모자라면 통째로 뺀다).
  */
 export function shareToKakao({
   base,
   names = [],
   namesLabel = "👥 참석",
+  extra = "",
   path,
 }: {
   base: string;
   names?: string[];
   namesLabel?: string;
+  extra?: string;
   path: string;
 }) {
   const Kakao = kakaoSdk();
@@ -88,8 +91,9 @@ export function shareToKakao({
 
   const url = `${window.location.origin}${path}`;
   const suffix = linkSuffix("모임 보기", url);
-  // 요약이 길어도 링크 줄은 남긴다 (요약을 줄이고, 남는 자리에 이름)
-  const body = fit(base, LIMIT - suffix.length);
+  // 요약이 길어도 링크 줄은 남긴다 (요약을 줄이고, 남는 자리에 덧붙일 줄, 그다음 이름)
+  let body = fit(base, LIMIT - suffix.length);
+  if (extra && body.length + 1 + extra.length + suffix.length <= LIMIT) body += `\n${extra}`;
   const line = fitNames(namesLabel, names, LIMIT - body.length - suffix.length);
   Kakao.Share.sendDefault({
     objectType: "text",

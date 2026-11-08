@@ -22,6 +22,7 @@ from .routers import (
     gatherings,
     matches,
     notices,
+    pickups,
     ratings,
     stats,
     tournaments,
@@ -72,6 +73,7 @@ app.include_router(ratings.router)
 app.include_router(club.router)
 app.include_router(notices.router)
 app.include_router(tournaments.router)
+app.include_router(pickups.router)
 
 
 @app.get("/")

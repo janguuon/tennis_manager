@@ -697,6 +697,8 @@ class GatheringRead(GatheringBase):
     canceled_at: datetime | None = None
     # 취소 정산 금액 (일반 벙개: 나눌 총액, 오테식 모임: 게스트 1인). 0이면 낼 돈 없음
     cancel_fee: int = 0
+    # 아직 태워 갈 사람을 찾는 픽업 요청 수 (예정·진행 중인 모임만, 캘린더·홈 표시)
+    pickup_open: int = 0
 
 
 class ParticipantRead(BaseModel):
@@ -742,10 +744,47 @@ class GatheringPaymentSummary(BaseModel):
     refunds: list[PaymentLine] = []  # 돌려줄 돈: 입금 후 불참 + 초과 입금(차액)
 
 
+class PickupWrite(BaseModel):
+    """픽업 요청 쓰기·고치기 (요청자 본인). 갈 때·올 때 중 하나만 고르면 되고, 만날 곳·시각·남길 말은 선택."""
+
+    meet_place: str | None = Field(None, max_length=100)
+    meet_time: time | None = None
+    going: bool = True
+    coming_back: bool = False
+    note: str | None = Field(None, max_length=200)
+
+    @model_validator(mode="after")
+    def _rules(self):
+        self.meet_place = " ".join((self.meet_place or "").split()) or None
+        self.note = " ".join((self.note or "").split()) or None
+        if not (self.going or self.coming_back):
+            raise PydanticCustomError("pickup_way", "갈 때·올 때 중 하나는 골라 주세요.")
+        return self
+
+
+class PickupRead(BaseModel):
+    """픽업 요청 한 건. driver 가 없으면 아직 태워 갈 사람을 찾는 중."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    gathering_id: int
+    requester: UserBrief
+    driver: UserBrief | None = None
+    meet_place: str | None = None
+    meet_time: time | None = None
+    going: bool
+    coming_back: bool
+    note: str | None = None
+    matched_at: datetime | None = None
+    created_at: datetime
+
+
 class GatheringDetail(GatheringRead):
     participants: list[ParticipantRead] = []
     payment: GatheringPaymentSummary | None = None  # 받을 돈이 있는 모임만
     court_bookings: list[CourtBookingRead] = []      # 오테식 모임의 코트 예약 내역
+    pickups: list[PickupRead] = []                   # 픽업 요청 (예정·진행 중인 모임만)
 
 
 class GuestInvite(BaseModel):

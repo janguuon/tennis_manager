@@ -46,6 +46,7 @@ import { CourtSurfaceField, CourtSurfaceTag } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
 import { BackLink, EmptyCard, PageBody, PageHeader } from "~/components/Page";
+import { PickupSection } from "~/components/Pickups";
 import { ApiError, api } from "~/lib/api.server";
 import {
   COURT_SURFACE_LABEL,
@@ -653,6 +654,28 @@ export async function action({ request, params }: ActionFunctionArgs) {
         token,
         body: { fee: Number(formData.get("fee") || 0) },
       });
+    } else if (intent === "pickup_create" || intent === "pickup_update") {
+      // 픽업 요청 쓰기·고치기 (참석자 본인)
+      const body = {
+        meet_place: String(formData.get("meet_place") ?? ""),
+        meet_time: formData.get("meet_time") || null,
+        going: formData.get("going") === "on",
+        coming_back: formData.get("coming_back") === "on",
+        note: formData.get("note") || null,
+      };
+      if (intent === "pickup_create") {
+        await api(`/gatherings/${id}/pickups`, { method: "POST", token, body });
+      } else {
+        await api(`/pickups/${formData.get("pickup_id")}`, { method: "PUT", token, body });
+      }
+    } else if (intent === "pickup_delete") {
+      await api(`/pickups/${formData.get("pickup_id")}`, { method: "DELETE", token });
+    } else if (intent === "pickup_accept" || intent === "pickup_release") {
+      // 제가 태워 갈게요 / 못 가게 됐어요
+      await api(`/pickups/${formData.get("pickup_id")}/driver`, {
+        method: intent === "pickup_accept" ? "POST" : "DELETE",
+        token,
+      });
     } else if (intent === "restore_gathering") {
       await api(`/gatherings/${id}/cancel`, { method: "DELETE", token });
     } else if (intent === "delete_gathering") {
@@ -830,15 +853,21 @@ export default function GatheringDetailPage() {
   const path = `/app/gatherings/${gathering.id}`;
 
   // 카카오 공유 메시지 (오픈톡방에 보낼 모임 요약)
+  const courtLine = `🟩 코트 ${
+    gathering.court_numbers
+      ? `${gathering.court_numbers} (${gathering.court_count}면)`
+      : `${gathering.court_count}면`
+  }${gathering.court_surface ? ` · ${COURT_SURFACE_LABEL[gathering.court_surface]}` : ""}`;
+  // 픽업 요청이 있으면 요청한 사람이 직접 알리지 않아도 모임 공유 글에 실린다 (이름 없이 수만).
+  // 카톡 200자 안에 꼭 들어가게 본문에 넣고, 대신 코트 줄은 자리가 남을 때만 붙인다 (모임 화면에 있다)
+  const pickupLine = gathering.pickup_open
+    ? `🚗 같이 타고 갈 식구 ${gathering.pickup_open}명`
+    : "";
   const shareBase = [
     `🎾 [${KIND_LABEL[gathering.kind]}] ${gathering.title}`,
     dateLine,
     gathering.location ? `📍 ${gathering.location}` : "",
-    `🟩 코트 ${
-      gathering.court_numbers
-        ? `${gathering.court_numbers} (${gathering.court_count}면)`
-        : `${gathering.court_count}면`
-    }${gathering.court_surface ? ` · ${COURT_SURFACE_LABEL[gathering.court_surface]}` : ""}`,
+    pickupLine ? "" : courtLine,
     club
       ? `💸 회비 지출${
           gathering.guest_fee > 0
@@ -849,6 +878,7 @@ export default function GatheringDetailPage() {
       ? `💰 참가비 총 ${won(gathering.fee)} (1인 ${won(perPerson)})`
       : "",
     account ? `🏦 ${account}` : "",
+    pickupLine,
   ]
     .filter(Boolean)
     .join("\n");
@@ -922,6 +952,7 @@ export default function GatheringDetailPage() {
                 ? shareToKakao({ base: cancelShare(gathering.cancel_reason), path })
                 : shareToKakao({
                     base: shareBase,
+                    extra: pickupLine ? courtLine : "",
                     names: attendees.map((p) => p.user.name),
                     path,
                   })
@@ -1797,6 +1828,17 @@ export default function GatheringDetailPage() {
               </section>
             ) : null}
           </div>
+        ) : null}
+
+        {/* 같이 타고 가요: 픽업 요청 (예정·진행 중인 모임). 넓은 화면에선 식구들 아래 */}
+        {gathering.status === "planned" || gathering.status === "ongoing" ? (
+          <PickupSection
+            gathering={gathering}
+            user={user}
+            attending={me?.status === "attending"}
+            staff={staff}
+            className={club || payment ? "" : "lg:col-span-2"}
+          />
         ) : null}
 
         {/* 대진 */}

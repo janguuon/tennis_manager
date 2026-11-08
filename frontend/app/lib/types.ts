@@ -168,6 +168,26 @@ export interface Gathering {
   canceled_at: string | null;
   /** 취소 정산 금액 (취소돼도 낼 돈): 일반 벙개는 참석자끼리 나눌 총액, 오테식 모임은 게스트 1인. 0이면 없음 */
   cancel_fee: number;
+  /** 아직 태워 갈 사람을 찾는 픽업 요청 수 (예정·진행 중인 모임만) */
+  pickup_open?: number;
+}
+
+/** 픽업 요청 한 건. driver 가 없으면 태워 갈 사람을 찾는 중 */
+export interface Pickup {
+  id: number;
+  gathering_id: number;
+  requester: UserBrief;
+  driver: UserBrief | null;
+  /** 만날 곳 (선택, 예: 영통 근처) */
+  meet_place: string | null;
+  /** "19:30:00" (선택) */
+  meet_time: string | null;
+  /** 갈 때 · 올 때 */
+  going: boolean;
+  coming_back: boolean;
+  note: string | null;
+  matched_at: string | null;
+  created_at: string;
 }
 
 /** 캘린더 목록에 보여 줄 참석자 */
@@ -255,6 +275,8 @@ export interface GatheringDetail extends Gathering {
   payment: GatheringPaymentSummary | null;
   /** 오테식 모임의 코트 예약 내역 */
   court_bookings: CourtBooking[];
+  /** 픽업 요청 (예정·진행 중인 모임만) */
+  pickups?: Pickup[];
 }
 
 /** 사람별 금액 한 줄 (받을 돈 / 돌려줄 돈) */

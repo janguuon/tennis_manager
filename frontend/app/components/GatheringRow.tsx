@@ -1,5 +1,5 @@
 import { Link, useOutletContext } from "@remix-run/react";
-import { ArrowUpRight, Lock, Users } from "lucide-react";
+import { ArrowUpRight, Car, Lock, Users } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { MemberAvatar } from "~/components/Club";
@@ -85,6 +85,13 @@ export function GatheringRow({ g, to }: { g: Gathering; to: string }) {
           {g.attendance?.attending ?? 0}
           {g.max_participants ? `/${g.max_participants}` : ""}
         </span>
+        {/* 아직 태워 갈 사람을 찾는 픽업 요청 */}
+        {g.pickup_open ? (
+          <span className="badge-orange-soft" title={`픽업 요청 ${g.pickup_open}건이 태워 갈 사람을 찾고 있어요`}>
+            <Car size={12} />
+            픽업 {g.pickup_open}
+          </span>
+        ) : null}
       </span>
       <ArrowUpRight size={16} className="hidden text-slate-400 transition-colors group-hover:text-ink dark:group-hover:text-white sm:block" />
       <div className="col-[2/-1] min-w-0">

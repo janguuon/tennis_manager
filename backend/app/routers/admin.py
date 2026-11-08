@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import avatars, visibility
+from .. import pickups as pickup_sync
 from ..database import get_db
 from ..deps import get_current_admin
 from ..models import (
@@ -209,6 +210,7 @@ def delete_member(
             p.waiting_since = None
             if was_attending:
                 promote_waiting(db, p.gathering)  # 빠진 자리에 대기자를 올린다
+        pickup_sync.release_user(db, user.id)  # 픽업 요청은 지우고, 태워 가기로 한 요청은 다시 찾는 중으로
         db.commit()
         return MemberDeleteResult(result="deactivated", name=user.name)
 
@@ -219,6 +221,7 @@ def delete_member(
         db.delete(p)
     for g in freed:
         promote_waiting(db, g)  # 빠진 자리에 대기자를 올린다
+    pickup_sync.release_user(db, user.id)
     name = user.name
     avatar_url = user.avatar_url
     db.delete(user)
@@ -292,6 +295,7 @@ def _purge(db: Session, user: User, admin: User) -> PurgePreview:
         if p.status == AttendanceStatus.ATTENDING:
             freed.append(p.gathering)
         db.delete(p)
+    pickup_sync.release_user(db, uid)
     for b in db.scalars(select(CourtBooking).where(CourtBooking.booker_id == uid)):
         db.delete(b)
     for b in db.scalars(select(CourtBooking).where(CourtBooking.reimbursed_by == uid)):

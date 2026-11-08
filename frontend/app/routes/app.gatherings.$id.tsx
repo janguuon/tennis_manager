@@ -52,7 +52,10 @@ import {
   COURT_SURFACE_LABEL,
   KIND_LABEL,
   canSettle,
+  GATHERING_KINDS,
   isClubKind,
+  isOtesikKind,
+  isStaffKind,
   isGuest,
   isStaff,
   naverMapUrl,
@@ -74,6 +77,7 @@ import {
   type DrawMatch,
   type Gathering,
   type GatheringDetail,
+  type GatheringKind,
   type Me,
   type UserBrief,
 } from "~/lib/types";
@@ -700,20 +704,22 @@ export default function GatheringDetailPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { user } = useOutletContext<{ user: Me }>();
+  // club: 회비에서 지출 (정산), staffRun: 운영진이 여는 클럽 일정 (오테식 정모·벙개, 교류전 — 권한)
   const club = isClubKind(gathering.kind);
+  const staffRun = isStaffKind(gathering.kind);
   const staff = isStaff(user);
   // 지도 버튼: 주소가 있으면 주소로, 없으면 장소 이름으로 네이버 지도 검색
   const mapUrl = naverMapUrl(gathering);
   // 게스트는 일정 보기와 참석 투표만 한다 (직접 만든 일정이라도 관리하지 않음, 서버와 같음)
   const guest = isGuest(user);
-  // 주최자·관리자. 오테식 모임은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
+  // 주최자·관리자. 오테식 모임·교류전은 클럽 일정이라 임원진도 관리한다 (서버 권한과 같음).
   const isOrganizer =
     !guest &&
-    (gathering.created_by === user.id || user.is_admin || (club && staff));
+    (gathering.created_by === user.id || user.is_admin || (staffRun && staff));
   // 취소된 모임: 참석 투표·명단 변경을 받지 않는다 (서버와 같음)
   const canceled = gathering.status === "canceled";
-  // 모임 취소(우천·코트 취소 등): 오테식 모임은 운영진만, 일반 벙개는 운영진과 올린 사람 (서버와 같음)
-  const canCancel = !guest && (staff || (!club && gathering.created_by === user.id));
+  // 모임 취소(우천·코트 취소 등): 오테식 모임·교류전은 운영진만, 일반 벙개는 운영진과 올린 사람 (서버와 같음)
+  const canCancel = !guest && (staff || (!staffRun && gathering.created_by === user.id));
   // 참석 취소 대신 해 주기(3일 전 마감 뒤 요청 처리): 주최자, 그리고 관리자·임원진·총무는 모든 모임에서
   const canManageAttendance = (isOrganizer || staff) && !canceled;
   // 대진 점수 입력·고치기: 주최자·관리자·임원진(모든 모임), 그리고 그 경기에 뛴 선수 (서버와 같음)
@@ -835,16 +841,16 @@ export default function GatheringDetailPage() {
     gathering.court_fee || gathering.ball_fee
       ? `코트 ${won(gathering.court_fee)} + 볼 ${won(gathering.ball_fee)}`
       : won(gathering.fee);
-  // 일반 벙개 ↔ 오테식 모임 전환은 정리할 기록이 없을 때만 (서버 규칙과 같음)
+  // n빵(일반 벙개·n빵 교류전) ↔ 회비 지출(오테식 모임·회비 교류전) 전환은 정리할 기록이 없을 때만 (서버 규칙과 같음)
   const switchBlock = gathering.participants.some((p) => p.paid)
     ? "입금 기록이 있어요"
     : gathering.court_bookings.length
     ? "코트 예약이 있어요"
     : undefined;
-  const kindLocks = switchBlock
-    ? club
-      ? { flash: switchBlock }
-      : { club_regular: switchBlock, club_flash: switchBlock }
+  const kindLocks: Partial<Record<GatheringKind, string>> = switchBlock
+    ? Object.fromEntries(
+        GATHERING_KINDS.filter((k) => isClubKind(k) !== club).map((k) => [k, switchBlock])
+      )
     : {};
   const account = accountText(gathering);
   const dateLine = `📅 ${gathering.event_date}${
@@ -1938,7 +1944,7 @@ export default function GatheringDetailPage() {
                         match={m}
                         canRecord={canScore(m)}
                         courtLabels={courtLabels}
-                        club={club}
+                        rated={isOtesikKind(gathering.kind)}
                         edit={
                           editingDraw === draw.id
                             ? {
@@ -2164,7 +2170,7 @@ export default function GatheringDetailPage() {
                       </div>
                     </div>
                     <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {isClubKind(kind) ? "회칙상 코트 1면에 6명이에요. " : ""}
+                      {isOtesikKind(kind) ? "회칙상 코트 1면에 6명이에요. " : ""}
                       정원이 차면 다음 신청은 대기로 받아요.
                     </p>
                     {isClubKind(kind) ? (
@@ -3045,13 +3051,14 @@ function DrawMatchRow({
   match,
   canRecord,
   courtLabels,
-  club,
+  rated,
   edit,
 }: {
   match: DrawMatch;
   canRecord: boolean;
   courtLabels: string[];
-  club: boolean;
+  /** 오테식 정모·벙개: 레이팅에 들어가므로 점수(게임 수)가 꼭 필요하다. 교류전·일반 벙개는 아니다 (서버와 같음) */
+  rated: boolean;
   /** 직접 바꾸기 중이면 고를 수 있는 참석자와 같은 라운드 자리 */
   edit: { attendees: UserBrief[]; seats: Map<number, string>; canDelete: boolean } | null;
 }) {
@@ -3246,7 +3253,7 @@ function DrawMatchRow({
                 className="input !w-16 !px-2 !py-2 text-center"
                 placeholder="0"
                 aria-label="팀1 게임 수"
-                required={club}
+                required={rated}
                 defaultValue={recorded ? match.team1_score ?? undefined : undefined}
               />
               <span className="text-slate-400">:</span>
@@ -3258,7 +3265,7 @@ function DrawMatchRow({
                 className="input !w-16 !px-2 !py-2 text-center"
                 placeholder="0"
                 aria-label="팀2 게임 수"
-                required={club}
+                required={rated}
                 defaultValue={recorded ? match.team2_score ?? undefined : undefined}
               />
               {recorded ? (
@@ -3277,7 +3284,7 @@ function DrawMatchRow({
                 {busy ? "저장 중…" : recorded ? "고친 결과 저장" : "결과 기록"}
               </button>
             </div>
-            {club ? (
+            {rated ? (
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 게임 수로 적어 주세요. 5:5 해피게임은 5:5, 타이브레이크는 6:5.
               </p>

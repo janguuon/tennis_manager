@@ -8,6 +8,8 @@
 - 일반 벙개: 코트비 + 캔볼값을 참석자끼리 n빵
 - 오테식 정모·벙개: 회비에서 지출. 회원은 낼 돈이 없고 게스트만 게스트비를 낸다.
   코트비는 예약자(CourtBooking)에게 총무가 돌려준다 (routers/court_bookings.py).
+- 교류전: 모임마다 정한다. 회비로 하면(exchange) 오테식 정모와 같고, n빵이면(exchange_split) 일반 벙개와 같다.
+  어느 쪽이든 운영진만 만들고 임원진이 함께 관리한다(STAFF_KINDS). 대진 결과는 레이팅에 넣지 않는다.
 """
 import io
 import secrets
@@ -32,6 +34,8 @@ from ..security import hash_password
 from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_settler, get_current_user
 from ..models import (
     CLUB_KINDS,
+    OTESIK_KINDS,
+    STAFF_KINDS,
     ApprovalStatus,
     AttendanceStatus,
     CourtBooking,
@@ -104,6 +108,7 @@ KIND_LABELS = {
     "오테식정모": GatheringKind.CLUB_REGULAR,
     "정모": GatheringKind.CLUB_REGULAR,
     "오테식벙개": GatheringKind.CLUB_FLASH,
+    **{k: v for k, v in sheet.USAGE_KINDS.items() if k.startswith("교류전")},
     "일반벙개": GatheringKind.FLASH,
     "벙개": GatheringKind.FLASH,
 }
@@ -396,17 +401,17 @@ def _require_organizer(gathering: Gathering, user: User) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     if gathering.created_by == user.id or user.is_admin:
         return
-    if gathering.is_club and user.is_staff:
+    if gathering.is_staff_run and user.is_staff:
         return
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
 
 
+STAFF_ONLY = "오테식 정모·벙개와 교류전은 관리자와 임원진만 만들 수 있습니다."
+
+
 def _require_club_creator(kind: GatheringKind, user: User) -> None:
-    if kind in CLUB_KINDS and not user.is_staff:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail="오테식 정모·벙개는 관리자와 임원진만 만들 수 있습니다.",
-        )
+    if kind in STAFF_KINDS and not user.is_staff:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=STAFF_ONLY)
 
 
 def require_booker(db: Session, user_id: int) -> User:
@@ -656,7 +661,7 @@ def create_gathering(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_member),
 ):
-    """모임 생성 (캘린더에 일정 등록). 오테식 정모·벙개는 관리자·임원진만, 게스트는 만들 수 없다."""
+    """모임 생성 (캘린더에 일정 등록). 오테식 정모·벙개와 교류전은 관리자·임원진만, 게스트는 만들 수 없다."""
     data = payload.model_dump()
     bookings = data.pop("court_bookings")
     open_now = data.pop("open_now")
@@ -664,7 +669,7 @@ def create_gathering(
     if bookings and data["kind"] not in CLUB_KINDS:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail="코트 예약 내역은 오테식 정모·벙개에만 등록할 수 있습니다.",
+            detail="코트 예약 내역은 회비로 하는 모임(오테식 정모·벙개, 회비 교류전)에만 등록할 수 있습니다.",
         )
     _normalize_courts(data)
     _clean_address(data)
@@ -710,12 +715,12 @@ def _cell_value(field: str, value) -> str | int:
         # "5,000" 같은 콤마 표기나 5000.0 float 도 허용
         return int(float(str(value).replace(",", "").strip()))
     if field == "kind":
-        key = str(value).replace(" ", "").strip()
+        key = sheet.usage_key(str(value))
         if key in KIND_LABELS:
             return KIND_LABELS[key].value
         if key in {k.value for k in GatheringKind}:
             return key
-        raise ValueError("종류: 오테식 정모 / 오테식 벙개 / 일반 벙개 중 하나로 적어 주세요.")
+        raise ValueError("종류: 오테식 정모 / 오테식 벙개 / 교류전(회비) / 교류전(n빵) / 일반 벙개 중 하나로 적어 주세요.")
     if field == "account_number":
         # 엑셀이 계좌번호를 숫자로 인식(예: 1234567890.0)해도 정수 문자열로 보정
         if isinstance(value, float) and value.is_integer():
@@ -789,11 +794,11 @@ async def import_gatherings(
                     continue
                 data[field] = _cell_value(field, value)
             payload = GatheringCreate(**data)  # pydantic 검증/타입 변환 재사용
-            if payload.kind in CLUB_KINDS and not current_user.is_staff:
-                raise ValueError("오테식 정모·벙개는 관리자와 임원진만 등록할 수 있습니다.")
+            if payload.kind in STAFF_KINDS and not current_user.is_staff:
+                raise ValueError("오테식 정모·벙개와 교류전은 관리자와 임원진만 등록할 수 있습니다.")
             d = payload.model_dump(exclude={"court_bookings", "open_now"})
             _normalize_courts(d)
-            if payload.kind in CLUB_KINDS and d.get("max_participants") is None:
+            if payload.kind in OTESIK_KINDS and d.get("max_participants") is None:
                 d["max_participants"] = d["court_count"] * sheet.SEATS_PER_COURT  # 회칙 제10조
             _clean_address(d)
             gathering = Gathering(**d, created_by=current_user.id)
@@ -994,9 +999,10 @@ def import_template(
         "· 무료 코트는 코트비에 0을 적어요. 0원 코트는 보낼 코트비가 없어 정산 목록에 올라가지 않아요.",
         "· 날짜 칸은 날짜만 받아요. 구글 시트에서는 칸을 두 번 누르면 달력이 떠요.",
         "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
-        "· 사용 여부가 오테식 정모 / 오테식 벙개 / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
+        "· 사용 여부가 오테식 정모 / 오테식 벙개 / 교류전 (회비) / 교류전 (n빵) / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
+        "· 교류전 (회비)는 오테식 정모처럼 회비에서, 교류전 (n빵)은 일반 벙개처럼 참석자끼리 나눠요. 교류전은 최대 인원을 비우면 제한이 없어요.",
         "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
-        f"· 최대 인원을 비우면 오테식 모임은 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명).",
+        f"· 최대 인원을 비우면 오테식 정모·벙개는 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명).",
         "  정원이 차면 다음 신청자는 대기로 들어가요. 일반 벙개는 비우면 인원 제한이 없어요.",
         "· 예약자명·코트요정은 목록에서 고르거나 직접 적어요. 적은 이름 그대로 들어가요.",
         "· 오테식 모임의 코트비는 총무가 코트요정에게 정산하므로 '지급할 코트비'에 코트요정 앞으로 올라가요",
@@ -1135,8 +1141,8 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             continue
         problems: list[str] = []
         club = first.kind in CLUB_KINDS
-        if club and not current_user.is_staff:
-            problems.append("오테식 정모·벙개는 관리자와 임원진만 등록할 수 있어요")
+        if first.kind in STAFF_KINDS and not current_user.is_staff:
+            problems.append("오테식 정모·벙개와 교류전은 관리자와 임원진만 등록할 수 있어요")
         dup = [c for c, n in Counter(group.courts).items() if n > 1]
         if dup:
             problems.append(f"같은 코트({', '.join(_court_label(c) for c in dup)})가 두 번 적혀 있어요")
@@ -1179,7 +1185,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             court_fairy=", ".join(group.fairies)[:200],
             court_reservers=_reservers_text(group.rows),
             max_participants=next((r.max_participants for r in group.rows if r.max_participants), None)
-            or (len(group.courts) * sheet.SEATS_PER_COURT if club else None),
+            or (len(group.courts) * sheet.SEATS_PER_COURT if first.kind in OTESIK_KINDS else None),
             description="\n".join(group.notes) or None,
             address=next((" ".join(r.address.split()) for r in group.rows if r.address), None),
             created_by=current_user.id,
@@ -1299,7 +1305,7 @@ def update_gathering(
     new_kind = data.get("kind")
     if new_kind is not None and new_kind != g.kind:
         _require_club_creator(new_kind, current_user)
-        # 일반 벙개 ↔ 오테식 모임은 정산 방식이 달라 정리할 기록이 없을 때만 바꾼다
+        # n빵(일반 벙개·n빵 교류전) ↔ 회비 지출(오테식 모임·회비 교류전)은 정산 방식이 달라 정리할 기록이 없을 때만 바꾼다
         if (new_kind in CLUB_KINDS) != g.is_club:
             if any(p.paid for p in g.participants):
                 raise HTTPException(
@@ -1342,17 +1348,17 @@ def update_gathering(
 
 
 def _require_canceler(gathering: Gathering, user: User) -> None:
-    """모임 취소·되돌리기: 오테식 모임(정모·오테식 벙개)은 운영진(관리자·임원진·총무)만,
+    """모임 취소·되돌리기: 오테식 모임(정모·오테식 벙개·교류전)은 운영진(관리자·임원진·총무)만,
     일반 벙개는 운영진과 올린 사람(게스트 제외)."""
     if user.is_guest:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
     if user.is_staff:
         return
-    if not gathering.is_club and gathering.created_by == user.id:
+    if not gathering.is_staff_run and gathering.created_by == user.id:
         return
     raise HTTPException(
         status.HTTP_403_FORBIDDEN,
-        detail="오테식 모임은 운영진만, 일반 벙개는 운영진과 올린 사람만 취소할 수 있어요.",
+        detail="오테식 모임·교류전은 운영진만, 일반 벙개는 운영진과 올린 사람만 취소할 수 있어요.",
     )
 
 

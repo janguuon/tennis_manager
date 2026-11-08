@@ -3,11 +3,15 @@ import { useState, type ReactNode } from "react";
 
 import { FieldGroup } from "~/components/Modal";
 import {
+  EXCHANGE_PAY_LABEL,
   KIND_DOT,
   KIND_HINT,
   KIND_LABEL,
   KIND_ORDER,
   isClubKind,
+  isExchangeKind,
+  isStaffKind,
+  kindGroup,
 } from "~/lib/club";
 import { won } from "~/lib/format";
 import type { GatheringKind, UserBrief } from "~/lib/types";
@@ -38,6 +42,7 @@ type BookingRow = {
  * 일정 등록·수정 폼의 "종류 · 정산" 칸.
  * - 일반 벙개: 코트비 + 캔볼값 (참석자 n빵), 입금 받을 계좌
  * - 오테식 정모·벙개: 게스트비, 게스트비 입금 계좌(회비 통장), 코트 예약자(등록할 때)
+ * - 교류전: 정산 방식을 고른다. 회비에서 지출이면 오테식 정모처럼, 참석자끼리 n빵이면 일반 벙개처럼
  *
  * members를 주면 코트 예약 줄을 함께 입력받는다(등록). 올린 뒤에는 모임 화면 '회비 지출' 카드에서 고친다.
  * children: 종류 선택과 금액 칸 사이에 들어갈 칸(날짜·코트 등). 고른 종류를 받는다.
@@ -70,7 +75,23 @@ export function GatheringFeeFields({
 
   const lockReason = (k: GatheringKind) =>
     lockedKinds[k] ??
-    (isClubKind(k) && !canCreateClub ? "관리자·임원진만" : undefined);
+    (isStaffKind(k) && !canCreateClub ? "관리자·임원진만" : undefined);
+  // 교류전은 한 칸: 고르면 마지막에 고른 정산 방식(처음엔 회비)으로, 막혀 있으면 다른 쪽으로
+  const [lastExchange, setLastExchange] = useState<GatheringKind>(
+    defaults.kind === "exchange_split" ? "exchange_split" : "exchange"
+  );
+  const exchangePick = (): GatheringKind => {
+    const other = lastExchange === "exchange" ? "exchange_split" : "exchange";
+    return lockReason(lastExchange) && !lockReason(other) ? other : lastExchange;
+  };
+  const optionLock = (k: GatheringKind) => {
+    if (k === kindGroup(kind)) return undefined;
+    return k === "exchange" ? lockReason(exchangePick()) : lockReason(k);
+  };
+  const pick = (k: GatheringKind) => {
+    setKind(k);
+    if (isExchangeKind(k)) setLastExchange(k);
+  };
 
   const updateRow = (key: number, patch: Partial<BookingRow>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -80,21 +101,22 @@ export function GatheringFeeFields({
       <FieldGroup title="모임 종류">
         <div className="kind-options" role="radiogroup" aria-label="모임 종류">
           {KIND_ORDER.map((k) => {
-            const locked = k !== kind ? lockReason(k) : undefined;
+            const selected = k === kindGroup(kind);
+            const locked = optionLock(k);
             return (
               <label
                 key={k}
                 className={`kind-option kind-option-${k} ${
-                  k === kind ? "is-selected" : ""
+                  selected ? "is-selected" : ""
                 } ${locked ? "is-locked" : ""}`}
               >
                 <input
                   type="radio"
-                  name="kind"
+                  name={`${idPrefix}kind_group`}
                   value={k}
-                  checked={k === kind}
+                  checked={selected}
                   disabled={Boolean(locked)}
-                  onChange={() => setKind(k)}
+                  onChange={() => pick(k === "exchange" ? exchangePick() : k)}
                   className="sr-only"
                 />
                 <i aria-hidden="true" className={KIND_DOT[k]} />
@@ -109,6 +131,40 @@ export function GatheringFeeFields({
             );
           })}
         </div>
+        <input type="hidden" name="kind" value={kind} />
+        {isExchangeKind(kind) ? (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="radiogroup"
+            aria-label="교류전 정산 방식"
+          >
+            <span className="text-[13px] font-bold">정산</span>
+            {(["exchange", "exchange_split"] as const).map((k) => {
+              const locked = k !== kind ? lockReason(k) : undefined;
+              return (
+                <label
+                  key={k}
+                  className={`surface-option ${k === kind ? "is-selected" : ""} ${
+                    locked ? "cursor-not-allowed opacity-50" : ""
+                  }`}
+                  title={locked}
+                >
+                  <input
+                    type="radio"
+                    name={`${idPrefix}exchange_pay`}
+                    value={k}
+                    checked={k === kind}
+                    disabled={Boolean(locked)}
+                    onChange={() => pick(k)}
+                    className="sr-only"
+                  />
+                  {locked ? <Lock size={11} /> : null}
+                  {EXCHANGE_PAY_LABEL[k]}
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {KIND_HINT[kind]}
         </p>

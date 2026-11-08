@@ -291,7 +291,7 @@ export default function AdminPage() {
           <h2 className="tile-title">모임 통장</h2>
         </div>
         <p className="mt-1 text-[13px] font-medium text-slate-500">
-          오테식 정모·벙개의 게스트비를 받는 계좌예요. 오테식 모임을 등록할 때 계좌를 비워 두면 자동으로 들어가고, 회원들은 모임 화면과
+          오테식 정모·벙개(회비로 하는 교류전 포함)의 게스트비를 받는 계좌예요. 오테식 모임을 등록할 때 계좌를 비워 두면 자동으로 들어가고, 회원들은 모임 화면과
           회비 정산에서 계좌를 복사해 쓸 수 있어요.
         </p>
         {clubAccount ? (
@@ -401,7 +401,7 @@ export default function AdminPage() {
               즉시, 정회원·게스트는 금요일 오전 10시에 다음 주(월~일) 일정을 봐요(운영진이 캘린더·모임 화면에서 미리 공개할 수 있어요). 정회원은 바로, 게스트는 모임 3일 전 0시부터 투표할 수 있어요.
             </p>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
-              <b className="font-bold text-ink dark:text-white">권한</b>: 임원진은 오테식 정모·벙개를 만들고 운영해요(대진·결과 입력).
+              <b className="font-bold text-ink dark:text-white">권한</b>: 임원진은 오테식 정모·벙개와 교류전을 만들고 운영해요(대진·결과 입력).
               <b className="font-bold text-ink dark:text-white"> 총무</b>는 임원진 권한에 더해 <b className="font-bold text-ink dark:text-white">정산</b>(입금 확인, 코트비
               지급·지급 내역, 예약자 계좌 보기)을 해요. 정산은 관리자와 총무만 할 수 있어요(일반 벙개 입금 확인은 만든 사람도 가능).
               게스트는 오테식 모임에 참석하면 게스트비를 내요.

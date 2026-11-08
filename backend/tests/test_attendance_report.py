@@ -38,7 +38,7 @@ def test_monthly_attendance_counts_attending_only(club, fixed_now):
     # 횟수는 오늘까지 지난 모임만, 오늘 뒤는 예정으로 따로 (모임 목록에는 예정도)
     amy = rows["amy"]
     assert (amy["total"], amy["upcoming"], amy["gathering_ids"]) == (1, 1, [g1, g2])
-    assert amy["by_kind"] == {"club_regular": 1, "club_flash": 0, "flash": 0}
+    assert amy["by_kind"] == {"club_regular": 1, "club_flash": 0, "exchange": 0, "exchange_split": 0, "flash": 0}
     assert (rows["ben"]["total"], rows["ben"]["gathering_ids"]) == (1, [g1])  # 불참은 안 센다
     assert rows["cal"]["total"] == 0  # 대기·취소된 모임·다음 달은 안 센다
     assert (rows["admin1"]["total"], rows["admin1"]["upcoming"], rows["admin1"]["gathering_ids"]) == (0, 1, [g2])

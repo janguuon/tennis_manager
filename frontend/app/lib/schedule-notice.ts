@@ -25,6 +25,8 @@ export type NewSchedule = {
 const NOTICE_NAME: Record<GatheringKind, string> = {
   club_regular: "정모",
   club_flash: "오테식 벙개",
+  exchange: "교류전",
+  exchange_split: "교류전",
   flash: "일반 벙개",
 };
 

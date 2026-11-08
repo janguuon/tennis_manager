@@ -400,7 +400,7 @@ class GatheringBase(BaseModel):
         None, max_length=300, description="예약자명: 코트에서 말할 예약 이름 (예: '3·5번 장미주, 2번 김다빈')"
     )
     max_participants: int | None = Field(None, ge=1)
-    kind: GatheringKind = Field(GatheringKind.FLASH, description="오테식 정모 / 오테식 벙개 / 일반 벙개")
+    kind: GatheringKind = Field(GatheringKind.FLASH, description="오테식 정모 / 오테식 벙개 / 교류전(회비·n빵) / 일반 벙개")
     fee: int = Field(0, ge=0, description="일반 벙개: n빵할 총액. 코트비·캔볼값을 넣으면 둘의 합.")
     court_fee: int = Field(0, ge=0, description="일반 벙개 코트비")
     ball_fee: int = Field(0, ge=0, description="일반 벙개 캔볼값")

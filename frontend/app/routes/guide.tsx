@@ -238,6 +238,13 @@ export default function GuidePage() {
               </dd>
             </div>
             <div>
+              <dt className="bg-house-blue">교류전</dt>
+              <dd>
+                다른 클럽과 겨루는 모임이에요. 운영진이 모임마다{" "}
+                <b>회비에서 지출</b>하거나 <b>참석자끼리 n분의 1</b>로 나눠요.
+              </dd>
+            </div>
+            <div>
               <dt className="bg-house-orange">일반 벙개</dt>
               <dd>
                 코트비 + 캔볼비를 참석한 사람끼리 <b>n분의 1</b>로 나눠요.

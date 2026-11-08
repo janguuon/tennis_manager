@@ -45,6 +45,7 @@ import {
   KIND_SHORT,
   isClubKind,
   isGuest,
+  isOtesikKind,
   isStaff,
 } from "~/lib/club";
 import { todayKST } from "~/lib/format";
@@ -221,7 +222,7 @@ export async function action({ request }: ActionFunctionArgs) {
     // 운영진: 정해진 공개 시각을 기다리지 않고 바로 공개
     open_now: formData.get("open_now") === "on",
   };
-  if (body.kind === "flash") body.court_bookings = [];
+  if (!isClubKind(body.kind)) body.court_bookings = [];
 
   try {
     const g = await api<Gathering>("/gatherings", {
@@ -1022,7 +1023,7 @@ export default function CalendarPage() {
                       </div>
                     </div>
                     <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {isClubKind(kind)
+                      {isOtesikKind(kind)
                         ? "회칙상 코트 1면에 6명이에요. "
                         : ""}
                       정원이 차면 다음 신청은 대기로 받아요.
@@ -1170,7 +1171,8 @@ export default function CalendarPage() {
                   <p>
                     날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요.
                     무료 코트는 코트비에 0을 적어요. 최대 인원을 비우면 오테식
-                    모임은 코트 수 × 6명이에요.
+                    정모·벙개는 코트 수 × 6명이에요. 교류전은 사용 여부에
+                    ‘교류전 (회비)’나 ‘교류전 (n빵)’을 골라요.
                   </p>
                 </div>
               </li>

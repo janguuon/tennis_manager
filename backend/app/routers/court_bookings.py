@@ -1,5 +1,5 @@
 """
-코트 예약 라우터: 오테식 정모·벙개의 코트비 지급.
+코트 예약 라우터: 회비로 하는 모임(오테식 정모·벙개, 회비 교류전)의 코트비 지급.
 
 코트를 잡은 회원이 코트비를 먼저 내면, 총무(정산 담당: 관리자·총무)가 회비에서 돌려준다.
 한 모임에 예약자가 여러 명일 수 있어 예약 1건(예약자·코트·금액)마다 지급 여부를 기록한다.
@@ -77,7 +77,7 @@ def add_court_booking(
     if not g.is_club:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail="코트 예약 내역은 오테식 정모·벙개에만 등록할 수 있습니다.",
+            detail="코트 예약 내역은 회비로 하는 모임(오테식 정모·벙개, 회비 교류전)에만 등록할 수 있습니다.",
         )
     require_booker(db, payload.booker_id)
     booking = CourtBooking(gathering_id=g.id, **payload.model_dump())

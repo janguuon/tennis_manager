@@ -93,7 +93,7 @@ class MemberType(str, enum.Enum):
     MATCH_DIRECTOR = "match_director"  # 경기이사
     TREASURER = "treasurer"  # 총무: 임원진 권한 + 정산(입금 확인·코트비 지급)
     VICE_TREASURER = "vice_treasurer"  # 부총무
-    OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개 생성·운영, 대진
+    OFFICER = "officer"   # 임원진: 등록 즉시 보임, 오테식 정모·벙개·교류전 생성·운영, 대진
     MEMBER = "member"     # 정회원: 전주 금요일 오전 10시부터 (다음 주 월~일 일정)
     GUEST = "guest"       # 게스트: 모임 3일 전 0시부터, 오테식 모임 참석 시 게스트비
 
@@ -126,14 +126,25 @@ class GatheringStatus(str, enum.Enum):
 
 
 class GatheringKind(str, enum.Enum):
-    """모임 종류. 종류에 따라 정산 방식이 다르다."""
+    """모임 종류. 종류에 따라 정산 방식이 다르다.
+
+    교류전(다른 클럽과 겨루는 모임)은 화면에서 한 종류로 보이고, 정산 방식에 따라 둘로 나눠 저장한다.
+    """
 
     CLUB_REGULAR = "club_regular"  # 오테식 정모: 회비에서 지출 (코트비는 예약자에게 돌려줌)
     CLUB_FLASH = "club_flash"      # 오테식 벙개: 회비에서 지출
+    EXCHANGE = "exchange"          # 교류전 (회비): 회비에서 지출
+    EXCHANGE_SPLIT = "exchange_split"  # 교류전 (n빵): 코트비 + 캔볼값을 참석자끼리 n빵
     FLASH = "flash"                # 일반 벙개: 코트비 + 캔볼값을 참석자끼리 n빵
 
 
-CLUB_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH)
+# 회비에서 지출하는 모임 (게스트만 참가비, 코트비는 코트요정에게 돌려줌)
+CLUB_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH, GatheringKind.EXCHANGE)
+# 운영진(관리자·임원진)만 만들고 함께 관리하는 클럽 일정 (출석 현황에는 모든 종류가 들어간다)
+STAFF_KINDS = CLUB_KINDS + (GatheringKind.EXCHANGE_SPLIT,)
+# 오테식 정모·벙개 (교류전 제외): 대진 결과가 레이팅에 들어가고(점수 필수),
+# 회칙 제10조 정원(코트 1면당 6명)을 기본으로 채운다. 교류전은 상대 클럽과 겨루고 인원도 상대와 정해서 뺀다
+OTESIK_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH)
 
 
 # ---------------------------------------------------------------------------
@@ -362,8 +373,18 @@ class Gathering(Base):
 
     @property
     def is_club(self) -> bool:
-        """오테식 정모·벙개: 회비에서 지출하는 모임."""
+        """오테식 정모·벙개, 회비로 하는 교류전: 회비에서 지출하는 모임."""
         return self.kind in CLUB_KINDS
+
+    @property
+    def is_staff_run(self) -> bool:
+        """오테식 정모·벙개, 교류전: 운영진이 만들고 임원진이 함께 관리하는 클럽 일정."""
+        return self.kind in STAFF_KINDS
+
+    @property
+    def is_rated(self) -> bool:
+        """오테식 정모·벙개: 대진 결과가 레이팅에 들어가 점수(게임 수)가 꼭 필요한 모임. 교류전은 빠진다."""
+        return self.kind in OTESIK_KINDS
 
 
 class PickupRequest(Base):

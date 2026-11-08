@@ -1,9 +1,16 @@
 // 모임 종류·회원 등급 표기와 권한 (서버·클라이언트 공용)
 import type { CourtSurface, GatheringKind, MemberType, User } from "~/lib/types";
 
+/*
+ * 교류전(다른 클럽과 겨루는 모임)은 정산 방식에 따라 둘로 저장한다:
+ * exchange = 회비에서 지출 (오테식 정모처럼), exchange_split = 참석자끼리 n빵 (일반 벙개처럼).
+ * 이름·색·필터에서는 한 종류(교류전)로 보인다 — kindGroup.
+ */
 export const KIND_LABEL: Record<GatheringKind, string> = {
   club_regular: "오테식 정모",
   club_flash: "오테식 벙개",
+  exchange: "교류전",
+  exchange_split: "교류전",
   flash: "일반 벙개",
 };
 
@@ -11,11 +18,13 @@ export const KIND_LABEL: Record<GatheringKind, string> = {
 export const KIND_SHORT: Record<GatheringKind, string> = {
   club_regular: "정모",
   club_flash: "오테식 벙개",
+  exchange: "교류전",
+  exchange_split: "교류전",
   flash: "벙개",
 };
 
 /*
- * 일정 종류 색: 오테식 정모 = 초록, 오테식 벙개 = 보라, 일반 벙개 = 주황.
+ * 일정 종류 색: 오테식 정모 = 초록, 오테식 벙개 = 보라, 교류전 = 파랑, 일반 벙개 = 주황.
  * 캘린더 칩·점, 목록 띠, 배지, 종류 고르기에서 같은 색을 쓴다. (클래스 이름을 그대로 써야 빌드에 남는다)
  */
 
@@ -23,6 +32,8 @@ export const KIND_SHORT: Record<GatheringKind, string> = {
 export const KIND_BADGE: Record<GatheringKind, string> = {
   club_regular: "badge-green",
   club_flash: "badge-lav",
+  exchange: "badge-blue",
+  exchange_split: "badge-blue",
   flash: "badge-orange-soft",
 };
 
@@ -30,6 +41,8 @@ export const KIND_BADGE: Record<GatheringKind, string> = {
 export const KIND_DOT: Record<GatheringKind, string> = {
   club_regular: "bg-house-green",
   club_flash: "bg-house-lav",
+  exchange: "bg-house-blue",
+  exchange_split: "bg-house-blue",
   flash: "bg-house-orange",
 };
 
@@ -37,6 +50,8 @@ export const KIND_DOT: Record<GatheringKind, string> = {
 export const KIND_CHIP: Record<GatheringKind, string> = {
   club_regular: "bg-house-green text-ink",
   club_flash: "bg-house-lav text-ink",
+  exchange: "bg-house-blue text-ink",
+  exchange_split: "bg-house-blue text-ink",
   flash: "bg-house-orange text-ink",
 };
 
@@ -44,16 +59,54 @@ export const KIND_CHIP: Record<GatheringKind, string> = {
 export const KIND_HINT: Record<GatheringKind, string> = {
   club_regular: "회비에서 지출 · 게스트만 참가비",
   club_flash: "회비에서 지출 · 게스트만 참가비",
+  exchange: "다른 클럽과 교류 · 회비에서 지출 · 게스트만 참가비",
+  exchange_split: "다른 클럽과 교류 · 코트비 + 캔볼값을 참석자끼리 n빵",
   flash: "코트비 + 캔볼값을 참석자끼리 n빵",
 };
 
-export const KIND_ORDER: GatheringKind[] = [
+/** 저장되는 모든 종류 (서버 GatheringKind) */
+export const GATHERING_KINDS: GatheringKind[] = [
   "club_regular",
   "club_flash",
+  "exchange",
+  "exchange_split",
   "flash",
 ];
 
-export const isClubKind = (kind: GatheringKind) => kind !== "flash";
+/** 화면에 보이는 종류 (교류전은 하나): 종류 고르기·범례·필터 순서 */
+export const KIND_ORDER: GatheringKind[] = [
+  "club_regular",
+  "club_flash",
+  "exchange",
+  "flash",
+];
+
+/** 교류전 정산 방식 고르기 */
+export const EXCHANGE_PAY_LABEL: Record<"exchange" | "exchange_split", string> = {
+  exchange: "회비에서 지출",
+  exchange_split: "참석자끼리 n빵",
+};
+
+export const isExchangeKind = (kind: GatheringKind) =>
+  kind === "exchange" || kind === "exchange_split";
+
+/** 화면에 보이는 종류로 묶기: n빵 교류전도 교류전 */
+export const kindGroup = (kind: GatheringKind): GatheringKind =>
+  kind === "exchange_split" ? "exchange" : kind;
+
+/** 회비에서 지출하는 모임 (오테식 정모·벙개, 회비 교류전): 게스트만 참가비, 코트비는 코트요정에게 */
+export const isClubKind = (kind: GatheringKind) =>
+  kind === "club_regular" || kind === "club_flash" || kind === "exchange";
+
+/** 관리자·임원진만 만들고 임원진이 함께 관리하는 클럽 일정 (오테식 정모·벙개, 교류전) */
+export const isStaffKind = (kind: GatheringKind) => kind !== "flash";
+
+/**
+ * 오테식 정모·벙개 (교류전 제외): 대진 결과가 레이팅에 들어가 점수가 꼭 필요하고,
+ * 회칙 제10조 정원(코트 1면에 6명)을 안내한다. 교류전은 상대 클럽과 겨루고 인원도 상대와 정한다
+ */
+export const isOtesikKind = (kind: GatheringKind) =>
+  kind === "club_regular" || kind === "club_flash";
 
 export const COURT_SURFACES: CourtSurface[] = ["hard", "turf", "clay", "carpet"];
 

@@ -159,7 +159,7 @@ def _require_organizer(db: Session, gathering_id: int, user: User) -> Gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
     # 모임 관리 권한과 같다: 오테식 모임은 클럽 일정이라 임원진도 대진을 짠다 (점수 입력은 _require_scorer).
     # 게스트는 보기와 투표만 한다
-    if not user.is_guest and (g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff)):
+    if not user.is_guest and (g.created_by == user.id or user.is_admin or (g.is_staff_run and user.is_staff)):
         return g
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail="모임 주최자 또는 관리자만 가능합니다.")
 
@@ -174,7 +174,7 @@ def _require_editor(db: Session, gathering_id: int, user: User) -> Gathering:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="모임을 찾을 수 없습니다.")
     if user.is_guest:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=GUEST_ONLY_VIEW_AND_VOTE)
-    if g.created_by == user.id or user.is_admin or (g.is_club and user.is_staff):
+    if g.created_by == user.id or user.is_admin or (g.is_staff_run and user.is_staff):
         return g
     attending = db.scalar(
         select(Participant.id).where(
@@ -524,7 +524,7 @@ def record_draw_match_result(
             status.HTTP_400_BAD_REQUEST, detail="대진의 선수 구성이 완전하지 않습니다."
         )
 
-    if gathering.is_club and payload.team1_score + payload.team2_score == 0:
+    if gathering.is_rated and payload.team1_score + payload.team2_score == 0:
         # 오테식 모임 대진은 게임 수로 레이팅을 매기므로 점수가 꼭 필요하다.
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -582,7 +582,7 @@ def update_draw_match_result(
 ):
     """입력한 결과의 점수 고치기. 승패를 다시 판정하고, 전적·랭킹·티어는 볼 때 다시 계산되므로 바로 반영된다."""
     dm, match, gathering = _recorded(db, draw_match_id, current_user)
-    if gathering.is_club and payload.team1_score + payload.team2_score == 0:
+    if gathering.is_rated and payload.team1_score + payload.team2_score == 0:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="점수를 게임 수로 입력해 주세요. (5:5 해피게임은 5:5, 타이브레이크는 6:5)",

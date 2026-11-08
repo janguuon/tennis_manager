@@ -577,7 +577,7 @@ export default function PaymentsPage() {
         <section className="card">
           <SectionHeading
             title={`${Number(mm)}월 회비 지출`}
-            sub={`오테식 정모·벙개 코트비 · 지급 ${won(
+            sub={`오테식 정모·벙개·교류전 코트비 · 지급 ${won(
               summary.court_reimbursed
             )} · 대기 ${won(summary.court_pending)}`}
             action={

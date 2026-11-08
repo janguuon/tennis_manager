@@ -4,7 +4,7 @@
 반영 경기
 ---------
 오테식 모임(정모·벙개)에서 **대진표로 치르고 결과를 입력한 경기만** 반영한다.
-일반 벙개, 직접 입력한 경기, 취소된 모임, 점수 없는(0:0) 결과, 탈퇴한 회원이 뛴 경기,
+일반 벙개·교류전, 직접 입력한 경기, 취소된 모임, 점수 없는(0:0) 결과, 탈퇴한 회원이 뛴 경기,
 이름만 적어 초대한 게스트(가입하지 않은 사람)가 뛴 경기는 빠진다. 자동 대진에서 초대 게스트는 출발점으로 본다.
 
 계산
@@ -28,7 +28,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .models import CLUB_KINDS, DrawMatch, Gathering, GatheringStatus, Match, TeamSide
+from .models import OTESIK_KINDS, DrawMatch, Gathering, GatheringStatus, Match, TeamSide
 from .stats import without_invited_guests, without_withdrawn
 
 BASE = 1000.0
@@ -237,7 +237,7 @@ def rated_games(db: Session) -> list[RatedGame]:
         .join(DrawMatch, DrawMatch.result_match_id == Match.id)
         .join(Gathering, Gathering.id == Match.gathering_id)
         .where(
-            Gathering.kind.in_(CLUB_KINDS),
+            Gathering.kind.in_(OTESIK_KINDS),
             Gathering.status != GatheringStatus.CANCELED,
             without_withdrawn(),
             without_invited_guests(),

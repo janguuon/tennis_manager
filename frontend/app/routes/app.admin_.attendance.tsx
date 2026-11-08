@@ -7,7 +7,7 @@ import { useState } from "react";
 import { MemberAvatar } from "~/components/Club";
 import { BackLink, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
-import { KIND_BADGE, KIND_DOT, KIND_ORDER } from "~/lib/club";
+import { KIND_BADGE, KIND_DOT, KIND_ORDER, kindGroup } from "~/lib/club";
 import { todayKST } from "~/lib/format";
 import { requireToken } from "~/lib/session.server";
 import { MEMBER_TYPE_LABEL, WEEKDAYS } from "~/lib/status";
@@ -62,6 +62,8 @@ type Filter = "all" | GatheringKind;
 const KIND_NAME: Record<GatheringKind, string> = {
   club_regular: "정모",
   club_flash: "오테식 벙개",
+  exchange: "교류전",
+  exchange_split: "교류전",
   flash: "일반 벙개",
 };
 
@@ -90,15 +92,16 @@ export default function AttendancePage() {
   const span = yearly ? "한 해" : "이 달";
 
   const byId = new Map(data.gatherings.map((g) => [g.id, g]));
-  const shown = data.gatherings.filter((g) => filter === "all" || g.kind === filter);
-  const kindCount = (kind: GatheringKind) => data.gatherings.filter((g) => g.kind === kind).length;
+  // 교류전은 회비·n빵을 함께 센다
+  const shown = data.gatherings.filter((g) => filter === "all" || kindGroup(g.kind) === filter);
+  const kindCount = (kind: GatheringKind) => data.gatherings.filter((g) => kindGroup(g.kind) === kind).length;
 
   // 고른 종류의 모임만 세어 다시 줄 세운다. 횟수는 오늘까지 지난 모임만 (많이 온 사람부터, 같으면 예정·이름순)
   const rows = data.rows
     .map((r) => {
       const gatherings = r.gathering_ids
         .map((id) => byId.get(id)!)
-        .filter((g) => g && (filter === "all" || g.kind === filter));
+        .filter((g) => g && (filter === "all" || kindGroup(g.kind) === filter));
       const done = gatherings.filter((g) => g.event_date <= data.today).length;
       return { row: r, gatherings, done, upcoming: gatherings.length - done };
     })
@@ -153,7 +156,10 @@ export default function AttendancePage() {
           <p className="text-[12px] font-bold">{span} 모임</p>
           <p className="font-display text-3xl font-extrabold">{data.gatherings.length}</p>
           <p className="mt-1 text-[11px] font-semibold leading-snug opacity-80">
-            {KIND_ORDER.map((k) => `${KIND_NAME[k]} ${kindCount(k)}`).join(" · ")}
+            {/* 교류전은 드물어 없는 달엔 빼고 보인다 */}
+            {KIND_ORDER.filter((k) => k !== "exchange" || kindCount(k) > 0)
+              .map((k) => `${KIND_NAME[k]} ${kindCount(k)}`)
+              .join(" · ")}
           </p>
         </div>
         <div className="tile-green !p-4 sm:!p-5">
@@ -283,7 +289,7 @@ function MemberAttendance({
   // 횟수는 오늘까지 지난 모임만, 앞으로 갈 모임은 예정으로 따로
   const done = gatherings.filter((g) => g.event_date <= today);
   const planned = gatherings.filter((g) => g.event_date > today);
-  const kinds = KIND_ORDER.map((k) => [k, done.filter((g) => g.kind === k).length] as const).filter(
+  const kinds = KIND_ORDER.map((k) => [k, done.filter((g) => kindGroup(g.kind) === k).length] as const).filter(
     ([, n]) => n > 0
   );
   const head = (

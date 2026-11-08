@@ -13,7 +13,8 @@
 - 오테식 모임 코트비는 총무가 코트요정에게 정산한다 → 코트요정이 지급 내역의 받는 사람.
   코트요정이 회원이면 그 회원 앞으로(환급 계좌 표시), 아니면 이름만 남긴다(가입이 승인되면 이어진다).
   일반 벙개는 참석자끼리 코트비 + 캔볼비를 n빵한다.
-- 최대 인원을 비우면 오테식 모임은 코트 수 × SEATS_PER_COURT(회칙 제10조, 1면당 6명)로 정한다.
+- 최대 인원을 비우면 오테식 정모·벙개는 코트 수 × SEATS_PER_COURT(회칙 제10조, 1면당 6명)로 정한다.
+  교류전은 상대 클럽과 정한 인원이라 비우면 제한이 없다.
   정원이 있어야 다 찼을 때 대기 신청이 된다. 일반 벙개는 비우면 인원 제한이 없다.
 - 날짜만 미리 채워 두고 나머지가 빈 행(양식 기본값)은 빈 행으로 본다.
 - 달마다 시트를 나눠 쓰면 올릴 때 고른 달 이름의 시트('11월', '2026년 11월', '2026-11')를 읽는다.
@@ -60,15 +61,27 @@ LABEL = {
     "address": "주소",
 }
 
-# 사용 여부 → 모임 종류 (띄어쓰기 무시). 그 밖의 값은 모임이 아니다.
+# 사용 여부 → 모임 종류 (띄어쓰기·괄호·대소문자 무시, usage_key). 그 밖의 값은 모임이 아니다.
 USAGE_KINDS = {
     "오테식정모": GatheringKind.CLUB_REGULAR,
     "오테식벙개": GatheringKind.CLUB_FLASH,
+    "교류전": GatheringKind.EXCHANGE,  # 정산 방식을 안 적으면 회비
+    "교류전회비": GatheringKind.EXCHANGE,
+    "교류전n빵": GatheringKind.EXCHANGE_SPLIT,
+    "교류전엔빵": GatheringKind.EXCHANGE_SPLIT,
     "일반벙개": GatheringKind.FLASH,
 }
+
+
+def usage_key(text: str) -> str:
+    """'교류전 (N빵)' → '교류전n빵'"""
+    return re.sub(r"[\s()]", "", text or "").lower()
+
 KIND_TITLE = {
     GatheringKind.CLUB_REGULAR: "오테식 정모",
     GatheringKind.CLUB_FLASH: "오테식 벙개",
+    GatheringKind.EXCHANGE: "교류전",
+    GatheringKind.EXCHANGE_SPLIT: "교류전",
     GatheringKind.FLASH: "일반 벙개",
 }
 
@@ -78,14 +91,14 @@ TIME_SLOTS = [
     "15:00~17:00", "16:00~18:00", "17:00~19:00", "18:00~20:00", "19:00~21:00", "20:00~22:00",
 ]
 USAGE_OPTIONS = [
-    "오테식 정모", "오테식 벙개", "일반 벙개", "예약대기", "결재 대기", "예약취소", "우천 취소",
+    "오테식 정모", "오테식 벙개", "교류전 (회비)", "교류전 (n빵)", "일반 벙개", "예약대기", "결재 대기", "예약취소", "우천 취소",
     "최코치님 사용", "예약 (비고에 예약자 작성)", "개인 사용 (비고에 사용자)",
 ]
 # 양식의 예약자명 선택지: 코트 예약에 쓰는 이름 (목록에 없는 이름도 적을 수 있다)
 BOOKER_NAMES = [
     "장미주", "김다빈", "이민석", "곽도언", "송승진", "서승우", "황규식", "김수현", "김응희", "안연숙",
 ]
-# 회칙 제10조: 코트 1면당 참가 정원 (최대 인원을 비운 오테식 모임에 적용)
+# 회칙 제10조: 코트 1면당 참가 정원 (최대 인원을 비운 오테식 정모·벙개에 적용)
 SEATS_PER_COURT = 6
 # 양식에서 드롭다운·날짜 검사를 거는 행 수 (2행부터)
 TEMPLATE_ROWS = 100
@@ -253,7 +266,7 @@ def parse_row(
         return None  # 완전히 빈 행 또는 날짜만 미리 채워 둔 행
 
     usage = _text(cell["usage"]) if "usage" in cols and not _blank(cell.get("usage")) else ""
-    kind = USAGE_KINDS.get(re.sub(r"\s+", "", usage))
+    kind = USAGE_KINDS.get(usage_key(usage))
     if usage and kind is None:
         # 모임이 아닌 사용 여부는 다른 칸이 비어 있어도 따지지 않는다
         return RowSkip(row_no, f"사용 여부가 '{usage}'라 모임으로 등록하지 않았어요")

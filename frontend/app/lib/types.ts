@@ -23,8 +23,13 @@ export type MatchType =
 /** maybe(미정)는 예전 투표 표시용. waiting = 정원이 차서 대기 중 */
 export type AttendanceStatus = "attending" | "absent" | "waiting" | "maybe";
 export type GatheringStatus = "planned" | "ongoing" | "completed" | "canceled";
-/** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 일반 벙개 (n빵) */
-export type GatheringKind = "club_regular" | "club_flash" | "flash";
+/** 모임 종류: 오테식 정모 / 오테식 벙개 (회비 지출) / 교류전 (회비 또는 n빵) / 일반 벙개 (n빵) */
+export type GatheringKind =
+  | "club_regular"
+  | "club_flash"
+  | "exchange" // 교류전 (회비에서 지출)
+  | "exchange_split" // 교류전 (참석자끼리 n빵)
+  | "flash";
 /** 코트 바닥 재질: 하드 · 인조잔디 · 클레이 · 카펫 */
 export type CourtSurface = "hard" | "turf" | "clay" | "carpet";
 

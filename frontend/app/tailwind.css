@@ -953,7 +953,7 @@
 /* ---- 모임 종류 · 정산 ---- */
 @layer components {
   .kind-options {
-    @apply grid grid-cols-3 gap-2;
+    @apply grid grid-cols-2 gap-2 sm:grid-cols-4;
   }
   .kind-option {
     @apply relative flex min-h-[64px] cursor-pointer flex-col justify-center gap-1.5 rounded-2xl border-[1.5px] border-slate-200 bg-paper px-3 py-2.5 transition-colors

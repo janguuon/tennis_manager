@@ -19,6 +19,7 @@ from ..models import (
     AttendanceStatus,
     CourtBooking,
     DrawMatch,
+    ExchangeMatch,
     Gathering,
     GatheringKind,
     GatheringStatus,
@@ -317,6 +318,11 @@ def _purge(db: Session, user: User, admin: User) -> PurgePreview:
                 setattr(tm, c, None)
     for t in db.scalars(select(Tournament).where(Tournament.created_by == uid)):
         t.created_by = admin.id
+    # 교류전: 그 회원 자리는 비운다 (점수는 남는다)
+    for em in db.scalars(
+        select(ExchangeMatch).where(or_(ExchangeMatch.ours_p1_id == uid, ExchangeMatch.ours_p2_id == uid))
+    ):
+        em.ours_p1_id, em.ours_p2_id = [p for p in (em.ours_p1_id, em.ours_p2_id) if p != uid] + [None]
     db.flush()
     for g in freed:
         promote_waiting(db, g)
@@ -405,6 +411,9 @@ def _has_history(db: Session, user_id: int) -> bool:
         ),
         select(TournamentMatch.id).where(_tournament_seat_filter(user_id)),
         select(Tournament.id).where(Tournament.created_by == user_id),
+        select(ExchangeMatch.id).where(
+            or_(ExchangeMatch.ours_p1_id == user_id, ExchangeMatch.ours_p2_id == user_id)
+        ),
     ]
     return any(db.scalar(q.limit(1)) is not None for q in checks)
 

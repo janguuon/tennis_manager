@@ -1450,3 +1450,43 @@
     @apply inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-slate-400 px-2 text-[11px] font-bold text-slate-600 dark:border-slate-500 dark:text-slate-300;
   }
 }
+
+/* ---- 교류전: 결과 꽃가루 (처음 볼 때 한 번), 대진표 ---- */
+@layer components {
+  .confetti {
+    @apply pointer-events-none fixed inset-0 z-50 overflow-hidden;
+  }
+  .confetti span {
+    @apply absolute -top-4 h-3.5 w-2 rounded-sm opacity-90;
+    animation-name: confetti-fall;
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.45, 1);
+    animation-fill-mode: forwards;
+  }
+  .exchange-round {
+    @apply space-y-3 border-t border-slate-200 pt-5 first:border-t-0 first:pt-0 dark:border-slate-700;
+  }
+  .exchange-courts {
+    @apply grid gap-3 md:grid-cols-2 xl:grid-cols-3;
+  }
+  .exchange-match {
+    @apply space-y-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-700;
+  }
+  .exchange-match.is-empty {
+    @apply border-dashed;
+  }
+  .exchange-side {
+    @apply min-w-0 space-y-1.5;
+  }
+  .exchange-name {
+    @apply flex min-w-0 items-center gap-1.5 text-[13px] font-semibold;
+  }
+}
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  100% {
+    transform: translate3d(var(--dx), 105vh, 0) rotate(var(--rot));
+    opacity: 0.85;
+  }
+}

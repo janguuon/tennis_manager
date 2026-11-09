@@ -36,6 +36,7 @@ from ..security import hash_password
 from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_settler, get_current_user
 from ..models import (
     CLUB_KINDS,
+    EXCHANGE_KINDS,
     STAFF_KINDS,
     ApprovalStatus,
     AttendanceStatus,
@@ -43,6 +44,7 @@ from ..models import (
     Gathering,
     GatheringKind,
     GatheringStatus,
+    Notice,
     Participant,
     MemberType,
     PickupRequest,
@@ -1378,6 +1380,13 @@ def update_gathering(
                 )
             if new_kind in CLUB_KINDS:
                 data.setdefault("guest_fee", GUEST_FEE_DEFAULT)
+        # 교류전 대진·상대 명단이 있으면 교류전이 아닌 종류로 바꾸지 않는다 (교류전 화면에서 지운 뒤에)
+        ex = g.exchange
+        if new_kind not in EXCHANGE_KINDS and ex is not None and (ex.opponents or ex.matches or ex.finished_at):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="교류전 대진·상대 명단이 있어 다른 종류로 바꿀 수 없어요. 교류전 화면에서 기록을 지운 뒤 바꿔 주세요.",
+            )
 
     new_status = data.get("status")
     if new_status == GatheringStatus.CANCELED and g.status != GatheringStatus.CANCELED:
@@ -1493,6 +1502,10 @@ def delete_gathering(
             status.HTTP_400_BAD_REQUEST,
             detail="코트비를 지급한 모임은 삭제할 수 없습니다. 모임을 취소 상태로 바꿔 주세요.",
         )
+    if g.exchange is not None and g.exchange.notice_id:
+        notice = db.get(Notice, g.exchange.notice_id)  # 교류전 결과 소식도 함께 내린다
+        if notice is not None:
+            db.delete(notice)
     db.delete(g)
     db.commit()
 

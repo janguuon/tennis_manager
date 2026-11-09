@@ -376,6 +376,10 @@ class Gathering(Base):
     pickups: Mapped[list[PickupRequest]] = relationship(
         back_populates="gathering", cascade="all, delete-orphan", order_by="PickupRequest.id"
     )
+    # 교류전 일정의 대진·점수판 (교류전 화면에서 처음 꾸릴 때 생긴다)
+    exchange: Mapped[Exchange | None] = relationship(
+        back_populates="gathering", cascade="all, delete-orphan", uselist=False
+    )
 
     @property
     def is_club(self) -> bool:
@@ -708,6 +712,100 @@ class TournamentMatch(Base):
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     tournament: Mapped[Tournament] = relationship(back_populates="matches")
+
+    @property
+    def recorded(self) -> bool:
+        return self.recorded_at is not None
+
+
+# ---------------------------------------------------------------------------
+# 교류전: 오테식 대 상대 클럽 (교류전 일정 하나에 하나)
+# ---------------------------------------------------------------------------
+class Exchange(Base):
+    """
+    교류전 대진·점수판. 교류전(회비·참가비) 일정 하나에 하나 (routers/exchanges.py, exchange.py).
+
+    - 우리 팀(오테식)은 그 일정에 참석한 회원·초대 게스트, 상대 팀은 이름·성별만 적는 명단(ExchangeOpponent).
+      상대 선수는 일정 참가자가 아니라 회비·참가비·게스트비·출석에 잡히지 않는다.
+    - 대진은 라운드 × 코트 표(ExchangeMatch). 경기마다 이긴 팀이 1승.
+    - 마치면(finished_at) 승리팀(winner)이 정해지고, 알리기로 했으면 클럽 소식(notice)으로 결과 팝업을 띄운다.
+    레이팅에는 넣지 않는다(교류전은 상대 클럽과 겨루는 경기).
+    """
+
+    __tablename__ = "exchanges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    gathering_id: Mapped[int] = mapped_column(
+        ForeignKey("gatherings.id"), nullable=False, unique=True, index=True
+    )
+    # 상대 클럽 이름. 비우면 일정 제목에서 '교류전'을 뺀 이름
+    opponent_name: Mapped[str | None] = mapped_column(String(50))
+    # 대진 코트 수·라운드 수. 비우면 일정 면수 / 모임 시간으로 정한 라운드 수
+    court_count: Mapped[int | None] = mapped_column(Integer)
+    rounds: Mapped[int | None] = mapped_column(Integer)
+    # 마친 교류전의 결과: ours 오테식 승 | theirs 상대 승 | draw 무승부. 마치기 전엔 NULL
+    winner: Mapped[str | None] = mapped_column(String(10))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 결과를 클럽 소식(팝업)으로 알렸으면 그 소식. 결과를 바꾸거나 마치기를 취소하면 지운다
+    notice_id: Mapped[int | None] = mapped_column(ForeignKey("notices.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    gathering: Mapped[Gathering] = relationship(back_populates="exchange")
+    opponents: Mapped[list[ExchangeOpponent]] = relationship(
+        back_populates="exchange", cascade="all, delete-orphan", order_by="ExchangeOpponent.id"
+    )
+    matches: Mapped[list[ExchangeMatch]] = relationship(
+        back_populates="exchange", cascade="all, delete-orphan"
+    )
+
+
+class ExchangeOpponent(Base):
+    """교류전 상대 선수: 앱 계정 없이 이름과 성별만 (성별은 대진에서 남복·여복·혼복을 맞추는 데 쓴다)."""
+
+    __tablename__ = "exchange_opponents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange_id: Mapped[int] = mapped_column(ForeignKey("exchanges.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(30), nullable=False)
+    gender: Mapped[Gender | None] = mapped_column(Enum(Gender))
+
+    exchange: Mapped[Exchange] = relationship(back_populates="opponents")
+
+
+class ExchangeMatch(Base):
+    """
+    교류전 경기 한 판 (대진표의 한 칸): round_number 라운드의 court 번째 코트(1부터).
+    우리 쪽은 회원(users), 상대 쪽은 상대 선수(exchange_opponents). 자리가 비면 빈 코트.
+    점수를 적으면 winner 1(오테식)·2(상대), 비기면 NULL.
+    """
+
+    __tablename__ = "exchange_matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exchange_id: Mapped[int] = mapped_column(ForeignKey("exchanges.id"), nullable=False, index=True)
+    round_number: Mapped[int] = mapped_column(Integer, default=1)
+    court: Mapped[int] = mapped_column(Integer, default=1)
+    match_type: Mapped[MatchType] = mapped_column(Enum(MatchType), nullable=False)
+
+    ours_p1_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    ours_p2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    theirs_p1_id: Mapped[int | None] = mapped_column(ForeignKey("exchange_opponents.id"))
+    theirs_p2_id: Mapped[int | None] = mapped_column(ForeignKey("exchange_opponents.id"))
+
+    ours_score: Mapped[int | None] = mapped_column(Integer)
+    theirs_score: Mapped[int | None] = mapped_column(Integer)
+    winner: Mapped[int | None] = mapped_column(Integer)  # 1 오테식 | 2 상대, 무승부·결과 전은 NULL
+    recorded_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    exchange: Mapped[Exchange] = relationship(back_populates="matches")
+
+    @property
+    def ours_ids(self) -> list[int]:
+        return [p for p in (self.ours_p1_id, self.ours_p2_id) if p is not None]
+
+    @property
+    def theirs_ids(self) -> list[int]:
+        return [p for p in (self.theirs_p1_id, self.theirs_p2_id) if p is not None]
 
     @property
     def recorded(self) -> bool:

@@ -44,6 +44,7 @@ import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
 import { CourtCapacityFields } from "~/components/CourtCapacityFields";
+import { ExchangeCard } from "~/components/ExchangeBoard";
 import { CourtSurfaceField, CourtSurfaceTag } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
@@ -60,6 +61,7 @@ import {
   hasEntryFee,
   payMode,
   isClubKind,
+  isExchangeKind,
   isOtesikKind,
   isStaffKind,
   isGuest,
@@ -83,6 +85,7 @@ import {
   type Draw,
   type DrawMatch,
   type Gathering,
+  type ExchangeDetail,
   type GatheringDetail,
   type GatheringKind,
   type Me,
@@ -109,7 +112,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       membersOrEmpty(token),
     ]);
     const around = await neighbors(token, gathering);
-    return json({ gathering, draws, members, around });
+    // 교류전 일정: 교류전 점수판 (게스트도 본다). 못 불러오면 카드 없이
+    const exchange = isExchangeKind(gathering.kind)
+      ? await api<ExchangeDetail>(`/exchanges/${id}`, { token }).catch(() => null)
+      : null;
+    return json({ gathering, draws, members, around, exchange });
   } catch (err) {
     // 아직 공개 전(403)이거나 지워진(404) 모임은 안내 화면으로
     if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
@@ -718,7 +725,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 
 export default function GatheringDetailPage() {
-  const { gathering, draws, members, around } = useLoaderData<typeof loader>();
+  const { gathering, draws, members, around, exchange } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { user } = useOutletContext<{ user: Me }>();
@@ -1935,7 +1942,11 @@ export default function GatheringDetailPage() {
           />
         ) : null}
 
-        {/* 대진 */}
+        {/* 교류전 일정: 교류전 점수판 (대진·점수는 교류전 화면에서) */}
+        {exchange ? <ExchangeCard x={exchange} member={!guest} /> : null}
+
+        {/* 대진 (교류전 일정은 예전에 짠 대진표가 있을 때만) */}
+        {!exchange || draws.length > 0 ? (
         <section className="card detail-draws space-y-5">
           <div>
             <h2 className="section-title">오늘의 매치업</h2>
@@ -2050,6 +2061,7 @@ export default function GatheringDetailPage() {
             </div>
           ))}
         </section>
+        ) : null}
       </div>
 
       {/* 수정 모달 */}

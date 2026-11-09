@@ -324,7 +324,21 @@ export default function CalendarPage() {
   const actionData = useActionData<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigation = useNavigation();
+  // 교류전 탭의 '교류전 일정 등록'(?new=exchange): 등록 창을 교류전으로 연다 (운영진만)
+  const newExchange = searchParams.get("new") === "exchange" && isStaff(user);
   const [showCreate, setShowCreate] = useState(false);
+  // 등록 창(Modal)은 브라우저에서만 그릴 수 있어 페이지가 뜬 뒤에 연다
+  useEffect(() => {
+    if (newExchange) setShowCreate(true);
+  }, [newExchange]);
+  const closeCreate = () => {
+    setShowCreate(false);
+    if (searchParams.has("new")) {
+      const p = new URLSearchParams(searchParams);
+      p.delete("new");
+      setSearchParams(p, { replace: true, preventScrollReset: true });
+    }
+  };
   // 방금 올린 일정: 단톡방 알림 창
   const [created, setCreated] = useState<NewSchedule | null>(null);
   const [importing, setImporting] = useState(false);
@@ -354,7 +368,7 @@ export default function CalendarPage() {
   // 모임 생성 성공 시 등록 창을 닫고 단톡방 알림 창을 띄운다
   useEffect(() => {
     if (actionData?.ok) {
-      setShowCreate(false);
+      closeCreate();
       setCreated(actionData.created);
     }
   }, [actionData]);
@@ -840,14 +854,14 @@ export default function CalendarPage() {
 
       {/* 일정 등록 */}
       {showCreate ? (
-        <Modal title="새 일정" onClose={() => setShowCreate(false)}>
+        <Modal title="새 일정" onClose={closeCreate}>
           <Form method="post" className="space-y-7">
             <GatheringFeeFields
               idPrefix="c_"
               canCreateClub={isStaff(user)}
               members={members}
               defaults={{
-                kind: "flash",
+                kind: newExchange ? "exchange" : "flash",
                 court_fee: 0,
                 ball_fee: 0,
                 guest_fee: 5000,

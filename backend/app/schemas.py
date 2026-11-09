@@ -1205,3 +1205,127 @@ class TournamentDetail(TournamentSummary):
     can_manage: bool = False  # 참가자·팀·대진표를 꾸릴 수 있는지 (운영진)
     captain_of: TeamColor | None = None  # 지금 보는 회원이 팀장인 팀 (청백전 경기 짜기)
     announced: bool = False  # 청백전 최종 결과를 클럽 소식으로 알렸는지
+
+
+# --- 교류전 (routers/exchanges.py) -------------------------------------------
+ExchangeResult = Literal["ours", "theirs", "draw"]
+
+
+class ExchangeScoreRead(BaseModel):
+    """점수판: 이긴 경기 수와 딴 게임 수 합 (점수가 들어간 경기만)."""
+
+    ours_wins: int = 0
+    theirs_wins: int = 0
+    draws: int = 0
+    ours_games: int = 0
+    theirs_games: int = 0
+
+
+class ExchangeSummary(BaseModel):
+    """교류전 목록 한 줄 (교류전 일정 하나). 대진을 꾸리기 전이어도 일정이 있으면 보인다."""
+
+    gathering_id: int
+    title: str
+    kind: GatheringKind
+    event_date: date
+    start_time: time | None = None
+    end_time: time | None = None
+    location: str | None = None
+    canceled: bool = False
+    opponent_name: str | None = None  # 비어 있으면 화면에서 '상대 클럽'
+    ours_count: int = 0  # 우리 팀(참석자) 수
+    theirs_count: int = 0  # 상대 선수 명단 수
+    played: int = 0  # 점수가 들어간 경기
+    total: int = 0  # 선수가 있는 경기
+    score: ExchangeScoreRead = ExchangeScoreRead()
+    winner: ExchangeResult | None = None
+    finished_at: datetime | None = None
+
+
+class ExchangeOpponentRead(BaseModel):
+    id: int
+    name: str
+    gender: Gender | None = None
+    games: int = 0
+    wins: int = 0
+
+
+class ExchangeOurPlayer(BaseModel):
+    """우리 팀 선수: 참석자. games/wins 는 오늘 점수가 들어간 경기만."""
+
+    user: UserBrief
+    games: int = 0
+    wins: int = 0
+
+
+class ExchangeMatchRead(BaseModel):
+    id: int
+    round_number: int
+    court: int
+    match_type: MatchType
+    ours: list[UserBrief] = []
+    theirs: list[ExchangeOpponentRead] = []
+    ours_score: int | None = None
+    theirs_score: int | None = None
+    winner: int | None = None  # 1 오테식 | 2 상대, 무승부·결과 전은 None
+    recorded: bool = False
+    can_score: bool = False
+    # 대진을 짠 뒤 불참으로 바뀐 우리 선수 (다시 짜거나 바꿔 넣어야 한다)
+    absent_ids: list[int] = []
+
+
+class ExchangeDetail(ExchangeSummary):
+    court_numbers: str | None = None
+    court_count: int  # 대진 코트 수 (정하지 않았으면 일정 면수)
+    rounds: int  # 대진 라운드 수 (정하지 않았으면 모임 시간으로)
+    cancel_reason: str | None = None
+    ours: list[ExchangeOurPlayer] = []
+    opponents: list[ExchangeOpponentRead] = []
+    matches: list[ExchangeMatchRead] = []
+    suggested_winner: ExchangeResult | None = None  # 지금 점수로 본 결과 (점수가 없으면 None)
+    mvp: list[UserBrief] = []
+    can_manage: bool = False
+    announced: bool = False
+
+
+class ExchangeUpdate(BaseModel):
+    """교류전 설정 (보낸 칸만 바꾼다). 코트 수·라운드 수는 다음에 대진을 짤 때 쓴다."""
+
+    opponent_name: str | None = Field(None, max_length=50)
+    court_count: int | None = Field(None, ge=1, le=30)
+    rounds: int | None = Field(None, ge=1, le=12)
+
+
+class ExchangeOpponentsAdd(BaseModel):
+    """상대 선수 붙여 넣기: '홍길동 남, 김영희 여' (쉼표·줄바꿈으로 여러 명)."""
+
+    text: str = Field(..., min_length=1, max_length=2000)
+
+
+class ExchangeOpponentUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=30)
+    gender: Gender | None = None
+
+
+class ExchangeDrawRequest(BaseModel):
+    court_count: int = Field(..., ge=1, le=30)
+    rounds: int = Field(..., ge=1, le=12)
+
+
+class ExchangeLineup(BaseModel):
+    """대진 한 칸의 선수: 우리 회원 id 와 상대 선수 id (단식 1:1, 복식 2:2, 둘 다 비우면 빈 코트)."""
+
+    ours_ids: list[int] = Field(default_factory=list, max_length=2)
+    theirs_ids: list[int] = Field(default_factory=list, max_length=2)
+
+
+class ExchangeMatchScore(BaseModel):
+    ours_score: int = Field(..., ge=0, le=99)
+    theirs_score: int = Field(..., ge=0, le=99)
+
+
+class ExchangeFinish(BaseModel):
+    """교류전 마치기: winner 를 비우면 점수판대로(이긴 경기 수 → 게임 득실 → 무승부)."""
+
+    winner: ExchangeResult | None = None
+    announce: bool = True

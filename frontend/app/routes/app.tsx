@@ -18,6 +18,7 @@ import {
   ScrollText,
   ShieldCheck,
   Sun,
+  Swords,
   Trophy,
   Users,
   Wallet,
@@ -86,6 +87,13 @@ const allNavItems: NavItem[] = [
     short: "대회",
     icon: Medal,
     color: "green",
+  },
+  {
+    to: "/app/exchanges",
+    label: "교류전",
+    short: "교류전",
+    icon: Swords,
+    color: "blue",
   },
   {
     to: "/app/payments",

@@ -567,3 +567,85 @@ export interface AttendanceReport {
   gatherings: AttendanceReportGathering[];
   rows: AttendanceReportRow[];
 }
+
+// --- 교류전 (서버 routers/exchanges.py) ---------------------------------------
+/** 교류전 결과: 오테식 승 · 상대 승 · 무승부 */
+export type ExchangeResult = "ours" | "theirs" | "draw";
+
+export interface ExchangeScore {
+  ours_wins: number;
+  theirs_wins: number;
+  draws: number;
+  ours_games: number;
+  theirs_games: number;
+}
+
+/** 교류전 목록 한 줄 (교류전 일정 하나, 주소는 일정 id) */
+export interface ExchangeSummary {
+  gathering_id: number;
+  title: string;
+  kind: GatheringKind;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  canceled: boolean;
+  /** 상대 클럽 (비어 있으면 '상대 클럽') */
+  opponent_name: string | null;
+  ours_count: number;
+  theirs_count: number;
+  /** 점수가 들어간 경기 / 선수가 있는 경기 */
+  played: number;
+  total: number;
+  score: ExchangeScore;
+  winner: ExchangeResult | null;
+  finished_at: string | null;
+}
+
+/** 상대 선수: 앱 계정 없이 이름·성별 */
+export interface ExchangeOpponent {
+  id: number;
+  name: string;
+  gender: Gender | null;
+  games: number;
+  wins: number;
+}
+
+export interface ExchangeOurPlayer {
+  user: UserBrief;
+  games: number;
+  wins: number;
+}
+
+export interface ExchangeMatch {
+  id: number;
+  round_number: number;
+  /** 몇 번째 코트 (1부터) — 일정 코트 번호로 바꿔 보여 준다 */
+  court: number;
+  match_type: MatchType;
+  ours: UserBrief[];
+  theirs: ExchangeOpponent[];
+  ours_score: number | null;
+  theirs_score: number | null;
+  /** 1 오테식 · 2 상대, 무승부·결과 전은 null */
+  winner: 1 | 2 | null;
+  recorded: boolean;
+  can_score: boolean;
+  /** 대진을 짠 뒤 불참으로 바뀐 우리 선수 */
+  absent_ids: number[];
+}
+
+export interface ExchangeDetail extends ExchangeSummary {
+  court_numbers: string | null;
+  court_count: number;
+  rounds: number;
+  cancel_reason: string | null;
+  ours: ExchangeOurPlayer[];
+  opponents: ExchangeOpponent[];
+  matches: ExchangeMatch[];
+  /** 지금 점수로 본 결과 (점수가 없으면 null) */
+  suggested_winner: ExchangeResult | null;
+  mvp: UserBrief[];
+  can_manage: boolean;
+  announced: boolean;
+}

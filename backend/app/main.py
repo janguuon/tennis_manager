@@ -20,6 +20,7 @@ from .routers import (
     club,
     court_bookings,
     draws,
+    exchanges,
     gatherings,
     matches,
     notices,
@@ -74,6 +75,7 @@ app.include_router(ratings.router)
 app.include_router(club.router)
 app.include_router(notices.router)
 app.include_router(tournaments.router)
+app.include_router(exchanges.router)
 app.include_router(pickups.router)
 app.include_router(calendar_feed.router)
 

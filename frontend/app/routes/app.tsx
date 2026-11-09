@@ -11,6 +11,7 @@ import {
 import {
   ArrowUpRight,
   CalendarDays,
+  Handshake,
   House,
   LogOut,
   Medal,
@@ -18,7 +19,6 @@ import {
   ScrollText,
   ShieldCheck,
   Sun,
-  Swords,
   Trophy,
   Users,
   Wallet,
@@ -92,7 +92,7 @@ const allNavItems: NavItem[] = [
     to: "/app/exchanges",
     label: "교류전",
     short: "교류전",
-    icon: Swords,
+    icon: Handshake,
     color: "blue",
   },
   {

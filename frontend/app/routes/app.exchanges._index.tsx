@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Link, useLoaderData } from "@remix-run/react";
-import { CalendarDays, Clock, MapPin, Plus, Swords, Users } from "lucide-react";
+import { CalendarDays, Clock, Handshake, MapPin, Plus, Users } from "lucide-react";
 
 import { EmptyCard, PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
@@ -91,7 +91,7 @@ export default function ExchangesPage() {
       ) : null}
 
       {exchanges.length === 0 ? (
-        <EmptyCard icon={<Swords size={28} />}>
+        <EmptyCard icon={<Handshake size={28} />}>
           아직 교류전 일정이 없어요.
           {staff ? " ‘교류전 일정 등록’으로 캘린더에 교류전을 올려 보세요." : ""}
         </EmptyCard>

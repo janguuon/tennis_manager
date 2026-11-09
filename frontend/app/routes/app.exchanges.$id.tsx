@@ -9,7 +9,7 @@ import {
   useNavigation,
   useRouteError,
 } from "@remix-run/react";
-import { CalendarDays, Check, ClipboardCopy, MapPin, Pencil, Shuffle, Swords, Trash2, UserPlus } from "lucide-react";
+import { CalendarDays, Check, ClipboardCopy, Handshake, MapPin, Pencil, Shuffle, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MemberAvatar } from "~/components/Club";
@@ -552,7 +552,7 @@ function DrawSection({ x }: { x: ExchangeDetail }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="section-title flex items-center gap-1.5">
-            <Swords size={18} /> 대진표
+            <Handshake size={18} /> 대진표
           </h2>
           <p className="mt-1 text-[13px] font-medium text-slate-500 dark:text-slate-400">
             {x.matches.length

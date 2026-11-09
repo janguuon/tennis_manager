@@ -1,5 +1,5 @@
 import { Link } from "@remix-run/react";
-import { ChevronRight, Swords, Trophy } from "lucide-react";
+import { ChevronRight, Handshake, Trophy } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 
@@ -134,7 +134,7 @@ export function ExchangeCard({ x, member }: { x: ExchangeDetail; member: boolean
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="section-title flex items-center gap-1.5">
-            <Swords size={18} /> 교류전 · {OURS_LABEL} 대 {opponent}
+            <Handshake size={18} /> 교류전 · {OURS_LABEL} 대 {opponent}
           </h2>
           <p className="tile-sub">
             {x.winner

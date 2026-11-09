@@ -36,7 +36,6 @@ from ..security import hash_password
 from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_member, get_current_settler, get_current_user
 from ..models import (
     CLUB_KINDS,
-    OTESIK_KINDS,
     STAFF_KINDS,
     ApprovalStatus,
     AttendanceStatus,
@@ -824,8 +823,8 @@ async def import_gatherings(
                 raise ValueError("오테식 정모·벙개와 교류전은 관리자와 임원진만 등록할 수 있습니다.")
             d = payload.model_dump(exclude={"court_bookings", "open_now"})
             _normalize_courts(d)
-            if payload.kind in OTESIK_KINDS and d.get("max_participants") is None:
-                d["max_participants"] = d["court_count"] * sheet.SEATS_PER_COURT  # 회칙 제10조
+            if d.get("max_participants") is None:
+                d["max_participants"] = sheet.default_capacity(payload.kind, d["court_count"])  # 회칙 제10조
             _clean_address(d)
             gathering = Gathering(**d, created_by=current_user.id)
             _apply_kind_rules(gathering)
@@ -1027,11 +1026,10 @@ def import_template(
         "· 한 행에 코트 한 면씩 적어요. 날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요(위 예시 1·2행 → 3·5번 코트 정모 하나).",
         "· 사용 여부가 오테식 정모 / 오테식 벙개 / 교류전 (회비) / 교류전 (참가비) / 일반 벙개인 행만 일정이 되고, 예약대기·우천 취소·개인 사용 등은 건너뛰어요.",
         "· 교류전 (회비)는 오테식 정모처럼 회비에서 내요. 교류전 (참가비)는 코트비만 기록되고, 1인 참가비는 등록한 뒤 모임 수정에서 정해요.",
-        "  교류전은 최대 인원을 비우면 제한이 없어요.",
         "· 코트 번호는 한 행에 한 면씩 적거나, '1~4'처럼 범위로 적어도 돼요.",
         "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
-        f"· 최대 인원을 비우면 오테식 정모·벙개는 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명).",
-        "  정원이 차면 다음 신청자는 대기로 들어가요. 일반 벙개는 비우면 인원 제한이 없어요.",
+        f"· 최대 인원을 비우면 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명). 일반 벙개도 같아요.",
+        "  교류전은 상대 클럽과 정한 인원이라 비우면 제한이 없어요. 정원이 차면 다음 신청자는 대기로 들어가요.",
         "· 예약자명·코트요정은 목록에서 고르거나 직접 적어요. 적은 이름 그대로 들어가요.",
         "· 오테식 모임의 코트비는 총무가 코트요정에게 정산하므로 '지급할 코트비'에 코트요정 앞으로 올라가요",
         "  (예약자명은 '3번 · 예약 장미주'처럼 코트 칸에 남아요).",
@@ -1213,7 +1211,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             court_fairy=", ".join(group.fairies)[:200],
             court_reservers=_reservers_text(group.rows),
             max_participants=next((r.max_participants for r in group.rows if r.max_participants), None)
-            or (len(group.courts) * sheet.SEATS_PER_COURT if first.kind in OTESIK_KINDS else None),
+            or sheet.default_capacity(first.kind, len(group.courts)),
             description="\n".join(group.notes) or None,
             address=next((" ".join(r.address.split()) for r in group.rows if r.address), None),
             created_by=current_user.id,

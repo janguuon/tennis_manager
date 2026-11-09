@@ -18,3 +18,6 @@ export function courtLabels(raw: string | null | undefined): string[] {
   }
   return out;
 }
+
+/** 코트 1면당 정원 (회칙 제10조, 서버 schedule_import.SEATS_PER_COURT) */
+export const SEATS_PER_COURT = 6;

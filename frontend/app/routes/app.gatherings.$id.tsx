@@ -43,7 +43,7 @@ import { AddToCalendar } from "~/components/AddToCalendar";
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
 import { CopyButton } from "~/components/CopyButton";
-import { CourtCountInput } from "~/components/CourtCountInput";
+import { CourtCapacityFields } from "~/components/CourtCapacityFields";
 import { CourtSurfaceField, CourtSurfaceTag } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { FieldGroup, Modal } from "~/components/Modal";
@@ -2227,37 +2227,14 @@ export default function GatheringDetailPage() {
                       defaultValue={gathering.court_surface}
                       hint="한 번 고르면 같은 장소인데 바닥이 비어 있는 일정에도 들어가요."
                     />
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label" htmlFor="e_count">
-                          코트 면수
-                        </label>
-                        <CourtCountInput
-                          id="e_count"
-                          numbersId="e_courts"
-                          defaultValue={gathering.court_count}
-                        />
-                      </div>
-                      <div>
-                        <label className="label" htmlFor="e_max">
-                          정원
-                        </label>
-                        <input
-                          id="e_max"
-                          name="max_participants"
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          className="input"
-                          placeholder="제한 없음"
-                          defaultValue={gathering.max_participants ?? ""}
-                        />
-                      </div>
-                    </div>
-                    <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {isOtesikKind(kind) ? "회칙상 코트 1면에 6명이에요. " : ""}
-                      정원이 차면 다음 신청은 대기로 받아요.
-                    </p>
+                    <CourtCapacityFields
+                      kind={kind}
+                      numbersId="e_courts"
+                      countId="e_count"
+                      capacityId="e_max"
+                      defaultCount={gathering.court_count}
+                      defaultCapacity={gathering.max_participants}
+                    />
                     {isClubKind(kind) ? (
                       <p className="rounded-2xl bg-house-green/20 px-4 py-3 text-[13px] font-medium leading-relaxed">
                         <strong>코트요정</strong>은 모임 화면의{" "}

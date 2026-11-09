@@ -13,9 +13,9 @@
 - 오테식 모임 코트비는 총무가 코트요정에게 정산한다 → 코트요정이 지급 내역의 받는 사람.
   코트요정이 회원이면 그 회원 앞으로(환급 계좌 표시), 아니면 이름만 남긴다(가입이 승인되면 이어진다).
   일반 벙개는 참석자끼리 코트비 + 캔볼비를 n빵한다.
-- 최대 인원을 비우면 오테식 정모·벙개는 코트 수 × SEATS_PER_COURT(회칙 제10조, 1면당 6명)로 정한다.
-  교류전은 상대 클럽과 정한 인원이라 비우면 제한이 없다.
-  정원이 있어야 다 찼을 때 대기 신청이 된다. 일반 벙개는 비우면 인원 제한이 없다.
+- 최대 인원을 비우면 코트 수 × SEATS_PER_COURT(회칙 제10조, 1면당 6명)로 정한다 (default_capacity).
+  오테식 정모·벙개와 일반 벙개가 같고, 교류전은 상대 클럽과 정한 인원이라 비우면 제한이 없다.
+  정원이 있어야 다 찼을 때 대기 신청이 된다. 화면에서 등록할 때도 정원 칸에 같은 값을 채워 둔다.
 - 날짜만 미리 채워 두고 나머지가 빈 행(양식 기본값)은 빈 행으로 본다.
 - 달마다 시트를 나눠 쓰면 올릴 때 고른 달 이름의 시트('11월', '2026년 11월', '2026-11')를 읽는다.
   숨긴 시트와 '작성 안내' 시트는 읽지 않는다.
@@ -28,7 +28,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 
-from .models import GatheringKind
+from .models import EXCHANGE_KINDS, GatheringKind
 
 # 정규화한 헤더 → 필드
 COURT_SHEET_HEADERS = {
@@ -99,8 +99,15 @@ USAGE_OPTIONS = [
 BOOKER_NAMES = [
     "장미주", "김다빈", "이민석", "곽도언", "송승진", "서승우", "황규식", "김수현", "김응희", "안연숙",
 ]
-# 회칙 제10조: 코트 1면당 참가 정원 (최대 인원을 비운 오테식 정모·벙개에 적용)
+# 회칙 제10조: 코트 1면당 참가 정원 (최대 인원을 비운 정모·벙개에 적용, 화면 lib/courts.ts 와 같다)
 SEATS_PER_COURT = 6
+
+
+def default_capacity(kind: GatheringKind, courts: int) -> int | None:
+    """최대 인원을 비웠을 때 정원: 코트 수 × 6명. 교류전은 상대 클럽과 정하므로 제한 없음."""
+    if kind in EXCHANGE_KINDS or courts < 1:
+        return None
+    return courts * SEATS_PER_COURT
 # 양식에서 드롭다운·날짜 검사를 거는 행 수 (2행부터)
 TEMPLATE_ROWS = 100
 # 날짜 칸 검사 범위: 2020-01-01 ~ 2099-12-31 (엑셀 날짜 일련번호)

@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { CourtCountInput } from "~/components/CourtCountInput";
+import { CourtCapacityFields } from "~/components/CourtCapacityFields";
 import { CourtSurfaceField } from "~/components/CourtSurface";
 import { GatheringFeeFields } from "~/components/GatheringFeeFields";
 import { GatheringRow } from "~/components/GatheringRow";
@@ -46,7 +46,6 @@ import {
   KIND_SHORT,
   isClubKind,
   isGuest,
-  isOtesikKind,
   isStaff,
 } from "~/lib/club";
 import { courtLabels } from "~/lib/courts";
@@ -996,34 +995,12 @@ export default function CalendarPage() {
                       </p>
                     </div>
                     <CourtSurfaceField hint="모름으로 두면 같은 장소에서 골랐던 바닥이 들어가요." />
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="label" htmlFor="court_count">
-                          코트 면수
-                        </label>
-                        <CourtCountInput id="court_count" numbersId="court_numbers" />
-                      </div>
-                      <div>
-                        <label className="label" htmlFor="max_participants">
-                          정원
-                        </label>
-                        <input
-                          id="max_participants"
-                          name="max_participants"
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          className="input"
-                          placeholder="제한 없음"
-                        />
-                      </div>
-                    </div>
-                    <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {isOtesikKind(kind)
-                        ? "회칙상 코트 1면에 6명이에요. "
-                        : ""}
-                      정원이 차면 다음 신청은 대기로 받아요.
-                    </p>
+                    <CourtCapacityFields
+                      kind={kind}
+                      numbersId="court_numbers"
+                      countId="court_count"
+                      capacityId="max_participants"
+                    />
                     {isClubKind(kind) ? (
                       <p className="rounded-2xl bg-house-green/20 px-4 py-3 text-[13px] font-medium leading-relaxed">
                         <strong>코트요정</strong>은 아래{" "}
@@ -1166,8 +1143,8 @@ export default function CalendarPage() {
                   </ul>
                   <p>
                     날짜·시간·장소·사용 여부가 같은 행은 한 모임으로 묶여요.
-                    무료 코트는 코트비에 0을 적어요. 최대 인원을 비우면 오테식
-                    정모·벙개는 코트 수 × 6명이에요. 교류전은 사용 여부에
+                    무료 코트는 코트비에 0을 적어요. 최대 인원을 비우면 코트 수
+                    × 6명이에요(교류전은 제한 없음). 교류전은 사용 여부에
                     ‘교류전 (회비)’나 ‘교류전 (참가비)’를 골라요.
                   </p>
                 </div>

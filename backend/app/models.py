@@ -142,8 +142,8 @@ class GatheringKind(str, enum.Enum):
 CLUB_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH, GatheringKind.EXCHANGE)
 # 운영진(관리자·임원진)만 만들고 함께 관리하는 클럽 일정 (출석 현황에는 모든 종류가 들어간다)
 STAFF_KINDS = CLUB_KINDS + (GatheringKind.EXCHANGE_SPLIT,)
-# 오테식 정모·벙개 (교류전 제외): 대진 결과가 레이팅에 들어가고(점수 필수),
-# 회칙 제10조 정원(코트 1면당 6명)을 기본으로 채운다. 교류전은 상대 클럽과 겨루고 인원도 상대와 정해서 뺀다
+# 오테식 정모·벙개 (교류전 제외): 대진 결과가 레이팅에 들어간다(점수 필수). 교류전은 상대 클럽과 겨뤄서 뺀다.
+# (비운 정원을 코트 1면당 6명으로 채우는 규칙은 교류전만 빼고 일반 벙개도 같다: schedule_import.default_capacity)
 OTESIK_KINDS = (GatheringKind.CLUB_REGULAR, GatheringKind.CLUB_FLASH)
 # 교류전 (회비·참가비): 게스트는 직접 투표하지 못하고 임원진이 초대해야 참가한다
 EXCHANGE_KINDS = (GatheringKind.EXCHANGE, GatheringKind.EXCHANGE_SPLIT)

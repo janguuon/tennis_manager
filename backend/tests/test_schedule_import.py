@@ -190,7 +190,7 @@ def test_free_court_zero_fee(club):
 
 
 def test_blank_capacity_defaults_to_six_per_court(club):
-    """회칙 제10조: 최대 인원을 비운 오테식 모임은 코트 수 × 6명 → 다 차면 대기."""
+    """회칙 제10조: 최대 인원을 비운 정모·벙개(일반 벙개 포함)는 코트 수 × 6명 → 다 차면 대기."""
     _people(club, seo="서승우")
     rows = [
         [D, "10:00~12:00", 3, "장미주", "서승우", 24000, None, "오테식 정모", None, "시민 테니스장", None],
@@ -201,7 +201,7 @@ def test_blank_capacity_defaults_to_six_per_court(club):
     ]
     assert _upload(club, _sheet(rows))["created"] == 3
     cap = {g["title"]: g["max_participants"] for g in _month(club)}
-    assert cap == {"오테식 정모": 12, "오테식 벙개": 6, "일반 벙개": None}
+    assert cap == {"오테식 정모": 12, "오테식 벙개": 6, "일반 벙개": 6}
 
     # 6명이 차면 7번째는 대기
     gid = next(g["id"] for g in _month(club) if g["title"] == "오테식 벙개")
@@ -209,6 +209,25 @@ def test_blank_capacity_defaults_to_six_per_court(club):
     club.add_members(*names)
     got = [club.vote(gid, n).json()["status"] for n in names]
     assert got == ["attending"] * 6 + ["waiting"]
+
+
+def test_simple_import_blank_capacity(club):
+    """간단 양식(/gatherings/import)도 같다: 비우면 코트 수 × 6명, 교류전은 제한 없음, 적은 정원은 그대로."""
+    wb = openpyxl.Workbook()
+    wb.active.append(["날짜", "제목", "종류", "코트번호", "최대인원"])
+    wb.active.append(["2099-01-10", "세 면 벙개", "일반 벙개", "1~3", None])
+    wb.active.append(["2099-01-11", "한 면 벙개", "일반 벙개", None, None])
+    wb.active.append(["2099-01-12", "정한 벙개", "일반 벙개", "1, 2", 8])
+    wb.active.append(["2099-01-13", "A클럽 교류전", "교류전 (회비)", "1~4", None])
+    bio = io.BytesIO()
+    wb.save(bio)
+    files = {"file": ("m.xlsx", bio.getvalue(), "application/octet-stream")}
+    items = club.c.post("/gatherings/import", files=files, headers=club.admin).json()["items"]
+    made = [club.c.get(f"/gatherings/{i['id']}", headers=club.admin).json() for i in items]
+    assert {g["title"]: g["max_participants"] for g in made} == {
+        "세 면 벙개": 18, "한 면 벙개": 6, "정한 벙개": 8, "A클럽 교류전": None,
+    }
+    assert S.default_capacity(S.GatheringKind.FLASH, 0) is None
 
 
 def test_member_cannot_import_club_rows_and_template(club):

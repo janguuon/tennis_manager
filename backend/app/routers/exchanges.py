@@ -3,7 +3,8 @@
 
 1. 캘린더에 교류전(회비·참가비) 일정을 만들면 교류전 목록(GET /exchanges)에 바로 보인다.
 2. 운영진이 상대 클럽 이름·상대 선수(이름·성별)를 적고, 코트 수 × 라운드 수로 대진을 짠다
-   (POST /exchanges/{id}/draw, 라운드 하나만 다시: POST /exchanges/{id}/rounds/{n}/draw, 칸마다 직접: PUT .../matches/{m}).
+   (POST /exchanges/{id}/draw: 자동 또는 빈 표, 칸마다 직접: PUT .../matches/{m},
+    라운드 하나만 다시: POST .../rounds/{n}/draw, 라운드 더하기·지우기: POST .../rounds, DELETE .../rounds/{n}).
    우리 팀은 그 일정에 참석한 회원·초대 게스트다. 상대 선수는 일정 참가자가 아니라 정산·출석에 잡히지 않는다.
 3. 경기마다 점수를 적는다 (운영진과 그 경기에 뛴 우리 선수). 이긴 경기마다 그 팀이 1승.
 4. POST /exchanges/{id}/finish → 승리팀(이긴 경기 수 → 게임 득실 → 무승부, 운영진이 바꿀 수 있다)을 정하고
@@ -47,6 +48,7 @@ from ..schemas import (
     ExchangeOpponentsAdd,
     ExchangeOpponentUpdate,
     ExchangeOurPlayer,
+    ExchangeRoundAdd,
     ExchangeScoreRead,
     ExchangeSummary,
     ExchangeUpdate,
@@ -402,6 +404,15 @@ def _require_players(ours: dict, theirs: dict) -> None:
         )
 
 
+def _empty(rounds: list[int], courts: int) -> list[dict]:
+    """빈 대진표: 라운드마다 courts 칸 (선수는 칸마다 직접 넣는다)."""
+    return [
+        dict(round_number=r, court=c, ours_ids=[], theirs_ids=[], match_type=MatchType.OPEN_DOUBLES)
+        for r in rounds
+        for c in range(1, courts + 1)
+    ]
+
+
 def _put(ex: Exchange, rows: list[dict]) -> None:
     for r in rows:
         o, t = r["ours_ids"] + [None, None], r["theirs_ids"] + [None, None]
@@ -425,7 +436,8 @@ def draw_all(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_member),
 ):
-    """대진 전체를 새로 짠다 (코트 수 × 라운드 수). 점수가 들어간 경기가 있으면 다시 짤 수 없다."""
+    """대진 전체를 새로 (코트 수 × 라운드 수): 자동으로 짜거나(auto), 빈 표만 만들어 칸마다 직접 넣는다(empty).
+    점수가 들어간 경기가 있으면 다시 만들 수 없다."""
     g = _load(db, gathering_id)
     _require_manage(current_user)
     _require_editable(g)
@@ -433,14 +445,75 @@ def draw_all(
     if any(m.recorded for m in ex.matches):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            detail="점수가 들어간 경기가 있어 전체를 다시 짤 수 없어요. 라운드별 ‘다시 짜기’를 써 주세요.",
+            detail="점수가 들어간 경기가 있어 전체를 다시 짤 수 없어요. 라운드별로 고쳐 주세요.",
         )
-    ours, theirs = _rosters(g)
-    _require_players(ours, theirs)
+    rounds = list(range(1, payload.rounds + 1))
+    if payload.mode == "auto":
+        ours, theirs = _rosters(g)
+        _require_players(ours, theirs)
+        rows = X.generate(ours, theirs, rounds, payload.court_count)
+    else:
+        rows = _empty(rounds, payload.court_count)
     ex.court_count, ex.rounds = payload.court_count, payload.rounds
     ex.matches.clear()
     db.flush()
-    _put(ex, X.generate(ours, theirs, list(range(1, payload.rounds + 1)), payload.court_count))
+    _put(ex, rows)
+    return _done(db, g, current_user)
+
+
+@router.post("/{gathering_id}/rounds", response_model=ExchangeDetail)
+def add_round(
+    gathering_id: int,
+    payload: ExchangeRoundAdd,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """라운드 하나 더 (맨 뒤에): 빈 칸으로(empty) 또는 다른 라운드에서 뛴 수·짝을 보고 자동으로(auto)."""
+    g = _load(db, gathering_id)
+    _require_manage(current_user)
+    _require_editable(g)
+    ex = _ensure(db, g)
+    last = max((m.round_number for m in ex.matches), default=0)
+    if last >= X.MAX_ROUNDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"라운드는 {X.MAX_ROUNDS}개까지 만들 수 있어요.")
+    courts = max((m.court for m in ex.matches), default=0) or _court_count(g)
+    if payload.mode == "auto":
+        ours, theirs = _rosters(g)
+        _require_players(ours, theirs)
+        kept = [(m.round_number, m.ours_ids, m.theirs_ids) for m in ex.matches]
+        rows = X.generate(ours, theirs, [last + 1], courts, kept=kept)
+    else:
+        rows = _empty([last + 1], courts)
+    _put(ex, rows)
+    ex.court_count, ex.rounds = courts, last + 1
+    return _done(db, g, current_user)
+
+
+@router.delete("/{gathering_id}/rounds/{round_number}", response_model=ExchangeDetail)
+def delete_round(
+    gathering_id: int,
+    round_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """라운드 지우기 (점수가 들어간 라운드는 안 된다). 뒤 라운드 번호는 하나씩 당긴다."""
+    g = _load(db, gathering_id)
+    _require_manage(current_user)
+    _require_editable(g)
+    ex = _ensure(db, g)
+    target = [m for m in ex.matches if m.round_number == round_number]
+    if not target:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"{round_number}라운드가 없어요.")
+    if any(m.recorded for m in target):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail=f"{round_number}라운드에 점수가 들어간 경기가 있어 지울 수 없어요."
+        )
+    for m in target:
+        ex.matches.remove(m)
+    for m in ex.matches:
+        if m.round_number > round_number:
+            m.round_number -= 1
+    ex.rounds = max((m.round_number for m in ex.matches), default=0) or None
     return _done(db, g, current_user)
 
 

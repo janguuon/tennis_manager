@@ -9,7 +9,18 @@ import {
   useNavigation,
   useRouteError,
 } from "@remix-run/react";
-import { CalendarDays, Check, ClipboardCopy, Handshake, MapPin, Pencil, Shuffle, Trash2, UserPlus } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ClipboardCopy,
+  Handshake,
+  MapPin,
+  Pencil,
+  Plus,
+  Shuffle,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MemberAvatar } from "~/components/Club";
@@ -85,8 +96,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
         await api(`${base}/draw`, {
           method: "POST",
           token,
-          body: { court_count: num(formData.get("court_count")), rounds: num(formData.get("rounds")) },
+          body: {
+            court_count: num(formData.get("court_count")),
+            rounds: num(formData.get("rounds")),
+            mode: formData.get("mode") === "empty" ? "empty" : "auto",
+          },
         });
+        break;
+      case "add_round":
+        await api(`${base}/rounds`, {
+          method: "POST",
+          token,
+          body: { mode: formData.get("mode") === "auto" ? "auto" : "empty" },
+        });
+        break;
+      case "delete_round":
+        await api(`${base}/rounds/${formData.get("round")}`, { method: "DELETE", token });
         break;
       case "draw_round":
         await api(`${base}/rounds/${formData.get("round")}/draw`, { method: "POST", token });
@@ -545,6 +570,8 @@ function DrawSection({ x }: { x: ExchangeDetail }) {
   const manage = x.can_manage && !x.canceled && !x.winner;
   const rounds = [...new Set(x.matches.map((m) => m.round_number))].sort((a, b) => a - b);
   const busy = useBusy("draw_all");
+  const navigation = useNavigation();
+  const busyMode = busy ? navigation.formData?.get("mode") : null;
   const [copied, setCopied] = useState(false);
   const anyRecorded = x.matches.some((m) => m.recorded);
   return (
@@ -558,7 +585,7 @@ function DrawSection({ x }: { x: ExchangeDetail }) {
             {x.matches.length
               ? `${rounds.length}라운드 · 코트 ${Math.max(...x.matches.map((m) => m.court))}면. 이긴 경기마다 그 팀이 1승이에요. 점수는 운영진과 그 경기에 뛴 선수가 적어요.`
               : manage
-              ? "코트 수와 라운드 수를 정하고 ‘대진 자동 짜기’를 눌러요. 경기를 덜 뛴 사람부터 넣고 남복·여복·혼복끼리 맞붙여요."
+              ? "코트 수와 라운드 수를 정하고 ‘자동으로 짜기’(덜 뛴 사람부터, 남복·여복·혼복끼리) 또는 ‘직접 짜기’(빈 표를 만들고 칸마다 선수를 넣어요)를 골라요."
               : "아직 대진이 없어요."}
           </p>
         </div>
@@ -586,7 +613,9 @@ function DrawSection({ x }: { x: ExchangeDetail }) {
           method="post"
           className="flex flex-wrap items-end gap-3 rounded-2xl bg-slate-100 p-4 dark:bg-slate-800"
           onSubmit={(e) => {
-            if (x.matches.length && !confirm("지금 대진을 지우고 새로 짤까요?")) e.preventDefault();
+            const empty = (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "empty";
+            const ask = empty ? "지금 대진을 지우고 빈 대진표로 새로 만들까요?" : "지금 대진을 지우고 자동으로 새로 짤까요?";
+            if (x.matches.length && !confirm(ask)) e.preventDefault();
           }}
         >
           <input type="hidden" name="intent" value="draw_all" />
@@ -602,12 +631,29 @@ function DrawSection({ x }: { x: ExchangeDetail }) {
             </label>
             <input id="rounds" name="rounds" type="number" min="1" max="12" inputMode="numeric" required className="input !w-24" defaultValue={x.rounds} />
           </div>
-          <button className="btn-primary" disabled={busy || anyRecorded} title={anyRecorded ? "점수가 들어간 경기가 있어요" : undefined}>
-            <Shuffle size={15} /> {busy ? "짜는 중…" : x.matches.length ? "전체 다시 짜기" : "대진 자동 짜기"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              name="mode"
+              value="auto"
+              className="btn-primary"
+              disabled={busy || anyRecorded}
+              title={anyRecorded ? "점수가 들어간 경기가 있어요" : undefined}
+            >
+              <Shuffle size={15} /> {busyMode === "auto" ? "짜는 중…" : x.matches.length ? "전체 자동으로 다시" : "자동으로 짜기"}
+            </button>
+            <button
+              name="mode"
+              value="empty"
+              className="btn-ghost"
+              disabled={busy || anyRecorded}
+              title={anyRecorded ? "점수가 들어간 경기가 있어요" : undefined}
+            >
+              <Pencil size={15} /> {busyMode === "empty" ? "만드는 중…" : x.matches.length ? "빈 표로 다시" : "직접 짜기"}
+            </button>
+          </div>
           {anyRecorded ? (
             <p className="w-full text-xs font-medium text-slate-500">
-              점수가 들어간 경기가 있어 전체는 다시 짤 수 없어요. 아래 라운드별 ‘다시 짜기’를 써요.
+              점수가 들어간 경기가 있어 전체는 다시 만들 수 없어요. 라운드별로 고치거나 라운드를 더해요.
             </p>
           ) : null}
         </Form>
@@ -616,7 +662,27 @@ function DrawSection({ x }: { x: ExchangeDetail }) {
       {rounds.map((r) => (
         <Round key={r} x={x} round={r} manage={manage} />
       ))}
+
+      {manage && rounds.length ? <AddRound rounds={rounds.length} /> : null}
     </section>
+  );
+}
+
+/** 맨 뒤에 라운드 하나 더: 빈 칸(직접 넣기) 또는 자동으로 */
+function AddRound({ rounds }: { rounds: number }) {
+  const busy = useBusy("add_round");
+  if (rounds >= 12) return null;
+  return (
+    <Form method="post" className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-5 dark:border-slate-700">
+      <input type="hidden" name="intent" value="add_round" />
+      <span className="mr-1 text-[13px] font-bold">{rounds + 1}라운드 더하기</span>
+      <button name="mode" value="empty" className="btn-ghost btn-sm" disabled={busy}>
+        <Plus size={14} /> 빈 라운드
+      </button>
+      <button name="mode" value="auto" className="btn-ghost btn-sm" disabled={busy}>
+        <Shuffle size={14} /> 자동 라운드
+      </button>
+    </Form>
   );
 }
 
@@ -656,18 +722,32 @@ function Round({ x, round, manage }: { x: ExchangeDetail; round: number; manage:
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[15px] font-extrabold">{round}라운드</h3>
         {manage && !recorded ? (
-          <Form
-            method="post"
-            onSubmit={(e) => {
-              if (!confirm(`${round}라운드만 다시 짤까요?`)) e.preventDefault();
-            }}
-          >
-            <input type="hidden" name="intent" value="draw_round" />
-            <input type="hidden" name="round" value={round} />
-            <button className="btn-ghost btn-sm" disabled={busy}>
-              <Shuffle size={13} /> {busy ? "짜는 중…" : "다시 짜기"}
-            </button>
-          </Form>
+          <span className="flex items-center gap-1">
+            <Form
+              method="post"
+              onSubmit={(e) => {
+                if (!confirm(`${round}라운드를 자동으로 다시 짤까요?`)) e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="draw_round" />
+              <input type="hidden" name="round" value={round} />
+              <button className="btn-ghost btn-sm" disabled={busy}>
+                <Shuffle size={13} /> {busy ? "짜는 중…" : "자동으로 다시"}
+              </button>
+            </Form>
+            <Form
+              method="post"
+              onSubmit={(e) => {
+                if (!confirm(`${round}라운드를 지울까요? 뒤 라운드 번호는 하나씩 당겨져요.`)) e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="intent" value="delete_round" />
+              <input type="hidden" name="round" value={round} />
+              <button className="px-1 text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline">
+                라운드 지우기
+              </button>
+            </Form>
+          </span>
         ) : null}
       </div>
       <div className="exchange-courts">
@@ -707,14 +787,24 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
           {courtName(x.court_numbers, m.court)}
           {empty ? "" : ` · ${MATCH_TYPE_LABEL[m.match_type]}`}
         </span>
-        {manage && !m.recorded ? (
+        {manage && !m.recorded && !empty ? (
           <button type="button" className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline" onClick={() => setEditing(true)}>
-            {empty ? "선수 넣기" : "선수 바꾸기"}
+            선수 바꾸기
           </button>
         ) : null}
       </div>
       {empty ? (
-        <p className="py-3 text-center text-[13px] font-medium text-slate-500">빈 코트</p>
+        manage ? (
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl py-4 text-[13px] font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+            onClick={() => setEditing(true)}
+          >
+            <UserPlus size={15} /> 선수 넣기
+          </button>
+        ) : (
+          <p className="py-3 text-center text-[13px] font-medium text-slate-500">빈 코트</p>
+        )
       ) : (
         <>
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
@@ -819,6 +909,9 @@ function LineupModal({ x, m, onClose }: { x: ExchangeDetail; m: ExchangeMatch; o
   const same = x.matches.filter((o) => o.round_number === m.round_number && o.id !== m.id);
   const busyOurs = new Set(same.flatMap((o) => o.ours.map((p) => p.id)));
   const busyTheirs = new Set(same.flatMap((o) => o.theirs.map((p) => p.id)));
+  // 이 칸을 뺀 대진표 전체에서 넣은 경기 수 (고르게 넣도록 참고)
+  const games = (side: "ours" | "theirs", id: number) =>
+    x.matches.filter((o) => o.id !== m.id && o[side].some((p) => p.id === id)).length;
   const picker = (
     name: "ours_id" | "theirs_id",
     values: string[],
@@ -847,7 +940,7 @@ function LineupModal({ x, m, onClose }: { x: ExchangeDetail; m: ExchangeMatch; o
           .map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
-              {o.busy ? " · 이 라운드 다른 코트" : ""}
+              {o.busy ? " · 이 라운드 다른 코트에 있음" : ""}
             </option>
           ))}
       </select>
@@ -855,12 +948,12 @@ function LineupModal({ x, m, onClose }: { x: ExchangeDetail; m: ExchangeMatch; o
   };
   const oursOptions = x.ours.map((p) => ({
     id: p.user.id,
-    label: `${p.user.name}${genderShort(p.user.gender) ? ` (${genderShort(p.user.gender)})` : ""}`,
+    label: `${p.user.name}${genderShort(p.user.gender) ? ` (${genderShort(p.user.gender)})` : ""} · ${games("ours", p.user.id)}경기`,
     busy: busyOurs.has(p.user.id),
   }));
   const theirsOptions = x.opponents.map((o) => ({
     id: o.id,
-    label: `${o.name}${genderShort(o.gender) ? ` (${genderShort(o.gender)})` : ""}`,
+    label: `${o.name}${genderShort(o.gender) ? ` (${genderShort(o.gender)})` : ""} · ${games("theirs", o.id)}경기`,
     busy: busyTheirs.has(o.id),
   }));
   return (

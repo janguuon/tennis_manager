@@ -1308,8 +1308,17 @@ class ExchangeOpponentUpdate(BaseModel):
 
 
 class ExchangeDrawRequest(BaseModel):
+    """대진 전체 새로: auto 자동으로 짜기, empty 빈 표(라운드 × 코트)만 만들고 칸마다 직접 넣기."""
+
     court_count: int = Field(..., ge=1, le=30)
     rounds: int = Field(..., ge=1, le=12)
+    mode: Literal["auto", "empty"] = "auto"
+
+
+class ExchangeRoundAdd(BaseModel):
+    """라운드 하나 더: empty 빈 칸, auto 다른 라운드를 보고 자동으로."""
+
+    mode: Literal["auto", "empty"] = "empty"
 
 
 class ExchangeLineup(BaseModel):

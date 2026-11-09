@@ -274,3 +274,45 @@ def test_generate_unit():
     lines, _ = X.player_lines([([1, 2], [11, 12], 2, 2, 6)])
     assert X.mvp(lines) == []
     assert X.default_opponent("교류전 (B클럽)") == "B클럽"
+
+
+def test_manual_draw_and_rounds(club):
+    """직접 짜기: 빈 표(라운드 × 코트)를 만들고 칸마다 넣는다. 라운드 더하기(빈 칸·자동)·지우기."""
+    gid = _setup(club)
+    opp = _opponents(club, gid)["opponents"]
+    # 빈 표는 상대 선수가 없어도 만든다
+    other = club.create(title="D클럽 교류전", kind="exchange").json()["id"]
+    assert _post(club, f"/{other}/draw", {"court_count": 2, "rounds": 1, "mode": "empty"}).status_code == 200
+
+    d = _post(club, f"/{gid}/draw", {"court_count": 2, "rounds": 2, "mode": "empty"}).json()
+    assert [(m["round_number"], m["court"], m["ours"], m["theirs"]) for m in d["matches"]] == [
+        (1, 1, [], []), (1, 2, [], []), (2, 1, [], []), (2, 2, [], []),
+    ]
+    assert (d["total"], d["rounds"], d["court_count"]) == (0, 2, 2)
+    ids = [club.ids[n] for n in OURS]
+    first = d["matches"][0]["id"]
+    body = {"ours_ids": ids[:2], "theirs_ids": [opp[0]["id"], opp[1]["id"]]}
+    d = _post(club, f"/{gid}/matches/{first}", body, method="put").json()
+    assert d["total"] == 1 and d["matches"][0]["match_type"] == "mens_doubles"
+
+    # 빈 라운드 더하기 → 3라운드, 자동 라운드 더하기 → 4라운드 (선수가 채워진다)
+    d = _post(club, f"/{gid}/rounds", {"mode": "empty"}).json()
+    assert [m["round_number"] for m in d["matches"]][-2:] == [3, 3] and d["rounds"] == 3
+    d = _post(club, f"/{gid}/rounds", {"mode": "auto"}).json()
+    fourth = [m for m in d["matches"] if m["round_number"] == 4]
+    assert len(fourth) == 2 and all(len(m["ours"]) == 2 for m in fourth)
+
+    # 2라운드 지우기 → 뒤 라운드가 하나씩 당겨진다
+    d = club.c.delete(f"/exchanges/{gid}/rounds/2", headers=club.admin).json()
+    assert sorted({m["round_number"] for m in d["matches"]}) == [1, 2, 3] and d["rounds"] == 3
+    assert all(len(m["ours"]) == 2 for m in d["matches"] if m["round_number"] == 3)
+    # 점수가 들어간 라운드는 지울 수 없다
+    _post(club, f"/{gid}/matches/{first}/result", {"ours_score": 6, "theirs_score": 2}, method="put")
+    assert club.c.delete(f"/exchanges/{gid}/rounds/1", headers=club.admin).status_code == 409
+    assert club.c.delete(f"/exchanges/{gid}/rounds/9", headers=club.admin).status_code == 404
+    # 정회원은 못 한다
+    assert _post(club, f"/{gid}/rounds", {"mode": "empty"}, as_="kim").status_code == 403
+    # 12라운드까지
+    for _ in range(9):
+        assert _post(club, f"/{gid}/rounds", {"mode": "empty"}).status_code == 200
+    assert _post(club, f"/{gid}/rounds", {"mode": "empty"}).status_code == 400

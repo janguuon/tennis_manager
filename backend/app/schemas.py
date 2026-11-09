@@ -816,6 +816,12 @@ class ParticipantVote(BaseModel):
     status: Literal["attending", "absent"]
 
 
+class ParticipantsAdd(BaseModel):
+    """운영진이 회원을 참석으로 넣는다 (고른 순서대로, 정원이 차면 대기)."""
+
+    user_ids: list[int] = Field(..., min_length=1, max_length=60)
+
+
 class FeeWaiverUpdate(BaseModel):
     """게스트비 면제 (관리자·총무). 면제할 때는 사유를 꼭 적는다. waived=false 면 면제를 취소한다."""
 

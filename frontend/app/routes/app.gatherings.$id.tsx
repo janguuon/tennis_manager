@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { AddParticipants } from "~/components/AddParticipants";
 import { AddToCalendar } from "~/components/AddToCalendar";
 import { BallBasket } from "~/components/BallBasket";
 import { Eyebrow, MemberAvatar } from "~/components/Club";
@@ -89,6 +90,7 @@ import {
   type GatheringDetail,
   type GatheringKind,
   type Me,
+  type Participant,
   type UserBrief,
 } from "~/lib/types";
 
@@ -105,18 +107,20 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const token = await requireToken(request);
   const id = params.id;
   try {
-    const [gathering, draws, members] = await Promise.all([
+    const [gathering, draws, members, roster] = await Promise.all([
       api<GatheringDetail>(`/gatherings/${id}`, { token }),
       api<Draw[]>(`/gatherings/${id}/draws`, { token }),
       // 코트 예약자 선택용 (게스트는 빈 목록)
       membersOrEmpty(token),
+      // 운영진의 '참가자 추가'용: 직함 없는 관리자 계정은 뺀다 (게스트는 빈 목록)
+      membersOrEmpty(token, { hideAdmin: true }),
     ]);
     const around = await neighbors(token, gathering);
     // 교류전 일정: 교류전 점수판 (게스트도 본다). 못 불러오면 카드 없이
     const exchange = isExchangeKind(gathering.kind)
       ? await api<ExchangeDetail>(`/exchanges/${id}`, { token }).catch(() => null)
       : null;
-    return json({ gathering, draws, members, around, exchange });
+    return json({ gathering, draws, members, roster, around, exchange });
   } catch (err) {
     // 아직 공개 전(403)이거나 지워진(404) 모임은 안내 화면으로
     if (err instanceof ApiError && (err.status === 403 || err.status === 404)) {
@@ -517,6 +521,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
         method: "DELETE",
         token,
       });
+    } else if (intent === "add_participants") {
+      const added = await api<Participant[]>(`/gatherings/${id}/participants`, {
+        method: "POST",
+        token,
+        body: { user_ids: formData.getAll("user_id").map(Number) },
+      });
+      return json({
+        ok: true,
+        error: null as string | null,
+        added: added.map((p) => ({ name: p.user.name, status: p.status })),
+      });
     } else if (intent === "set_attendance") {
       await api(
         `/gatherings/${id}/participants/${formData.get("user_id")}/attendance`,
@@ -725,7 +740,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 
 export default function GatheringDetailPage() {
-  const { gathering, draws, members, around, exchange } = useLoaderData<typeof loader>();
+  const { gathering, draws, members, roster, around, exchange } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { user } = useOutletContext<{ user: Me }>();
@@ -840,14 +855,6 @@ export default function GatheringDetailPage() {
         gathering.created_by === user.id ||
         myAttending ||
         me?.status === "waiting");
-  const joinedIds = new Set(
-    gathering.participants
-      .filter((p) => p.status === "attending" || p.status === "waiting")
-      .map((p) => p.user.id)
-  );
-  const invitableGuests = inviteOnly
-    ? members.filter((m) => m.member_type === "guest" && !joinedIds.has(m.id))
-    : [];
   const inviteOpensAt =
     !staff && !gathering.guest_vote_open ? gathering.guest_vote_open_at : null;
   // 대기열: 정원이 차면 참석 신청은 대기, 자리가 나면 순서대로 참석
@@ -1407,12 +1414,30 @@ export default function GatheringDetailPage() {
             club || payment ? "" : "lg:col-span-2"
           }`}
         >
-          <h2 className="section-title">함께하는 식구들</h2>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            {attendees.length
-              ? `${attendees.length}명이 함께해요`
-              : "아직 참석자가 없어요"}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+            <div>
+              <h2 className="section-title">함께하는 식구들</h2>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                {attendees.length
+                  ? `${attendees.length}명이 함께해요`
+                  : "아직 참석자가 없어요"}
+              </p>
+            </div>
+            {/* 운영진: 회원을 골라 참석으로 넣기 (단톡방으로 참석을 말한 사람 등) */}
+            {staff && !guest && !canceled ? (
+              <AddParticipants
+                roster={roster}
+                participants={gathering.participants}
+                free={
+                  gathering.max_participants == null
+                    ? null
+                    : waiting.length
+                    ? 0
+                    : Math.max(gathering.max_participants - attendees.length, 0)
+                }
+              />
+            ) : null}
+          </div>
           {canManageAttendance && attendanceLocked && attendees.length ? (
             <p className="mt-3 flex items-start gap-1.5 rounded-2xl bg-house-yellow/25 px-3.5 py-2.5 text-xs font-semibold leading-relaxed">
               <Lock size={12} className="mt-0.5 shrink-0" />
@@ -1421,11 +1446,7 @@ export default function GatheringDetailPage() {
             </p>
           ) : null}
           {canInvite ? (
-            <GuestInviteBox
-              opensAt={inviteOpensAt}
-              inviteOnly={inviteOnly}
-              guests={invitableGuests}
-            />
+            <GuestInviteBox opensAt={inviteOpensAt} inviteOnly={inviteOnly} />
           ) : null}
           {!gathering.participants.length ? (
             <p className="py-7 text-sm text-slate-500 dark:text-slate-400">
@@ -2340,21 +2361,11 @@ const shortDate = (iso: string) =>
 function GuestInviteBox({
   opensAt,
   inviteOnly = false,
-  guests = [],
 }: {
   opensAt: string | null;
   inviteOnly?: boolean;
-  /** 교류전: 아직 참가하지 않은 가입한 게스트 */
-  guests?: UserBrief[];
 }) {
   const fetcher = useFetcher<{ ok: boolean; error: string | null }>();
-  const picker = useFetcher<{ ok: boolean; error: string | null }>();
-  const [picked, setPicked] = useState("");
-  const pickBusy = picker.state !== "idle";
-  // 참가시키면 고른 칸을 비운다 (그 게스트는 목록에서 빠진다)
-  useEffect(() => {
-    if (picker.state === "idle" && picker.data?.ok) setPicked("");
-  }, [picker.state, picker.data]);
   const formRef = useRef<HTMLFormElement>(null);
   const [open, setOpen] = useState(false);
   const busy = fetcher.state !== "idle";
@@ -2393,48 +2404,8 @@ function GuestInviteBox({
       {inviteOnly ? (
         <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
           교류전 게스트는 임원진이 초대해요. 게스트가 직접 참석 투표를 할 수
-          없어요.
+          없어요. 가입한 게스트는 위 ‘참가자 추가’로 넣어요.
         </p>
-      ) : null}
-      {inviteOnly && guests.length ? (
-        <div className="space-y-1.5">
-          <label className="label !mb-0" htmlFor="invite_member_guest">
-            가입한 게스트 참가시키기
-          </label>
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <select
-              id="invite_member_guest"
-              className="input"
-              value={picked}
-              onChange={(e) => setPicked(e.target.value)}
-            >
-              <option value="">게스트 고르기</option>
-              {guests.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn-primary btn-sm h-auto"
-              disabled={!picked || pickBusy}
-              onClick={() =>
-                picker.submit(
-                  { intent: "set_attendance", user_id: picked, status: "attending" },
-                  { method: "post" }
-                )
-              }
-            >
-              {pickBusy ? "참가시키는 중…" : "참가시키기"}
-            </button>
-          </div>
-          {picker.state === "idle" && picker.data?.error ? (
-            <p role="alert" className="alert-error">
-              {picker.data.error}
-            </p>
-          ) : null}
-        </div>
       ) : null}
       <p className="text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">
         가입하지 않은 분을 이름으로 초대해요. 게스트와 똑같이 자리를 쓰고(꽉 차면

@@ -75,6 +75,7 @@ from ..schemas import (
     MonthlyPaymentSummary,
     MyPaymentDue,
     ParticipantRead,
+    ParticipantsAdd,
     ParticipantVote,
     PaymentLine,
     PickupRead,
@@ -1568,6 +1569,43 @@ def vote_attendance(
     db.commit()
     db.refresh(participant)
     return ParticipantRead.model_validate(participant)
+
+
+@router.post("/{gathering_id}/participants", response_model=list[ParticipantRead])
+def add_participants(
+    gathering_id: int,
+    payload: ParticipantsAdd,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """운영진(관리자·임원진·총무)이 회원·가입한 게스트를 참석으로 넣는다 (단톡방으로 참석을 말한 사람 등).
+
+    고른 순서대로 넣고, 정원이 찼거나 대기자가 있으면 대기로 들어간다. 불참으로 투표했던 사람도 참석이 된다.
+    이미 참석·대기 중인 사람은 그대로 둔다. 이름만 적어 초대한 게스트는 '게스트 초대'로 넣는다.
+    """
+    gathering = _load_gathering(db, gathering_id)
+    if not current_user.is_staff:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="참가자 추가는 관리자·임원진만 할 수 있어요.")
+    _require_not_canceled(gathering)
+    ids = list(dict.fromkeys(payload.user_ids))  # 같은 사람은 한 번만, 고른 순서는 그대로
+    users = {u.id: u for u in db.scalars(select(User).where(User.id.in_(ids)))}
+    for uid in ids:
+        u = users.get(uid)
+        if u is None or not u.is_active or u.approval_status != ApprovalStatus.APPROVED or u.invited_by_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"{u.name + ' 님은 ' if u else ''}참가자로 넣을 수 없는 회원이에요. (승인된 회원·가입한 게스트만)",
+            )
+    current = {p.user_id: p for p in gathering.participants}
+    for uid in ids:
+        _set_attendance(db, gathering, current.get(uid), uid, "attending")
+        db.flush()
+    db.commit()
+    added = db.scalars(
+        select(Participant).where(Participant.gathering_id == gathering_id, Participant.user_id.in_(ids))
+    ).all()
+    order = {uid: i for i, uid in enumerate(ids)}
+    return [ParticipantRead.model_validate(p) for p in sorted(added, key=lambda p: order[p.user_id])]
 
 
 @router.put("/{gathering_id}/participants/{user_id}/attendance", response_model=ParticipantRead)

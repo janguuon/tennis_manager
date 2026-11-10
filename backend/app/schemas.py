@@ -907,6 +907,8 @@ class DrawMatchRead(BaseModel):
     balance: DrawBalance | None = None
     # 자리별 회원 id [팀1 1번, 팀1 2번, 팀2 1번, 팀2 2번] (빈자리는 null) — 직접 바꾸기 화면용
     slot_ids: list[int | None] = []
+    # 취소된 경기 (점수를 받지 않는다)
+    canceled: bool = False
 
 
 DrawSlot = Literal["team1_player1", "team1_player2", "team2_player1", "team2_player2"]
@@ -1276,6 +1278,8 @@ class ExchangeMatchRead(BaseModel):
     winner: int | None = None  # 1 오테식 | 2 상대, 무승부·결과 전은 None
     recorded: bool = False
     can_score: bool = False
+    # 취소된 경기 (점수를 받지 않고 점수판·남은 경기에서 빠진다)
+    canceled: bool = False
     # 대진을 짠 뒤 불참으로 바뀐 우리 선수 (다시 짜거나 바꿔 넣어야 한다)
     absent_ids: list[int] = []
 

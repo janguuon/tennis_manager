@@ -362,6 +362,8 @@ export interface DrawMatch {
   balance: DrawBalance | null;
   /** 자리별 회원 id [팀1 1번, 팀1 2번, 팀2 1번, 팀2 2번] (빈자리 null) */
   slot_ids: (number | null)[];
+  /** 취소한 경기 (못 친 경기: 점수를 받지 않고 전적과 상관없다) */
+  canceled: boolean;
 }
 
 export type Tier = "A" | "B" | "C" | "D" | "E";
@@ -631,6 +633,8 @@ export interface ExchangeMatch {
   winner: 1 | 2 | null;
   recorded: boolean;
   can_score: boolean;
+  /** 취소한 경기 (점수판·남은 경기에서 빠진다) */
+  canceled: boolean;
   /** 대진을 짠 뒤 불참으로 바뀐 우리 선수 */
   absent_ids: number[];
 }

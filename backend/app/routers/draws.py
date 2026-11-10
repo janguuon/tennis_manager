@@ -8,7 +8,10 @@
    또는 POST /gatherings/{id}/draws       → 빈 대진표 만들고 수동으로 경기 추가
 3. PATCH /draw-matches/{id}              → 선수/코트 수동 편집
 4. POST /draw-matches/{id}/result        → 결과 입력 시 Match 생성 → 전적 반영
+5. POST /draw-matches/{id}/cancel        → 못 친 경기 취소 (점수·전적에 영향 없음, DELETE 로 되돌리기)
 """
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -120,6 +123,7 @@ def _draw_match_reads(
                 team2_score=result.team2_score if result else None,
                 balance=_balance(dm, book),
                 slot_ids=[getattr(dm, slot) for slot in _SLOT_COLUMNS],
+                canceled=dm.canceled_at is not None,
             )
         )
     return reads
@@ -249,7 +253,9 @@ def generate_draw(
     book = rating.load(db)
     partners, opponents = matchmaking.recent_meetings(book.games, gathering.event_date)
     earlier = db.scalars(
-        select(DrawMatch).join(Draw).where(Draw.gathering_id == gathering_id)
+        select(DrawMatch)
+        .join(Draw)
+        .where(Draw.gathering_id == gathering_id, DrawMatch.canceled_at.is_(None))  # 취소한 경기는 안 친 경기
     ).all()
     context = matchmaking.MatchContext(
         ratings={uid: p.rating for uid, p in book.players.items()},
@@ -515,6 +521,10 @@ def record_draw_match_result(
             status.HTTP_409_CONFLICT,
             detail="이미 결과가 입력된 대진입니다. 먼저 해당 경기를 삭제하세요.",
         )
+    if dm.canceled_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="취소한 경기예요. 점수를 적으려면 먼저 '취소 되돌리기'를 눌러 주세요."
+        )
 
     team1_ids = [pid for pid in (dm.team1_player1_id, dm.team1_player2_id) if pid is not None]
     team2_ids = [pid for pid in (dm.team2_player1_id, dm.team2_player2_id) if pid is not None]
@@ -612,6 +622,52 @@ def delete_draw_match_result(
     dm.result_match_id = None
     db.flush()
     db.delete(match)
+    db.commit()
+    db.refresh(dm)
+    return _single_draw_match_read(dm, db)
+
+
+# --- 경기 취소 ---------------------------------------------------------------
+def _cancelable(db: Session, draw_match_id: int, user: User) -> DrawMatch:
+    """경기 취소·되돌리기: 모임을 올린 사람(벙주)과 운영진(관리자·임원진·총무). 게스트는 보기만."""
+    dm = db.get(DrawMatch, draw_match_id)
+    if not dm:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
+    g = db.get(Gathering, db.get(Draw, dm.draw_id).gathering_id)
+    if user.is_guest or not (g.created_by == user.id or user.is_staff):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="경기 취소는 모임을 올린 사람과 운영진만 할 수 있어요.")
+    return dm
+
+
+@router.post("/draw-matches/{draw_match_id}/cancel", response_model=DrawMatchRead)
+def cancel_draw_match(
+    draw_match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """못 친 경기 취소 (비·부상·시간 부족 등). 점수를 받지 않고 전적·레이팅과는 상관없다.
+    다음 자동 대진에서도 '오늘 같이 뛴 사람'으로 치지 않는다. 점수가 들어간 경기는 점수를 먼저 지운다."""
+    dm = _cancelable(db, draw_match_id, current_user)
+    if dm.result_match_id is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="점수가 들어간 경기는 취소할 수 없어요. 결과를 먼저 지워 주세요."
+        )
+    if dm.canceled_at is None:
+        dm.canceled_at = datetime.now()
+        db.commit()
+    db.refresh(dm)
+    return _single_draw_match_read(dm, db)
+
+
+@router.delete("/draw-matches/{draw_match_id}/cancel", response_model=DrawMatchRead)
+def restore_draw_match(
+    draw_match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """경기 취소 되돌리기: 다시 점수를 적을 수 있는 경기로."""
+    dm = _cancelable(db, draw_match_id, current_user)
+    dm.canceled_at = None
     db.commit()
     db.refresh(dm)
     return _single_draw_match_read(dm, db)

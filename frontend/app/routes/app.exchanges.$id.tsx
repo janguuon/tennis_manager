@@ -136,6 +136,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
       case "delete_result":
         await api(`${base}/matches/${match}/result`, { method: "DELETE", token });
         break;
+      case "cancel_match":
+      case "restore_match":
+        // 못 친 경기 취소·되돌리기 (점수판·남은 경기에서 빠진다)
+        await api(`${base}/matches/${match}/cancel`, { method: intent === "cancel_match" ? "POST" : "DELETE", token });
+        break;
       case "finish":
         await api(`${base}/finish`, {
           method: "POST",
@@ -695,7 +700,7 @@ function boardText(x: ExchangeDetail) {
   for (const r of [...new Set(x.matches.map((m) => m.round_number))].sort((a, b) => a - b)) {
     lines.push("", `[${r}라운드]`);
     for (const m of x.matches.filter((m) => m.round_number === r && m.ours.length)) {
-      const mid = m.recorded ? ` ${m.ours_score}:${m.theirs_score} ` : " vs ";
+      const mid = m.canceled ? " (경기 취소) " : m.recorded ? ` ${m.ours_score}:${m.theirs_score} ` : " vs ";
       lines.push(
         `${courtName(x.court_numbers, m.court)}: ${m.ours.map((p) => p.name).join("·")}${mid}${m.theirs.map((p) => p.name).join("·")}`,
       );
@@ -710,8 +715,10 @@ function boardText(x: ExchangeDetail) {
 function Round({ x, round, manage }: { x: ExchangeDetail; round: number; manage: boolean }) {
   const matches = x.matches.filter((m) => m.round_number === round);
   const busy = useBusy("draw_round", { name: "round", value: round });
-  const playing = new Set(matches.flatMap((m) => m.ours.map((p) => p.id)));
-  const playingT = new Set(matches.flatMap((m) => m.theirs.map((p) => p.id)));
+  // 취소한 경기의 선수는 그 라운드에 쉬는 사람으로 본다
+  const live = matches.filter((m) => !m.canceled);
+  const playing = new Set(live.flatMap((m) => m.ours.map((p) => p.id)));
+  const playingT = new Set(live.flatMap((m) => m.theirs.map((p) => p.id)));
   const resting = [
     ...x.ours.filter((p) => !playing.has(p.user.id)).map((p) => p.user.name),
     ...x.opponents.filter((o) => !playingT.has(o.id)).map((o) => `${o.name}(상대)`),
@@ -766,8 +773,9 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
   const [editing, setEditing] = useState(false);
   const opponent = opponentLabel(x);
   const empty = !m.ours.length;
+  const cancelBusy = useBusy(m.canceled ? "restore_match" : "cancel_match", { name: "match_id", value: m.id });
   const side = (label: string, chip: string, names: { id: number; name: string; absent?: boolean }[], won: boolean) => (
-    <div className={`exchange-side ${!won && m.winner !== null ? "opacity-60" : ""}`}>
+    <div className={`exchange-side ${!won && m.winner !== null ? "opacity-60" : ""} ${m.canceled ? "opacity-50" : ""}`}>
       <span className={`${chip} max-w-full truncate`}>
         {label}
         {won ? " 승" : ""}
@@ -781,13 +789,16 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
     </div>
   );
   return (
-    <div className={`exchange-match ${empty ? "is-empty" : ""}`}>
+    <div className={`exchange-match ${empty || m.canceled ? "is-empty" : ""}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="badge-gray">
-          {courtName(x.court_numbers, m.court)}
-          {empty ? "" : ` · ${MATCH_TYPE_LABEL[m.match_type]}`}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="badge-gray">
+            {courtName(x.court_numbers, m.court)}
+            {empty ? "" : ` · ${MATCH_TYPE_LABEL[m.match_type]}`}
+          </span>
+          {m.canceled ? <span className="badge-orange-soft shrink-0">경기 취소</span> : null}
         </span>
-        {manage && !m.recorded && !empty ? (
+        {manage && !m.recorded && !empty && !m.canceled ? (
           <button type="button" className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline" onClick={() => setEditing(true)}>
             선수 바꾸기
           </button>
@@ -819,7 +830,40 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
             </span>
             {side(opponent, "team-chip-white", m.theirs, m.winner === 2)}
           </div>
-          <ScoreBox m={m} opponent={opponent} />
+          {m.canceled ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">못 친 경기로 취소했어요. 점수판에 들어가지 않아요.</p>
+              {manage ? (
+                <Form method="post" className="ml-auto">
+                  <input type="hidden" name="intent" value="restore_match" />
+                  <input type="hidden" name="match_id" value={m.id} />
+                  <button className="btn-ghost btn-sm" disabled={cancelBusy}>
+                    취소 되돌리기
+                  </button>
+                </Form>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <ScoreBox m={m} opponent={opponent} />
+              {manage && !m.recorded ? (
+                <Form
+                  method="post"
+                  className="-mt-1 flex justify-end"
+                  onSubmit={(e) => {
+                    if (!confirm("이 경기를 취소할까요? 못 친 경기로 남고 점수판·남은 경기에서 빠져요. 나중에 되돌릴 수 있어요."))
+                      e.preventDefault();
+                  }}
+                >
+                  <input type="hidden" name="intent" value="cancel_match" />
+                  <input type="hidden" name="match_id" value={m.id} />
+                  <button className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline" disabled={cancelBusy}>
+                    경기 취소
+                  </button>
+                </Form>
+              ) : null}
+            </>
+          )}
         </>
       )}
       {editing ? <LineupModal x={x} m={m} onClose={() => setEditing(false)} /> : null}
@@ -906,12 +950,12 @@ function LineupModal({ x, m, onClose }: { x: ExchangeDetail; m: ExchangeMatch; o
   const [theirs, setTheirs] = useState<string[]>([0, 1].map((i) => String(m.theirs[i]?.id ?? "")));
   const busy = useAfterSubmit("lineup", onClose);
   const seats = doubles ? [0, 1] : [0];
-  const same = x.matches.filter((o) => o.round_number === m.round_number && o.id !== m.id);
+  const same = x.matches.filter((o) => o.round_number === m.round_number && o.id !== m.id && !o.canceled);
   const busyOurs = new Set(same.flatMap((o) => o.ours.map((p) => p.id)));
   const busyTheirs = new Set(same.flatMap((o) => o.theirs.map((p) => p.id)));
   // 이 칸을 뺀 대진표 전체에서 넣은 경기 수 (고르게 넣도록 참고)
   const games = (side: "ours" | "theirs", id: number) =>
-    x.matches.filter((o) => o.id !== m.id && o[side].some((p) => p.id === id)).length;
+    x.matches.filter((o) => o.id !== m.id && !o.canceled && o[side].some((p) => p.id === id)).length;
   const picker = (
     name: "ours_id" | "theirs_id",
     values: string[],

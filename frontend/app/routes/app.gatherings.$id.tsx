@@ -645,6 +645,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
         method: "DELETE",
         token,
       });
+    } else if (intent === "cancel_match" || intent === "restore_match") {
+      // 못 친 경기 취소·되돌리기 (점수·전적과 상관없다)
+      await api(`/draw-matches/${formData.get("draw_match_id")}/cancel`, {
+        method: intent === "cancel_match" ? "POST" : "DELETE",
+        token,
+      });
     } else if (intent === "update_gathering") {
       const get = (k: string) => {
         const v = formData.get(k);
@@ -766,6 +772,8 @@ export default function GatheringDetailPage() {
   const canManageAttendance = (isOrganizer || staff) && !canceled;
   // 대진 점수 입력·고치기: 주최자·관리자·임원진(모든 모임), 그리고 그 경기에 뛴 선수 (서버와 같음)
   const canScore = (m: DrawMatch) => !guest && (isOrganizer || staff || m.slot_ids.includes(user.id));
+  // 못 친 경기 취소·되돌리기: 모임을 올린 사람과 운영진 (서버와 같음)
+  const canCancelMatch = !guest && (gathering.created_by === user.id || staff);
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
   const settle = canSettle(user);
   const canPay = settle || (!club && !guest && gathering.created_by === user.id);
@@ -2063,6 +2071,7 @@ export default function GatheringDetailPage() {
                         key={m.id}
                         match={m}
                         canRecord={canScore(m)}
+                        canCancel={canCancelMatch}
                         courtLabels={courtLabels}
                         rated={isOtesikKind(gathering.kind)}
                         edit={
@@ -3125,7 +3134,7 @@ function drawRounds(matches: DrawMatch[]) {
 const matchPlayers = (m: DrawMatch) => [...m.team1, ...m.team2];
 
 /**
- * 대진표 위: 한 사람이 몇 게임씩 뛰는지 (게임 수별로 묶어서).
+ * 대진표 위: 한 사람이 몇 게임씩 뛰는지 (게임 수별로 묶어서). 취소한 경기는 세지 않는다.
  * 대진을 만든 뒤 새로 참석한 사람은 0게임으로 보인다.
  */
 function DrawGameCounts({
@@ -3138,6 +3147,7 @@ function DrawGameCounts({
   const people = new Map<number, { name: string; games: number }>();
   for (const u of attendees) people.set(u.id, { name: u.name, games: 0 });
   for (const m of draw.matches) {
+    if (m.canceled) continue;
     for (const u of matchPlayers(m)) {
       const p = people.get(u.id) ?? { name: u.name, games: 0 };
       p.games += 1;
@@ -3173,7 +3183,7 @@ function DrawGameCounts({
   );
 }
 
-/** 라운드 머리줄: "1라운드 · 휴식 2명 홍길동, 김철수" (지금 참석자 중 이 라운드에 없는 사람) */
+/** 라운드 머리줄: "1라운드 · 휴식 2명 홍길동, 김철수" (지금 참석자 중 이 라운드에 없는 사람, 취소한 경기의 선수 포함) */
 function RoundRestLine({
   round,
   matches,
@@ -3183,7 +3193,9 @@ function RoundRestLine({
   matches: DrawMatch[];
   attendees: UserBrief[];
 }) {
-  const playing = new Set(matches.flatMap((m) => matchPlayers(m).map((u) => u.id)));
+  const playing = new Set(
+    matches.filter((m) => !m.canceled).flatMap((m) => matchPlayers(m).map((u) => u.id))
+  );
   const resting = attendees.filter((u) => !playing.has(u.id));
   return (
     <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
@@ -3222,12 +3234,15 @@ const SLOT_NAMES = ["team1_player1", "team1_player2", "team2_player1", "team2_pl
 function DrawMatchRow({
   match,
   canRecord,
+  canCancel,
   courtLabels,
   rated,
   edit,
 }: {
   match: DrawMatch;
   canRecord: boolean;
+  /** 못 친 경기 취소·되돌리기 (모임을 올린 사람·운영진) */
+  canCancel: boolean;
   courtLabels: string[];
   /** 오테식 정모·벙개: 레이팅에 들어가므로 점수(게임 수)가 꼭 필요하다. 교류전·일반 벙개는 아니다 (서버와 같음) */
   rated: boolean;
@@ -3255,7 +3270,8 @@ function DrawMatchRow({
       : match.court_number ?? "—";
   // 관리자에게만 온다
   const balance = match.balance;
-  const editable = edit !== null && !recorded;
+  const canceled = match.canceled;
+  const editable = edit !== null && !recorded && !canceled;
   const swapping =
     navigation.state !== "idle" &&
     navigation.formData?.get("intent") === "swap_slot" &&
@@ -3325,10 +3341,13 @@ function DrawMatchRow({
     </div>
   );
   return (
-    <div className="draw-card">
+    <div className={`draw-card ${canceled ? "border-dashed" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="badge-gray">
-          COURT {courtLabel} · {match.round_number ?? 1}R
+        <span className="flex items-center gap-1.5">
+          <span className="badge-gray">
+            COURT {courtLabel} · {match.round_number ?? 1}R
+          </span>
+          {canceled ? <span className="badge-orange-soft">경기 취소</span> : null}
         </span>
         <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           {balance ? (
@@ -3344,7 +3363,7 @@ function DrawMatchRow({
           {MATCH_TYPE_LABEL[match.match_type]}
         </span>
       </div>
-      <div className="draw-teams">
+      <div className={`draw-teams ${canceled ? "opacity-50 line-through decoration-slate-400" : ""}`}>
         {editable ? editTeam(singles ? [0] : [0, 1]) : team(match.team1)}
         <span className="text-center font-display text-xs text-slate-400">
           VS
@@ -3367,7 +3386,22 @@ function DrawMatchRow({
         </Form>
       ) : null}
       <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
-        {recorded && !fixing ? (
+        {canceled ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              못 친 경기로 취소했어요. 점수·전적에 들어가지 않아요.
+            </p>
+            {canCancel ? (
+              <Form method="post" className="ml-auto">
+                <input type="hidden" name="intent" value="restore_match" />
+                <input type="hidden" name="draw_match_id" value={match.id} />
+                <button className="btn-ghost btn-sm" disabled={busy}>
+                  취소 되돌리기
+                </button>
+              </Form>
+            ) : null}
+          </div>
+        ) : recorded && !fixing ? (
           <div className="flex flex-wrap items-center gap-2">
             <span className="badge-gray">
               <Check size={13} />
@@ -3467,6 +3501,22 @@ function DrawMatchRow({
             경기 예정
           </p>
         )}
+        {canCancel && !recorded && !canceled ? (
+          <Form
+            method="post"
+            className="mt-2 flex justify-end"
+            onSubmit={(e) => {
+              if (!confirm("이 경기를 취소할까요? 못 친 경기로 남고 점수·전적에는 들어가지 않아요. 나중에 되돌릴 수 있어요."))
+                e.preventDefault();
+            }}
+          >
+            <input type="hidden" name="intent" value="cancel_match" />
+            <input type="hidden" name="draw_match_id" value={match.id} />
+            <button className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline" disabled={busy}>
+              경기 취소
+            </button>
+          </Form>
+        ) : null}
       </div>
     </div>
   );

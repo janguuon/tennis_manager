@@ -576,6 +576,8 @@ class DrawMatch(Base):
 
     # 결과가 입력되면 실제 Match로 연결
     result_match_id: Mapped[int | None] = mapped_column(ForeignKey("matches.id"))
+    # 경기 취소(비·부상 등으로 못 친 경기): 점수를 받지 않고, 다음 자동 대진의 '오늘 같이 뛴 사람'에도 넣지 않는다
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     draw: Mapped[Draw] = relationship(back_populates="draw_matches")
 
@@ -717,6 +719,10 @@ class TournamentMatch(Base):
     def recorded(self) -> bool:
         return self.recorded_at is not None
 
+    @property
+    def canceled(self) -> bool:
+        return self.canceled_at is not None
+
 
 # ---------------------------------------------------------------------------
 # 교류전: 오테식 대 상대 클럽 (교류전 일정 하나에 하나)
@@ -796,6 +802,8 @@ class ExchangeMatch(Base):
     theirs_score: Mapped[int | None] = mapped_column(Integer)
     winner: Mapped[int | None] = mapped_column(Integer)  # 1 오테식 | 2 상대, 무승부·결과 전은 NULL
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 경기 취소(못 친 경기): 점수를 받지 않고 점수판·남은 경기·자동 대진의 뛴 수에서 빠진다
+    canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     exchange: Mapped[Exchange] = relationship(back_populates="matches")
 
@@ -810,3 +818,7 @@ class ExchangeMatch(Base):
     @property
     def recorded(self) -> bool:
         return self.recorded_at is not None
+
+    @property
+    def canceled(self) -> bool:
+        return self.canceled_at is not None

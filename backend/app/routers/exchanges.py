@@ -7,6 +7,7 @@
     라운드 하나만 다시: POST .../rounds/{n}/draw, 라운드 더하기·지우기: POST .../rounds, DELETE .../rounds/{n}).
    우리 팀은 그 일정에 참석한 회원·초대 게스트다. 상대 선수는 일정 참가자가 아니라 정산·출석에 잡히지 않는다.
 3. 경기마다 점수를 적는다 (운영진과 그 경기에 뛴 우리 선수). 이긴 경기마다 그 팀이 1승.
+   못 친 경기는 취소한다 (POST .../matches/{m}/cancel): 점수판·남은 경기에서 빠지고 되돌릴 수 있다.
 4. POST /exchanges/{id}/finish → 승리팀(이긴 경기 수 → 게임 득실 → 무승부, 운영진이 바꿀 수 있다)을 정하고
    알리기로 했으면 클럽 소식으로 결과 팝업(오테식 승·무승부는 축하, 상대 승은 수고 인사)을 띄운다.
    마친 교류전은 점수·대진을 바꾸지 못한다(마치기를 취소하면 된다).
@@ -132,6 +133,11 @@ def _filled(m: ExchangeMatch) -> bool:
     return bool(m.ours_ids) and bool(m.theirs_ids)
 
 
+def _live(m: ExchangeMatch) -> bool:
+    """칠 경기: 선수가 다 있고 취소하지 않았다 (점수판의 경기 수·남은 경기)."""
+    return _filled(m) and not m.canceled
+
+
 def _score(ex: Exchange | None) -> X.Score:
     return X.score([(m.winner, m.ours_score or 0, m.theirs_score or 0) for m in _matches(ex) if m.recorded])
 
@@ -160,7 +166,7 @@ def _summary(g: Gathering) -> dict:
         ours_count=sum(1 for p in g.participants if p.status == AttendanceStatus.ATTENDING),
         theirs_count=len(ex.opponents) if ex else 0,
         played=sum(1 for m in matches if m.recorded),
-        total=sum(1 for m in matches if _filled(m)),
+        total=sum(1 for m in matches if _live(m)),
         score=ExchangeScoreRead(**vars(s)),
         winner=ex.winner if ex else None,
         finished_at=ex.finished_at if ex else None,
@@ -217,8 +223,9 @@ def _detail(db: Session, g: Gathering, user: User) -> ExchangeDetail:
                 theirs_score=m.theirs_score,
                 winner=m.winner,
                 recorded=m.recorded,
-                can_score=not locked and _filled(m) and not user.is_guest
+                can_score=not locked and _live(m) and not user.is_guest
                 and (manage or user.id in m.ours_ids),
+                canceled=m.canceled,
                 absent_ids=[p for p in m.ours_ids if p not in attending_ids],
             )
             for m in matches
@@ -385,9 +392,10 @@ def remove_opponent(
 
 # --- 대진 -------------------------------------------------------------------
 def _clear(m: ExchangeMatch) -> None:
-    """빈 코트로 (양쪽 선수를 모두 뺀다: 한쪽만 남은 칸은 경기가 아니다)."""
+    """빈 코트로 (양쪽 선수를 모두 뺀다: 한쪽만 남은 칸은 경기가 아니다). 취소 표시도 지운다."""
     m.ours_p1_id = m.ours_p2_id = m.theirs_p1_id = m.theirs_p2_id = None
     m.match_type = MatchType.OPEN_DOUBLES
+    m.canceled_at = None
 
 
 def _rosters(g: Gathering) -> tuple[dict, dict]:
@@ -480,7 +488,7 @@ def add_round(
     if payload.mode == "auto":
         ours, theirs = _rosters(g)
         _require_players(ours, theirs)
-        kept = [(m.round_number, m.ours_ids, m.theirs_ids) for m in ex.matches]
+        kept = [(m.round_number, m.ours_ids, m.theirs_ids) for m in ex.matches if not m.canceled]
         rows = X.generate(ours, theirs, [last + 1], courts, kept=kept)
     else:
         rows = _empty([last + 1], courts)
@@ -539,7 +547,11 @@ def draw_round(
     ours, theirs = _rosters(g)
     _require_players(ours, theirs)
     courts = max(m.court for m in target)
-    kept = [(m.round_number, m.ours_ids, m.theirs_ids) for m in ex.matches if m.round_number != round_number]
+    kept = [
+        (m.round_number, m.ours_ids, m.theirs_ids)
+        for m in ex.matches
+        if m.round_number != round_number and not m.canceled
+    ]
     for m in target:
         ex.matches.remove(m)
     db.flush()
@@ -571,6 +583,8 @@ def set_lineup(
         raise HTTPException(
             status.HTTP_409_CONFLICT, detail="점수가 들어간 경기는 선수를 바꿀 수 없어요. 점수를 먼저 지워 주세요."
         )
+    if m.canceled:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="취소한 경기예요. 선수를 바꾸려면 먼저 '취소 되돌리기'를 눌러 주세요.")
     o, t = payload.ours_ids, payload.theirs_ids
     if not o and not t:
         _clear(m)
@@ -590,12 +604,52 @@ def set_lineup(
     return _done(db, g, current_user)
 
 
+@router.post("/{gathering_id}/matches/{match_id}/cancel", response_model=ExchangeDetail)
+def cancel_match(
+    gathering_id: int,
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """못 친 경기 취소 (비·부상·시간 부족 등): 점수를 받지 않고 점수판·남은 경기·자동 대진의 뛴 수에서 빠진다.
+    점수가 들어간 경기는 점수를 먼저 지운다. 선수 자리는 그대로 남겨 두어 되돌릴 수 있다."""
+    g = _load(db, gathering_id)
+    _require_manage(current_user)
+    _require_editable(g)
+    m = _match(g, match_id)
+    if not _filled(m):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="선수가 정해지지 않은 코트예요.")
+    if m.recorded:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="점수가 들어간 경기는 취소할 수 없어요. 점수를 먼저 지워 주세요."
+        )
+    m.canceled_at = m.canceled_at or datetime.now()
+    return _done(db, g, current_user)
+
+
+@router.delete("/{gathering_id}/matches/{match_id}/cancel", response_model=ExchangeDetail)
+def restore_match(
+    gathering_id: int,
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """경기 취소 되돌리기."""
+    g = _load(db, gathering_id)
+    _require_manage(current_user)
+    _require_editable(g)
+    _match(g, match_id).canceled_at = None
+    return _done(db, g, current_user)
+
+
 # --- 점수 -------------------------------------------------------------------
 def _scorable(g: Gathering, match_id: int, user: User) -> ExchangeMatch:
     _require_editable(g)
     m = _match(g, match_id)
     if not _filled(m):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="선수가 정해지지 않은 코트예요.")
+    if m.canceled:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="취소한 경기예요. 점수를 적으려면 먼저 '취소 되돌리기'를 눌러 주세요.")
     if not (user.is_staff or user.id in m.ours_ids):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="점수는 운영진과 그 경기에 뛴 선수가 적어요.")
     return m

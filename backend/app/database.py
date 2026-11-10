@@ -99,6 +99,9 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("gatherings", "entry_fee", "entry_fee INTEGER NOT NULL DEFAULT 0"),
     # 참석 일정 구독(폰 캘린더) 비밀 링크
     ("users", "calendar_token", "calendar_token VARCHAR(64)"),
+    # 경기 취소 (대진·교류전): 점수·전적에 영향 없이 못 친 경기로 둔다
+    ("draw_matches", "canceled_at", "canceled_at DATETIME"),
+    ("exchange_matches", "canceled_at", "canceled_at DATETIME"),
 ]
 
 

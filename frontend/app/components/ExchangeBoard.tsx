@@ -165,14 +165,16 @@ export function ExchangeCard({ x, member }: { x: ExchangeDetail; member: boolean
                   .map((m) => (
                     <li
                       key={m.id}
-                      className="grid grid-cols-[64px_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[13px] font-semibold dark:bg-slate-800"
+                      className={`grid grid-cols-[64px_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[13px] font-semibold dark:bg-slate-800 ${
+                        m.canceled ? "text-slate-400 line-through" : ""
+                      }`}
                     >
                       <span className="text-[11px] font-bold text-slate-500">{courtName(x.court_numbers, m.court)}</span>
                       <span className={`truncate ${m.winner === 1 ? "font-extrabold" : ""}`}>
                         {m.ours.map((p) => p.name).join("·")}
                       </span>
                       <span className="font-display text-xs text-slate-500">
-                        {m.recorded ? `${m.ours_score}:${m.theirs_score}` : "vs"}
+                        {m.canceled ? "취소" : m.recorded ? `${m.ours_score}:${m.theirs_score}` : "vs"}
                       </span>
                       <span className={`truncate text-right ${m.winner === 2 ? "font-extrabold" : ""}`}>
                         {m.theirs.map((p) => p.name).join("·")}

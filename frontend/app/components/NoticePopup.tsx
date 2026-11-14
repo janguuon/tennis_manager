@@ -39,21 +39,24 @@ export function NoticeCard({ notice }: { notice: Notice }) {
 }
 
 /**
- * 들어왔을 때 아직 확인하지 않은 클럽 소식을 한 번 띄운다. 뜰 때 꽃가루가 떨어지고 축하 소식이면 폭죽도 터진다.
- * 확인(또는 닫기)하면 서버에 적어 두어 다른 기기에서도 다시 뜨지 않는다.
+ * 들어왔을 때 '다시 보지 않기'를 누르지 않은 클럽 소식을 띄운다 (게시 기간 동안).
+ * - [확인]·✕·바깥 누르기: 이번에만 닫는다. 다음에 앱에 들어오면 다시 뜬다.
+ * - [다시 보지 않기]: 서버에 적어 두어 그 소식은 다른 기기에서도 다시 뜨지 않는다 (그 뒤에 올라온 소식은 뜬다).
+ * 뜰 때 꽃가루가 떨어지고 축하 소식이면 폭죽도 터진다 (같은 소식은 이 기기에서 한 번).
  */
 export function NoticePopup({ notices }: { notices: Notice[] }) {
   const fetcher = useFetcher();
   const fresh = notices.filter((n) => n.is_new);
   const [open, setOpen] = useState(false);
 
-  // 서버 렌더와 어긋나지 않게 화면이 뜬 뒤에 연다
+  // 서버 렌더와 어긋나지 않게 화면이 뜬 뒤에 연다. 앱 안에서 화면을 옮겨 다닐 때는 다시 열지 않는다
   useEffect(() => {
     setOpen(fresh.length > 0);
   }, [fresh.length]);
 
   if (!open) return null;
-  const close = () => {
+  const close = () => setOpen(false);
+  const neverAgain = () => {
     setOpen(false);
     fetcher.submit({ intent: "seen" }, { method: "post", action: "/app/notices" });
   };
@@ -70,13 +73,18 @@ export function NoticePopup({ notices }: { notices: Notice[] }) {
           <NoticeCard key={n.id} notice={n} />
         ))}
       </div>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <Link to="/app/notices" className="text-link text-sm" onClick={close}>
           지난 소식 보기
         </Link>
-        <button type="button" className="btn-primary h-11 px-6" onClick={close}>
-          확인했어요
-        </button>
+        <span className="ml-auto flex items-center gap-2">
+          <button type="button" className="btn-ghost h-11 px-4" onClick={neverAgain}>
+            다시 보지 않기
+          </button>
+          <button type="button" className="btn-primary h-11 px-6" onClick={close}>
+            확인
+          </button>
+        </span>
       </div>
     </Modal>
   );

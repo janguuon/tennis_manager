@@ -26,7 +26,7 @@ import {
 import { CopyButton } from "~/components/CopyButton";
 import { Emblem } from "~/components/Logo";
 import { MyVotePill } from "~/components/MyVote";
-import { NOTICE_ICON } from "~/components/NoticePopup";
+import { NOTICE_ICON, NOTICE_LABEL, noticeDate } from "~/components/NoticePopup";
 import { PageBody, PageHeader } from "~/components/Page";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
@@ -177,12 +177,35 @@ export default function HomePage() {
           </div>
         }
       />
-      <div className="club-news">
-        <span>
-          <i className="h-1.5 w-1.5 rounded-full bg-house-green" />
+      {/* 클럽 소식 띠: 가입 대기(관리자) → 최근 소식 → 다가오는 모임 순서로 하나를 크게 보여 준다 */}
+      <Link
+        to={
+          me.is_admin && pendingCount
+            ? "/app/admin"
+            : latestNotice
+            ? "/app/notices"
+            : soonest
+            ? `/app/gatherings/${soonest.id}?from=${soonest.event_date}`
+            : "/app/calendar"
+        }
+        className={`club-news ${
+          me.is_admin && pendingCount
+            ? "is-alert"
+            : latestNotice
+            ? latestNotice.kind === "celebrate"
+              ? "is-celebrate"
+              : "is-news"
+            : ""
+        }`}
+      >
+        <span className="club-news-label">
+          <i className="h-1.5 w-1.5 rounded-full bg-current" />
           CLUB NEWS
+          {!(me.is_admin && pendingCount) && latestNotice
+            ? ` · ${NOTICE_LABEL[latestNotice.kind]} · ${noticeDate(latestNotice.created_at)}`
+            : ""}
         </span>
-        <p>
+        <p className="club-news-text">
           {me.is_admin && pendingCount
             ? `새로운 식구 ${pendingCount}명이 가입 승인을 기다려요.`
             : latestNotice
@@ -193,28 +216,10 @@ export default function HomePage() {
               }명 함께해요.`
             : "좋아하는 사람들과, 좋아하는 테니스를."}
         </p>
-        <Link
-          to={
-            me.is_admin && pendingCount
-              ? "/app/admin"
-              : latestNotice
-              ? "/app/notices"
-              : soonest
-              ? `/app/gatherings/${soonest.id}?from=${soonest.event_date}`
-              : "/app/calendar"
-          }
-          className="text-link"
-          aria-label={
-            me.is_admin && pendingCount
-              ? "가입 신청 확인"
-              : latestNotice
-              ? "클럽 소식 보기"
-              : "모임 확인"
-          }
-        >
-          <ArrowUpRight size={17} />
-        </Link>
-      </div>
+        <span className="club-news-go" aria-hidden="true">
+          <ArrowUpRight size={18} />
+        </span>
+      </Link>
       {canceledSoon.length ? (
         <ul className="space-y-2">
           {canceledSoon.map((g) => (

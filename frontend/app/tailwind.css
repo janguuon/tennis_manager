@@ -373,14 +373,32 @@
   .text-link {
     @apply inline-flex min-h-8 items-center gap-1.5 text-xs font-semibold hover:underline hover:underline-offset-4;
   }
+  /* 홈 맨 위 클럽 소식 띠: 축하는 노랑, 소식은 파랑, 가입 대기(관리자)는 주황, 나머지는 흰 카드 */
   .club-news {
-    @apply flex items-center gap-4 border-y border-slate-200 py-3.5 dark:border-slate-700;
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 rounded-[22px] bg-white/70 px-5 py-4 ring-1 ring-inset ring-slate-200 transition-transform hover:-translate-y-0.5 dark:bg-slate-800/60 dark:ring-slate-700 sm:px-6 sm:py-5;
   }
-  .club-news > span {
-    @apply flex shrink-0 items-center gap-2 text-[9px] font-bold tracking-widest;
+  .club-news.is-celebrate {
+    @apply bg-house-yellow text-ink ring-0;
   }
-  .club-news p {
-    @apply min-w-0 flex-1 truncate text-xs text-slate-500 dark:text-slate-400;
+  .club-news.is-news {
+    @apply bg-house-blue text-ink ring-0;
+  }
+  .club-news.is-alert {
+    @apply bg-house-orange text-ink ring-0;
+  }
+  .club-news-label {
+    @apply col-start-1 flex min-w-0 items-center gap-2 text-[11px] font-bold tracking-[0.12em] opacity-75;
+  }
+  .club-news-text {
+    @apply col-start-1 line-clamp-2 text-[16px] font-extrabold leading-snug tracking-[-0.02em] sm:text-lg;
+  }
+  .club-news-go {
+    @apply col-start-2 row-span-2 row-start-1 flex h-10 w-10 items-center justify-center rounded-full bg-ink/10 dark:bg-white/10;
+  }
+  .club-news.is-celebrate .club-news-go,
+  .club-news.is-news .club-news-go,
+  .club-news.is-alert .club-news-go {
+    @apply bg-ink/10;
   }
   .home-grid {
     @apply grid grid-cols-2 gap-4 lg:grid-cols-12 xl:gap-5;

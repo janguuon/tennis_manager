@@ -1451,16 +1451,23 @@
   }
 }
 
-/* ---- 교류전: 결과 꽃가루 (처음 볼 때 한 번), 대진표 ---- */
+/* ---- 축하 효과(components/Celebration): 꽃가루·폭죽 / 교류전 대진표 ---- */
 @layer components {
-  .confetti {
+  .celebration {
     @apply pointer-events-none fixed inset-0 z-50 overflow-hidden;
   }
-  .confetti span {
+  .confetti-piece {
     @apply absolute -top-4 h-3.5 w-2 rounded-sm opacity-90;
     animation-name: confetti-fall;
     animation-timing-function: cubic-bezier(0.25, 0.6, 0.45, 1);
     animation-fill-mode: forwards;
+  }
+  .firework {
+    @apply absolute h-0 w-0;
+  }
+  .firework i {
+    @apply absolute -left-[3px] -top-[3px] h-1.5 w-1.5 rounded-full opacity-0;
+    animation: firework-burst 1.15s cubic-bezier(0.15, 0.7, 0.3, 1) both;
   }
   .exchange-round {
     @apply space-y-3 border-t border-slate-200 pt-5 first:border-t-0 first:pt-0 dark:border-slate-700;
@@ -1488,5 +1495,23 @@
   100% {
     transform: translate3d(var(--dx), 105vh, 0) rotate(var(--rot));
     opacity: 0.85;
+  }
+}
+@keyframes firework-burst {
+  /* 터지기 전(지연 중)에는 안 보이게 시작한다 */
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.4);
+    opacity: 0;
+  }
+  10% {
+    transform: translate3d(calc(var(--x) * 0.15), calc(var(--y) * 0.15), 0) scale(1.4);
+    opacity: 1;
+  }
+  65% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--x), var(--y), 0) scale(0.5);
+    opacity: 0;
   }
 }

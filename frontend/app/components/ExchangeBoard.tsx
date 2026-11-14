@@ -1,8 +1,7 @@
 import { Link } from "@remix-run/react";
 import { ChevronRight, Handshake, Trophy } from "lucide-react";
-import { useEffect, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
 
+import { Celebration } from "~/components/Celebration";
 import { EmblemBadge } from "~/components/Logo";
 import { courtName, OURS_LABEL, opponentLabel, resultLabel } from "~/lib/exchange";
 import type { ExchangeDetail } from "~/lib/types";
@@ -43,7 +42,9 @@ export function ExchangeResultBanner({ x }: { x: ExchangeDetail }) {
   const win = x.winner === "ours";
   return (
     <section className={`${x.winner === "theirs" ? "tile-blue" : "tile-yellow"} space-y-3`}>
-      {x.winner !== "theirs" ? <Confetti storageKey={`exchange-confetti-${x.gathering_id}-${x.finished_at}`} /> : null}
+      {x.winner !== "theirs" ? (
+        <Celebration storageKey={`exchange-confetti-${x.gathering_id}-${x.finished_at}`} fireworks={win} />
+      ) : null}
       <div className="flex items-center gap-4">
         <EmblemBadge className="h-14 w-14 !rounded-2xl !ring-ink/15" />
         <div className="min-w-0">
@@ -74,51 +75,6 @@ export function ExchangeResultBanner({ x }: { x: ExchangeDetail }) {
         </p>
       ) : null}
     </section>
-  );
-}
-
-const CONFETTI_COLORS = ["#F5CD52", "#5276DB", "#F18A58", "#9ABB88", "#C1ACE0", "#252722"];
-
-/** 꽃가루: 이 기기에서 처음 볼 때 한 번만 (움직임 줄이기 설정이면 띄우지 않는다) */
-export function Confetti({ storageKey }: { storageKey: string }) {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    try {
-      if (localStorage.getItem(storageKey)) return;
-      localStorage.setItem(storageKey, "1");
-    } catch {
-      // 저장소를 못 쓰면 매번 보여도 괜찮다
-    }
-    setShow(true);
-    const timer = setTimeout(() => setShow(false), 4500);
-    return () => clearTimeout(timer);
-  }, [storageKey]);
-  if (!show) return null;
-  // 화면 전체에 뿌린다 (부모의 transform·overflow 에 갇히지 않게 body 로)
-  return createPortal(
-    <div className="confetti" aria-hidden="true">
-      {Array.from({ length: 70 }, (_, i) => {
-        // 조각마다 정해진 값 (매번 같은 모양이어도 괜찮다)
-        const r = (n: number) => ((i * 9301 + n * 49297) % 233280) / 233280;
-        return (
-          <span
-            key={i}
-            style={
-              {
-                left: `${r(1) * 100}%`,
-                background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-                animationDelay: `${r(2) * 0.9}s`,
-                animationDuration: `${2.4 + r(3) * 1.6}s`,
-                "--dx": `${(r(4) - 0.5) * 160}px`,
-                "--rot": `${r(5) * 720 - 360}deg`,
-              } as CSSProperties
-            }
-          />
-        );
-      })}
-    </div>,
-    document.body,
   );
 }
 

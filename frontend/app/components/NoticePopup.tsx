@@ -1,6 +1,7 @@
 import { Link, useFetcher } from "@remix-run/react";
 import { useEffect, useState } from "react";
 
+import { Celebration } from "~/components/Celebration";
 import { Modal } from "~/components/Modal";
 import type { Notice } from "~/lib/types";
 
@@ -38,7 +39,7 @@ export function NoticeCard({ notice }: { notice: Notice }) {
 }
 
 /**
- * 들어왔을 때 아직 확인하지 않은 클럽 소식을 한 번 띄운다.
+ * 들어왔을 때 아직 확인하지 않은 클럽 소식을 한 번 띄운다. 뜰 때 꽃가루가 떨어지고 축하 소식이면 폭죽도 터진다.
  * 확인(또는 닫기)하면 서버에 적어 두어 다른 기기에서도 다시 뜨지 않는다.
  */
 export function NoticePopup({ notices }: { notices: Notice[] }) {
@@ -58,6 +59,12 @@ export function NoticePopup({ notices }: { notices: Notice[] }) {
   };
   return (
     <Modal title="클럽 소식" onClose={close}>
+      {/* 소식이 뜨면 꽃가루, 축하 소식이 있으면 폭죽까지 (같은 소식은 이 기기에서 한 번) */}
+      <Celebration
+        inDialog
+        fireworks={fresh.some((n) => n.kind === "celebrate")}
+        storageKey={`notice-celebration-${fresh.map((n) => n.id).join("-")}`}
+      />
       <div className="space-y-3">
         {fresh.map((n) => (
           <NoticeCard key={n.id} notice={n} />

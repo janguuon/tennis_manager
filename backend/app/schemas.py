@@ -580,13 +580,15 @@ class GatheringImportItem(BaseModel):
 
 class GatheringImportResult(BaseModel):
     """엑셀 일괄 업로드 결과. 건너뛴 행(이미 등록된 일정, 모임이 아닌 사용 여부)은 skips.
-    items: 이번에 새로 등록된 일정(날짜·시간 순)."""
+    updates: 이미 있는 일정에 새 코트를 더한 행. items: 이번에 새로 등록된 일정(날짜·시간 순)."""
 
     created: int
     failed: int
     errors: list[GatheringImportRowError]
     skipped: int = 0
     skips: list[GatheringImportRowNote] = []
+    updated: int = 0
+    updates: list[GatheringImportRowNote] = []
     items: list[GatheringImportItem] = []
     # 등록은 됐지만 알아 둘 것 (예: 입금 계좌가 비어 있는 일반 벙개)
     notices: list[str] = []

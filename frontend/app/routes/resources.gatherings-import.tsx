@@ -41,6 +41,8 @@ export async function action({ request }: ActionFunctionArgs) {
       errors: { row: number; error: string }[];
       skipped: number;
       skips: { row: number; message: string }[];
+      updated: number;
+      updates: { row: number; message: string }[];
       items: NewSchedule[];
       notices: string[];
     }>(

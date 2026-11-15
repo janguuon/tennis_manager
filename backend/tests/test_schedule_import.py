@@ -432,3 +432,96 @@ def test_import_single_sheet_and_hidden_sheets(club):
     assert r.json()["created"] == 1
     # 달 형식이 틀리면 400
     assert _upload_month(club, data, "2099-1월").status_code == 400
+
+
+# --- 이미 있는 일정에 코트 더하기 ------------------------------------------------
+def test_reupload_adds_new_court_to_existing(club):
+    """같은 날짜·시간·장소·종류의 일정이 있으면, 그 일정에 없는 코트(다른 예약자로 더 잡은 코트)만 더한다."""
+    _people(club, seo="서승우", ohj="오장원")
+    first = [[D, "10:00~12:00", 3, "장미주", "서승우", 24000, None, "오테식 정모", None, "시민 테니스장", None]]
+    assert _upload(club, _sheet(first))["created"] == 1
+    [g] = _month(club)
+    assert (g["court_numbers"], g["max_participants"]) == ("3", 6)
+    # 6명이 차서 7번째는 대기
+    names = ("aaa", "bbb", "ccc", "ddd", "eee", "fff", "ggg")
+    club.add_members(*names)
+    assert [club.vote(g["id"], n).json()["status"] for n in names][-1] == "waiting"
+
+    # 나중에 5번 코트를 김다빈 이름으로 더 잡아 행을 추가해 다시 올림
+    more = first + [[D, "10:00~12:00", "5번", "김다빈", "오장원", 22000, None, "오테식 정모", None, "시민  테니스장", "주차 2시간"]]
+    r = _upload(club, _sheet(more))
+    assert (r["created"], r["updated"], r["failed"], r["items"]) == (0, 1, 0, [])
+    assert r["updates"][0]["row"] == 2
+    assert "코트 5번 추가" in r["updates"][0]["message"] and "정원 6명 → 12명" in r["updates"][0]["message"]
+    [g] = _month(club)  # 새 일정이 생기지 않고 기존 일정이 바뀐다
+    assert (g["court_numbers"], g["court_count"], g["max_participants"]) == ("3, 5", 2, 12)
+    assert g["court_fairy"] == "서승우, 오장원"
+    assert g["court_reservers"] == "3번 장미주, 5번 김다빈"
+    assert g["description"] == "주차 2시간"
+    detail = club.detail(g["id"])
+    assert sorted((b["booker_name"], b["amount"], b["court_label"]) for b in detail["court_bookings"]) == [
+        ("서승우", 24000, "3번 · 예약 장미주"), ("오장원", 22000, "5번 · 예약 김다빈"),
+    ]
+    # 정원이 늘어 대기자가 참석으로 올라간다
+    assert {p["status"] for p in detail["participants"]} == {"attending"}
+    assert len(detail["participants"]) == 7
+
+    # 또 올리면 더할 코트가 없어 건너뛴다
+    again = _upload(club, _sheet(more))
+    assert (again["created"], again["updated"]) == (0, 0)
+    assert [s["row"] for s in again["skips"] if "이미 등록된" in s["message"]] == [2]
+    assert len(club.detail(g["id"])["court_bookings"]) == 2
+
+
+def test_add_courts_flash_rules(club):
+    """일반 벙개: 코트비·캔볼비가 더해지고, 적은 최대 인원이 있으면 그 값. 올린 벙주·운영진만 더할 수 있다.
+    이미 있는 코트를 다른 예약자로 적은 행은 건드리지 않는다."""
+    _people(club, ohj="오장원", kim="김회원")
+    day = datetime(2099, 1, 20)
+    base = [day, "19:00~21:00", 2, "김다빈", "오장원", 20000, 6000, "일반 벙개", None, "구립 테니스장", None]
+    assert _upload(club, _sheet([base]), as_="ohj")["created"] == 1
+    [g] = _month(club)
+    assert (g["created_by"], g["fee"], g["max_participants"]) == (club.ids["ohj"], 26000, 6)
+
+    added = [day, "19:00~21:00", 4, "장미주", "오장원", 18000, 2000, "일반 벙개", 10, "구립 테니스장", None]
+    # 같은 2번 코트를 다른 예약자로 적은 행은 이미 있는 코트라 그대로
+    same_court = [day, "19:00~21:00", 2, "이민석", "오장원", 20000, None, "일반 벙개", None, "구립 테니스장", None]
+    # 다른 회원(벙주 아님)은 남의 일정에 코트를 더하지 못한다
+    r = _upload(club, _sheet([base, added]), as_="kim")
+    assert (r["updated"], r["failed"]) == (0, 1) and "다른 회원" in r["errors"][0]["error"]
+    assert _month(club)[0]["court_numbers"] == "2"
+
+    r = _upload(club, _sheet([same_court, added]), as_="ohj")
+    assert (r["created"], r["updated"], r["failed"]) == (0, 1, 0)
+    [g] = _month(club)
+    assert (g["court_numbers"], g["court_count"]) == ("2, 4", 2)
+    assert (g["court_fee"], g["ball_fee"], g["fee"], g["max_participants"]) == (38000, 8000, 46000, 10)
+    assert g["court_reservers"] == "2번 김다빈, 4번 장미주"
+    assert g["court_fairy"] == "오장원"
+
+    # 한 행에 이미 있는 코트와 새 코트를 같이 적으면 나눠 적어 달라고 한다
+    r = _upload(club, _sheet([[day, "19:00~21:00", "4, 6", "장미주", "오장원", 30000, None, "일반 벙개", None, "구립 테니스장", None]]))
+    assert r["updated"] == 0 and "이미 등록된 코트(4번)" in r["errors"][0]["error"]
+
+
+def test_add_courts_skips_canceled_and_unnumbered(club):
+    """취소된 일정, 코트 번호 없이 직접 등록한 일정에는 더하지 않는다. '3번'처럼 적은 코트도 같은 코트로 본다."""
+    day = "2099-01-21"
+    numbered = club.create(kind="flash", title="일반 벙개", event_date=day, start_time="19:00", end_time="21:00",
+                           location="구립 테니스장", court_numbers="3번").json()["id"]
+    club.create(kind="club_flash", title="오테식 벙개", event_date=day, start_time="10:00", end_time="12:00",
+                location="시민 테니스장", court_count=1)
+    canceled = club.create(kind="club_regular", title="오테식 정모", event_date="2099-01-24", start_time="10:00",
+                           end_time="12:00", location="시민 테니스장", court_numbers="1").json()["id"]
+    club.c.post(f"/gatherings/{canceled}/cancel", json={"reason": "우천"}, headers=club.admin)
+    rows = [
+        [datetime(2099, 1, 21), "19:00~21:00", 3, "김다빈", "새요정", 20000, None, "일반 벙개", None, "구립 테니스장", None],
+        [datetime(2099, 1, 21), "10:00~12:00", 2, "김다빈", "새요정", 20000, None, "오테식 벙개", None, "시민 테니스장", None],
+        [datetime(2099, 1, 24), "10:00~12:00", 2, "김다빈", "새요정", 20000, None, "오테식 정모", None, "시민 테니스장", None],
+    ]
+    r = _upload(club, _sheet(rows))
+    assert (r["created"], r["updated"], r["failed"]) == (0, 0, 0)
+    msgs = {s["row"]: s["message"] for s in r["skips"]}
+    assert "이미 등록된" in msgs[2] and "이미 등록된" in msgs[3]
+    assert "취소된 일정" in msgs[4]
+    assert club.detail(numbered)["court_numbers"] == "3번"

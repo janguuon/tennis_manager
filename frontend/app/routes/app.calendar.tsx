@@ -356,6 +356,8 @@ export default function CalendarPage() {
     errors?: { row: number; error: string }[];
     skipped?: number;
     skips?: { row: number; message: string }[];
+    updated?: number;
+    updates?: { row: number; message: string }[];
     items?: NewSchedule[];
     notices?: string[];
     error?: string;
@@ -1170,7 +1172,9 @@ export default function CalendarPage() {
                   <p>
                     달마다 시트를 나눴다면 고른 달 이름의 시트(
                     {Number(importMonth.slice(5))}월)를 읽어요. 예약대기·우천
-                    취소 같은 행과 이미 등록된 일정은 건너뛰어요.
+                    취소 같은 행과 이미 등록된 일정은 건너뛰어요. 이미 있는
+                    일정에 코트를 더 잡아 행을 추가했다면 그 코트만 기존
+                    일정에 더해져요.
                   </p>
                   <div className="mt-2.5 inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-paper p-1 dark:border-slate-700 dark:bg-slate-900">
                     <button
@@ -1292,6 +1296,9 @@ export default function CalendarPage() {
                 <div className="alert-success space-y-2">
                   <p className="font-semibold">
                     일정 {importFetcher.data.created}건 등록
+                    {importFetcher.data.updated
+                      ? ` · ${importFetcher.data.updated}건 코트 추가`
+                      : ""}
                     {importFetcher.data.skipped
                       ? ` · ${importFetcher.data.skipped}건 건너뜀`
                       : ""}
@@ -1303,6 +1310,13 @@ export default function CalendarPage() {
                     <ul className="space-y-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
                       {importFetcher.data.notices.map((n) => (
                         <li key={n}>· {n}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {importFetcher.data.updates?.length ? (
+                    <ul className="space-y-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      {importFetcher.data.updates.map((u) => (
+                        <li key={`u${u.row}`}>· {u.message}</li>
                       ))}
                     </ul>
                   ) : null}

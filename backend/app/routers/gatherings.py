@@ -13,6 +13,7 @@
   어느 쪽이든 운영진만 만들고 임원진이 함께 관리한다(STAFF_KINDS). 대진 결과는 레이팅에 넣지 않는다.
 """
 import io
+import re
 import secrets
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
@@ -769,7 +770,8 @@ async def import_gatherings(
     """엑셀(.xlsx)로 일정을 한꺼번에 등록한다. 오류 행은 건너뛰고 보고한다.
 
     - 코트 예약 시트(새 양식, schedule_import.py): 한 행 = 코트 한 면 예약. 같은 날짜·시간·장소·종류는
-      한 모임으로 묶고, 이미 등록된 일정은 건너뛴다. 달마다 시트를 나눠 쓰면 month 의 시트('11월')를 읽는다.
+      한 모임으로 묶고, 이미 등록된 일정은 건너뛴다(그 일정에 없는 새 코트 행은 그 일정에 더한다 — _add_courts).
+      달마다 시트를 나눠 쓰면 month 의 시트('11월')를 읽는다.
     - 예전 양식: 한 행 = 한 모임.
     """
     if not (file.filename or "").lower().endswith(".xlsx"):
@@ -1031,6 +1033,7 @@ def import_template(
         "· 교류전 (회비)는 오테식 정모처럼 회비에서 내요. 교류전 (참가비)는 코트비만 기록되고, 1인 참가비는 등록한 뒤 모임 수정에서 정해요.",
         "· 코트 번호는 한 행에 한 면씩 적거나, '1~4'처럼 범위로 적어도 돼요.",
         "· 이미 같은 날짜·시간·장소·종류로 등록된 일정은 다시 올려도 건너뛰어요.",
+        "  그 일정에 없는 코트를 더 잡아 행을 추가했다면 그 코트만 기존 일정에 더해져요(코트비·정원도 함께).",
         f"· 최대 인원을 비우면 코트 수 × {sheet.SEATS_PER_COURT}명(회칙 제10조)으로 정해져요(위 예시 정모 → 12명). 일반 벙개도 같아요.",
         "  교류전은 상대 클럽과 정한 인원이라 비우면 제한이 없어요. 정원이 차면 다음 신청자는 대기로 들어가요.",
         "· 예약자명·코트요정은 목록에서 고르거나 직접 적어요. 적은 이름 그대로 들어가요.",
@@ -1153,6 +1156,10 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         return found[0] if len(found) == 1 else None
 
     no_account: list[str] = []  # 입금 계좌가 비어 있는 일반 벙개 (모임 수정에서 채운다)
+    notices: list[str] = []
+    # 이미 있는 일정에 코트를 더한 결과와 그 일정들
+    updates: list[GatheringImportRowNote] = []
+    touched: list[Gathering] = []
 
     # 오테식 모임 입금 계좌: 모임 통장 (없으면 가장 최근 오테식 모임의 계좌)
     club_account = default_club_account(db)
@@ -1194,12 +1201,23 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
             if " ".join((g.location or "").split()) == location
         ]
         if same:
-            skips.append(
-                GatheringImportRowNote(
-                    row=first.row,
-                    message=f"{group.row_text}: 이미 등록된 일정이라 건너뛰었어요 ({same[0].title}, 코트 {same[0].court_numbers or '-'})",
-                )
-            )
+            # 이미 있는 일정: 거기에 없는 코트(나중에 더 잡은 코트)만 그 일정에 더한다
+            target = next((g for g in same if g.status != GatheringStatus.CANCELED), same[0])
+            fee_before = target.fee
+            outcome, message = _add_courts(db, target, group, fairies, current_user)
+            note = GatheringImportRowNote(row=first.row, message=f"{group.row_text}: {message}")
+            if outcome == "added":
+                updates.append(note)
+                touched.append(target)
+                if target.fee != fee_before and any(p.paid for p in target.participants):
+                    notices.append(
+                        f"{_day_text(target)} {target.title}: 코트를 더해 n빵 금액이 바뀌었어요. "
+                        "이미 입금한 사람은 차액을 확인해 주세요."
+                    )
+            elif outcome == "error":
+                errors.append(GatheringImportRowError(row=first.row, error=note.message))
+            else:
+                skips.append(note)
             continue
 
         gathering = Gathering(
@@ -1223,20 +1241,7 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         if club:
             gathering.guest_fee = GUEST_FEE_DEFAULT
             fill_club_account(gathering, club_account)
-            # 코트 한 면마다 코트요정에게 줄 코트비. 예약자명(예약에 쓴 이름)은 코트 칸에 남긴다.
-            # 회원이 아닌 코트요정은 이름만 남긴다(정산 탭에 이름으로, 가입 승인 때 그 회원에게 이어짐)
-            for r, fairy in zip(group.rows, fairies):
-                if r.court_fee <= 0:
-                    continue  # 무료 코트(0원): 보낼 코트비가 없다
-                label = f"{_court_label(r.court)} · 예약 {r.booker}"[:50]
-                gathering.court_bookings.append(
-                    CourtBooking(
-                        booker_id=fairy.id if fairy else None,
-                        booker_name=None if fairy else r.fairy[:50],
-                        amount=r.court_fee,
-                        court_label=label,
-                    )
-                )
+            gathering.court_bookings.extend(_sheet_bookings(group.rows, fairies))
         else:
             # 일반 벙개: 참석자끼리 코트비+캔볼비 n빵. 회원인 첫 코트요정이 벙주(환급 계좌가 있으면 그 계좌).
             # 교류전(참가비)은 코트비만 기록하고 1인 참가비는 모임 수정에서 정한다(_apply_kind_rules).
@@ -1256,23 +1261,133 @@ def _import_court_sheet(db: Session, header: tuple, rows, current_user: User) ->
         made.append(gathering)
 
     db.flush()
-    for g in made:
+    for g in made + touched:
         _share_place(db, g)
+    for g in touched:
+        promote_waiting(db, g)  # 코트를 더해 정원이 늘었으면 대기자가 올라간다
     db.commit()
-    notices = (
-        [f"일반 벙개({', '.join(no_account)})는 입금 계좌가 비어 있어요. 모임 수정에서 계좌를 적어 주세요."]
-        if no_account
-        else []
-    )
+    if no_account:
+        notices.insert(
+            0, f"일반 벙개({', '.join(no_account)})는 입금 계좌가 비어 있어요. 모임 수정에서 계좌를 적어 주세요."
+        )
     return GatheringImportResult(
         created=len(made),
         failed=len(errors),
         errors=errors,
         skipped=len(skips),
         skips=skips,
+        updated=len(updates),
+        updates=updates,
         items=_import_items(made),
         notices=notices,
     )
+
+
+def _sheet_bookings(rows: list[sheet.SheetRow], fairies: list[User | None]) -> list[CourtBooking]:
+    """오테식 모임: 코트 한 면마다 코트요정에게 줄 코트비. 예약자명(예약에 쓴 이름)은 코트 칸에 남긴다.
+    회원이 아닌 코트요정은 이름만 남긴다(정산 탭에 이름으로, 가입 승인 때 그 회원에게 이어짐).
+    무료 코트(0원)는 보낼 코트비가 없어 넣지 않는다."""
+    return [
+        CourtBooking(
+            booker_id=fairy.id if fairy else None,
+            booker_name=None if fairy else r.fairy[:50],
+            amount=r.court_fee,
+            court_label=f"{_court_label(r.court)} · 예약 {r.booker}"[:50],
+        )
+        for r, fairy in zip(rows, fairies)
+        if r.court_fee > 0
+    ]
+
+
+def _court_key(court: str) -> str:
+    """같은 코트인지 비교용: '3번'·'3 번 코트'·'3' → '3'"""
+    return re.sub(r"\s|번|코트", "", court)
+
+
+def _day_text(g: Gathering) -> str:
+    """'1/17 10:00'"""
+    when = f"{g.event_date.month}/{g.event_date.day}"
+    return f"{when} {g.start_time:%H:%M}" if g.start_time else when
+
+
+def _join_names(*texts: str | None) -> list[str]:
+    """'서승우, 오장원' 들을 이어 겹치는 이름은 한 번만."""
+    names = [" ".join(n.split()) for t in texts if t for n in t.split(",")]
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def _add_courts(
+    db: Session, g: Gathering, group: sheet.SheetGroup, fairies: list[User | None], user: User
+) -> tuple[str, str]:
+    """엑셀에 같은 날짜·시간·장소·종류의 일정이 이미 있을 때: 그 일정에 없는 코트만 더한다 (모임 수정과 같다).
+
+    코트 예약 시트를 달 중간에 다시 올리는 경우 — 처음엔 3번만 잡았다가 5번(다른 예약자)을 더 잡았으면
+    5번 행만 기존 일정에 붙인다. 이미 있는 코트 행은 그대로 둔다(예약자가 바뀌었어도 건드리지 않는다).
+    - 코트 번호·코트 수·코트요정·예약자명·비고·주소를 더하고, 오테식 모임은 지급할 코트비를,
+      일반 벙개·교류전(참가비)은 코트비·캔볼비를 더한다.
+    - 정원이 코트 수 × 6명(비워서 정해진 값)이었으면 늘어난 코트 수로 다시 정한다. 엑셀에 최대 인원을 적었으면 그 값.
+    - 코트는 뒤에 붙인다 (교류전 대진이 코트 순서로 코트를 가리킨다).
+    돌려주는 값: ("added" | "skip" | "error", 안내 문구)
+    """
+    have = sheet.court_labels(g.court_numbers or "")
+    have_keys = {_court_key(c) for c in have}  # 직접 등록한 일정은 '3번'처럼 적었을 수 있다
+    already = f"이미 등록된 일정이라 건너뛰었어요 ({g.title}, 코트 {g.court_numbers or '-'})"
+    if g.status == GatheringStatus.CANCELED:
+        return "skip", f"같은 시간에 취소된 일정이 있어 건너뛰었어요 ({g.title}, 코트 {g.court_numbers or '-'})"
+    if not have:
+        return "skip", already  # 코트 번호를 안 적은 일정: 같은 코트인지 알 수 없다
+    new_rows: list[sheet.SheetRow] = []
+    new_fairies: list[User | None] = []
+    for r, fairy in zip(group.rows, fairies):
+        courts = r.court.split(", ")
+        hit = [c for c in courts if _court_key(c) in have_keys]
+        if not hit:
+            new_rows.append(r)
+            new_fairies.append(fairy)
+        elif len(hit) < len(courts):
+            return "error", (
+                f"{r.row}행에 이미 등록된 코트({', '.join(map(_court_label, hit))})가 함께 적혀 있어요. "
+                "새로 잡은 코트만 따로 한 행에 적어 주세요"
+            )
+    if not new_rows:
+        return "skip", already
+    if g.status == GatheringStatus.COMPLETED or visibility.now_kst() >= _ends_at(g):
+        return "skip", f"이미 끝난 일정이라 코트를 더하지 않았어요 ({g.title}, 코트 {g.court_numbers})"
+    if g.exchange is not None and g.exchange.finished_at is not None:
+        return "skip", f"교류전이 끝나 코트를 더하지 않았어요 ({g.title}, 코트 {g.court_numbers})"
+    if not (user.is_staff or g.created_by == user.id):
+        return "error", f"다른 회원이 올린 일정({g.title})이라 코트를 더하지 않았어요. 벙주나 운영진이 올려 주세요"
+
+    added = [c for r in new_rows for c in r.court.split(", ")]
+    old_count = len(have)
+    g.court_numbers = ", ".join(have + added)[:200]
+    g.court_count = old_count + len(added)
+    g.court_fairy = ", ".join(_join_names(g.court_fairy, *(r.fairy for r in new_rows)))[:200] or None
+    g.court_reservers = ", ".join(t for t in (g.court_reservers, _reservers_text(new_rows)) if t)[:300] or None
+    notes = [n for n in dict.fromkeys(r.note for r in new_rows if r.note) if n not in (g.description or "")]
+    if notes:
+        g.description = "\n".join([g.description, *notes] if g.description else notes)
+    if not g.address:
+        g.address = next((" ".join(r.address.split()) for r in new_rows if r.address), None)
+
+    old_cap = g.max_participants
+    written = next((r.max_participants for r in new_rows if r.max_participants), None)
+    if written:
+        g.max_participants = written
+    elif old_cap is not None and old_cap == sheet.default_capacity(g.kind, old_count):
+        g.max_participants = sheet.default_capacity(g.kind, g.court_count)
+
+    if g.is_club:
+        g.court_bookings.extend(_sheet_bookings(new_rows, new_fairies))
+    else:
+        g.court_fee = (g.court_fee or 0) + sum(r.court_fee for r in new_rows)
+        g.ball_fee = (g.ball_fee or 0) + sum(r.ball_fee for r in new_rows)
+    _apply_kind_rules(g)
+
+    text = f"기존 일정({g.title} {_day_text(g)})에 코트 {', '.join(map(_court_label, added))} 추가 → 코트 {g.court_numbers}"
+    if g.max_participants != old_cap:
+        text += f" · 정원 {old_cap or '제한 없음'}{'명' if old_cap else ''} → {g.max_participants}명"
+    return "added", text
 
 
 @router.get("", response_model=list[GatheringRead])

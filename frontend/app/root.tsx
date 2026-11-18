@@ -57,6 +57,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* 홈 화면 앱(PWA): 상단 상태 표시줄 색을 바탕색(크림/다크)에 맞춘다. 아이폰 홈 화면 이름은 짧게 */}
+        <meta name="theme-color" content={theme === "dark" ? "#21221E" : "#F3ECE3"} />
+        <meta name="apple-mobile-web-app-title" content="오테식" />
         {/* 링크 미리보기: 라우트 meta는 부모 것을 덮어쓰므로 모든 페이지 공통으로 여기에 둔다 */}
         <meta name="description" content={SITE_DESCRIPTION} />
         <meta property="og:type" content="website" />

@@ -666,6 +666,5 @@ export interface PushSettings {
   kinds: Record<PushKind, boolean>;
   /** 알림을 켠 기기 수 */
   devices: number;
-  /** 게스트는 일정 공개 알림을 받지 않는다 */
   guest: boolean;
 }

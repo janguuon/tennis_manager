@@ -15,11 +15,11 @@ import {
 } from "~/lib/push";
 import type { PushKind, PushSettings as Settings } from "~/lib/types";
 
-const KIND_ROWS: { kind: PushKind; label: string; sub: string; memberOnly?: boolean }[] = [
+const KIND_ROWS: { kind: PushKind; label: string; sub: string }[] = [
   { kind: "match", label: "내 경기", sub: "경기 시작(코트 번호)과 다음 차례" },
   { kind: "reminder", label: "참석 일정 1시간 전", sub: "참석으로 투표한 모임이 곧 시작할 때" },
   { kind: "waitlist", label: "대기 → 참석", sub: "대기하던 모임에 자리가 났을 때" },
-  { kind: "schedule", label: "일정 공개", sub: "다음 주 일정이 열릴 때 (금요일 오전 10시)", memberOnly: true },
+  { kind: "schedule", label: "일정 공개", sub: "금요일 오전 10시 다음 주 일정 공개, 새로 열린 일정" },
   { kind: "news", label: "클럽 소식", sub: "운영진 소식, 교류전·대회 결과" },
 ];
 
@@ -102,7 +102,6 @@ export function PushSettings({ initial }: { initial: Settings | null }) {
     }
   };
 
-  const rows = KIND_ROWS.filter((r) => !(r.memberOnly && settings?.guest));
   return (
     <section className="card scroll-mt-4" id="push">
       <h2 className="section-title flex items-center gap-2">
@@ -181,7 +180,7 @@ export function PushSettings({ initial }: { initial: Settings | null }) {
         <div className="mt-5">
           <p className="label">받을 알림</p>
           <ul className="push-kinds">
-            {rows.map((r) => (
+            {KIND_ROWS.map((r) => (
               <li key={r.kind}>
                 <label className="push-kind">
                   <span className="min-w-0">

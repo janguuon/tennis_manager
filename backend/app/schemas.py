@@ -1368,7 +1368,7 @@ class PushSettingsRead(BaseModel):
     public_key: str
     kinds: dict[str, bool]
     devices: int = 0
-    # 게스트는 일정 공개 알림을 받지 않는다 (화면에서 그 줄을 숨긴다)
+    # 게스트: 금요일 일정 공개 알림의 투표 안내가 다르다 ('새 일정' 알림은 받지 않는다)
     guest: bool = False
 
 

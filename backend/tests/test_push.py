@@ -141,7 +141,7 @@ def test_reminder_one_hour_before(club, sent):
     assert to(sent) == ["kim", "kim"] and sent[1]["title"] == "⏰ 모임 30분 뒤 시작"
 
 
-def test_schedule_open_notice(club, sent, fixed_now):
+def _open_setup(club):
     club.add_members("kim", "park", "guest1")
     club.set_type("guest1", "guest")
     for n in ("kim", "park", "guest1"):
@@ -149,37 +149,77 @@ def test_schedule_open_notice(club, sent, fixed_now):
     admin = {"endpoint": "https://fcm.googleapis.com/wp/admin", "keys": KEYS}
     club.c.post("/push/subscriptions", json=admin, headers=club.admin)
 
+
+def test_weekly_open_on_friday(club, sent):
+    _open_setup(club)
     # 처음 켤 때는 이미 열린 일정을 알리지 않는다 (FAR_DATE 모임은 이미 열려 있다)
     club.gathering(0)
     push.tick(datetime(2099, 1, 12, 9, 1))
     assert sent == []
 
-    # 다음 주 일정: 금요일 오전 10시에 열린다 → 정회원에게 (게스트·만든 사람 빼고), 여러 개면 묶어서
-    a = club.gathering(0, date="2099-01-22", title="정모", start_time="10:00")
+    # 금요일 오전 10시: '다음 주 일정이 공개됐어요' 전체 알림 (게스트·만든 사람 포함, 게스트는 투표 안내가 다르다)
+    club.gathering(0, date="2099-01-22", title="정모", start_time="10:00")
     push.tick(datetime(2099, 1, 16, 9, 59))
     assert sent == []
     push.tick(datetime(2099, 1, 16, 10, 0))
-    assert to(sent) == ["kim", "park"]
-    assert sent[0]["title"] == "📅 새 일정이 열렸어요" and sent[0]["body"] == "1/22(목) 10:00 정모"
-    assert sent[0]["url"] == f"/app/gatherings/{a}"
+    assert to(sent) == ["admin", "guest1", "kim", "park"]
+    assert {m["title"] for m in sent} == {"📅 다음 주 일정이 공개됐어요"}  # '새 일정' 알림은 따로 안 간다
+    by = {m["to"]: m for m in sent}
+    assert by["kim"]["body"] == "1/19(월)~1/25(일) 일정 1개 — 1/22(목) 정모. 지금 참석 투표해 주세요!"
+    assert by["guest1"]["body"] == "1/19(월)~1/25(일) 일정 1개 — 1/22(목) 정모. 게스트 참석 투표는 모임 3일 전부터 열려요."
+    assert by["kim"]["url"] == "/app/calendar?month=2099-01"
+    push.tick(datetime(2099, 1, 16, 10, 1))
+    assert len(sent) == 4
 
+    # 공개 뒤에 만든 다음 주 일정은 정회원에게 '새 일정' (만든 사람·게스트 빼고), 여러 개면 묶어서
     sent.clear()
-    club.gathering(0, date="2099-01-29", title="벙개1")
-    club.gathering(0, date="2099-01-30", title="벙개2")
-    push.tick(datetime(2099, 1, 23, 10, 0))
+    club.gathering(0, date="2099-01-23", title="벙개1")
+    club.gathering(0, date="2099-01-24", title="벙개2")
+    push.tick(datetime(2099, 1, 17, 9, 0))
     assert to(sent) == ["kim", "park"]
-    assert sent[0]["title"] == "📅 새 일정 2개가 열렸어요" and sent[0]["body"] == "1/29(목) 벙개1, 1/30(금) 벙개2"
-    push.tick(datetime(2099, 1, 23, 10, 1))
-    assert len(sent) == 2
+    assert sent[0]["title"] == "📅 새 일정 2개가 열렸어요" and sent[0]["body"] == "1/23(금) 벙개1, 1/24(토) 벙개2"
 
-    # 운영진이 미리 공개하면 다음 확인 때 (일정 공개 알림을 끈 사람은 빼고)
+    # 다음 주 일정이 많으면 앞 3개만, 취소된 일정은 빼고, 일정 공개 알림을 끈 사람은 빼고
     sent.clear()
     club.c.put("/push/settings", json={"kinds": {"schedule": False}}, headers=club.h("park"))
-    fixed_now["now"] = datetime(2099, 1, 24, 9, 0)
-    early = club.gathering(0, date="2099-02-05", title="미리")
+    for d, t in (("2099-01-26", "월벙"), ("2099-01-27", "화벙"), ("2099-01-29", "목정모"), ("2099-01-31", "토정모")):
+        club.gathering(0, date=d, title=t)
+    rain = club.gathering(0, date="2099-01-30", title="우천")
+    club.c.post(f"/gatherings/{rain}/cancel", json={"reason": "우천"}, headers=club.admin)
+    push.tick(datetime(2099, 1, 23, 10, 0))
+    assert to(sent) == ["admin", "guest1", "kim"]
+    assert by_body(sent, "kim").startswith("1/26(월)~2/1(일) 일정 4개 — 1/26(월) 월벙, 1/27(화) 화벙, 1/29(목) 목정모 외 1개.")
+
+    # 다음 주 일정이 없으면 보내지 않는다. 그 시각에 서버가 꺼져 있었으면 금요일 안에 늦게라도
+    sent.clear()
+    push.tick(datetime(2099, 1, 30, 10, 0))
+    assert sent == []
+    club.gathering(0, date="2099-02-12", title="2주 뒤")
+    push.tick(datetime(2099, 2, 6, 15, 30))
+    assert to(sent) == ["admin", "guest1", "kim"] and "2/12(목) 2주 뒤" in sent[0]["body"]
+
+
+def by_body(sent, name):
+    return next(m["body"] for m in sent if m["to"] == name)
+
+
+def test_early_open_goes_to_members(club, sent, fixed_now):
+    _open_setup(club)
+    push.tick(datetime(2099, 1, 12, 9, 1))  # 첫 실행
+    # 운영진이 미리 공개하면 다음 확인 때 정회원에게 (게스트·만든 사람 빼고)
+    fixed_now["now"] = datetime(2099, 1, 13, 9, 0)
+    early = club.gathering(0, date="2099-01-22", title="미리", start_time="19:00", location="망원 코트")
+    push.tick(datetime(2099, 1, 13, 9, 1))
+    assert sent == []  # 아직 공개 전
     assert club.c.post(f"/gatherings/{early}/open", headers=club.admin).status_code == 200
-    push.tick(datetime(2099, 1, 24, 9, 1))
-    assert to(sent) == ["kim"] and "미리" in sent[0]["body"]
+    push.tick(datetime(2099, 1, 13, 9, 2))
+    assert to(sent) == ["kim", "park"]
+    assert sent[0]["title"] == "📅 새 일정이 열렸어요" and sent[0]["body"] == "1/22(목) 19:00 미리 · 망원 코트"
+    assert sent[0]["url"] == f"/app/gatherings/{early}"
+    # 금요일 전체 알림에는 미리 공개한 일정도 들어간다
+    sent.clear()
+    push.tick(datetime(2099, 1, 16, 10, 0))
+    assert to(sent) == ["admin", "guest1", "kim", "park"] and "1/22(목) 미리" in sent[0]["body"]
 
 
 def _draw_setup(club):

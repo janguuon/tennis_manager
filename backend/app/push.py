@@ -5,7 +5,8 @@
 (PushSubscription). 서버는 VAPID 키로 서명해 그 주소(구글 FCM·애플 등)에 암호화한 알림을 보낸다. 외부 가입은 필요 없다.
 
 알림 종류 (회원이 마이페이지에서 종류마다 끈다, User.push_off):
-- schedule: 일정 공개 — 정회원에게. 금요일 오전 10시에 다음 주 일정이 열리면 한 번에 묶어서, 미리 공개·나중에 만든 일정은 열릴 때.
+- schedule: 일정 공개 — 금요일 오전 10시 '다음 주 일정이 공개됐어요' 전체 알림(게스트 포함, 게스트는 투표 안내가 다르다).
+  미리 공개·공개 뒤에 만든 일정은 열릴 때 정회원에게 '새 일정이 열렸어요'.
 - reminder: 참석한 일정 시작 1시간 전 (대기자 빼고)
 - waitlist: 대기에서 참석으로 바뀌었을 때
 - news: 클럽 소식 (운영진 소식, 교류전·대회 결과 소식)
@@ -37,7 +38,6 @@ from .models import (
     ClubSetting,
     Gathering,
     GatheringStatus,
-    MemberType,
     Notice,
     PushSent,
     PushSubscription,
@@ -414,16 +414,58 @@ def send_reminders(db: Session, now: datetime) -> int:
     return count
 
 
+def _everyone(db: Session) -> list[User]:
+    """승인된 회원·게스트 (탈퇴 빼고)."""
+    return list(
+        db.scalars(select(User).where(User.approval_status == ApprovalStatus.APPROVED, User.is_active.is_(True))).all()
+    )
+
+
 def _members(db: Session) -> list[User]:
-    """일정 공개 알림을 받는 사람: 승인된 정회원·운영진 (게스트 빼고)."""
-    users = db.scalars(
-        select(User).where(User.approval_status == ApprovalStatus.APPROVED, User.is_active.is_(True))
+    """'새 일정이 열렸어요' 를 받는 사람: 정회원·운영진 (게스트 빼고)."""
+    return [u for u in _everyone(db) if not u.is_guest]
+
+
+def send_weekly_open(db: Session, now: datetime) -> int:
+    """
+    금요일 오전 10시: '다음 주 일정이 공개됐어요' 전체 알림 (게스트 포함, 일정 공개 알림을 끈 사람 빼고).
+
+    다음 주(월~일) 일정을 한 번에 소개한다. 서버가 그 시각에 꺼져 있었으면 그날 안에 늦게라도.
+    다음 주 일정이 하나도 없으면 보내지 않는다. 이때 열린 일정은 '새 일정' 알림을 따로 보내지 않는다.
+    """
+    monday = now.date() + timedelta(days=7 - now.weekday())
+    opens = visibility.member_open_at(monday)
+    if not (opens <= now and now.date() == opens.date()):
+        return 0
+    if not once(db, "weekly", monday.isoformat()):
+        return 0
+    sunday = monday + timedelta(days=6)
+    gs = db.scalars(
+        select(Gathering)
+        .where(Gathering.event_date.between(monday, sunday), Gathering.status != GatheringStatus.CANCELED)
+        .order_by(Gathering.event_date, Gathering.start_time, Gathering.id)
     ).all()
-    return [u for u in users if u.is_admin or u.member_type != MemberType.GUEST]
+    for g in gs:
+        once(db, "open", str(g.id))
+    db.flush()  # send_openings 가 이 기록을 보게
+    if not gs:
+        return 0
+    names = ", ".join(f"{day_text(g.event_date)} {g.title}" for g in gs[:3])
+    more = f" 외 {len(gs) - 3}개" if len(gs) > 3 else ""
+    head = f"{day_text(monday)}~{day_text(sunday)} 일정 {len(gs)}개 — {names}{more}."
+    title = "📅 다음 주 일정이 공개됐어요"
+    url = f"/app/calendar?month={monday:%Y-%m}"
+    users = _everyone(db)
+    notify(db, [u.id for u in users if not u.is_guest], "schedule", title, f"{head} 지금 참석 투표해 주세요!", url,
+           tag="weekly", ttl=86400)
+    notify(db, [u.id for u in users if u.is_guest], "schedule", title,
+           f"{head} 게스트 참석 투표는 모임 3일 전부터 열려요.", url, tag="weekly", ttl=86400)
+    return len(gs)
 
 
 def send_openings(db: Session, now: datetime) -> int:
-    """새로 열린 일정(정회원에게 보이기 시작한 일정)을 알린다. 한 번에 여러 개면 묶어서."""
+    """새로 열린 일정(정회원에게 보이기 시작한 일정)을 알린다: 미리 공개·공개 뒤에 만든 일정. 한 번에 여러 개면 묶어서.
+    금요일 10시에 열리는 다음 주 일정은 send_weekly_open 이 한 번에 알린다."""
     upcoming = db.scalars(
         select(Gathering)
         .where(Gathering.event_date >= now.date(), Gathering.status != GatheringStatus.CANCELED)
@@ -460,6 +502,7 @@ def tick(now: datetime | None = None) -> None:
     now = now or visibility.now_kst()
     with SessionLocal() as db:
         send_reminders(db, now)
+        send_weekly_open(db, now)
         send_openings(db, now)
         db.commit()
 

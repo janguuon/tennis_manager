@@ -28,6 +28,7 @@ import { Emblem } from "~/components/Logo";
 import { MyVotePill } from "~/components/MyVote";
 import { NOTICE_ICON, NOTICE_LABEL, noticeDate } from "~/components/NoticePopup";
 import { PageBody, PageHeader } from "~/components/Page";
+import { PushPrompt } from "~/components/PushSettings";
 import { api } from "~/lib/api.server";
 import { ATTENDANCE_LOCK_DAYS, isFull, waitingList } from "~/lib/attendance";
 import { COURT_SURFACE_LABEL, KIND_DOT, guestsByInvite, isGuest, isStaff, naverMapUrl } from "~/lib/club";
@@ -177,6 +178,8 @@ export default function HomePage() {
           </div>
         }
       />
+      {/* 폰 알림 켜기 안내 (휴대폰에서 아직 정하지 않았을 때 한 번) */}
+      <PushPrompt />
       {/* 클럽 소식 띠: 가입 대기(관리자) → 최근 소식 → 다가오는 모임 순서로 하나를 크게 보여 준다 */}
       <Link
         to={

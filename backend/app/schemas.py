@@ -911,6 +911,8 @@ class DrawMatchRead(BaseModel):
     slot_ids: list[int | None] = []
     # 취소된 경기 (점수를 받지 않는다)
     canceled: bool = False
+    # 경기 시작을 누른 시각 (점수가 들어가기 전이면 '진행 중')
+    started_at: datetime | None = None
 
 
 DrawSlot = Literal["team1_player1", "team1_player2", "team2_player1", "team2_player2"]
@@ -1284,6 +1286,8 @@ class ExchangeMatchRead(BaseModel):
     canceled: bool = False
     # 대진을 짠 뒤 불참으로 바뀐 우리 선수 (다시 짜거나 바꿔 넣어야 한다)
     absent_ids: list[int] = []
+    # 경기 시작을 누른 시각 (점수가 들어가기 전이면 '진행 중')
+    started_at: datetime | None = None
 
 
 class ExchangeDetail(ExchangeSummary):
@@ -1350,3 +1354,51 @@ class ExchangeFinish(BaseModel):
 
     winner: ExchangeResult | None = None
     announce: bool = True
+
+
+# ---------------------------------------------------------------------------
+# 폰 알림 (routers/notifications.py, push.py)
+# ---------------------------------------------------------------------------
+PushKind = Literal["schedule", "reminder", "waitlist", "news", "match"]
+
+
+class PushSettingsRead(BaseModel):
+    """알림 설정: 브라우저가 구독할 때 쓰는 공개 키, 종류별 켜짐, 알림을 켠 기기 수."""
+
+    public_key: str
+    kinds: dict[str, bool]
+    devices: int = 0
+    # 게스트는 일정 공개 알림을 받지 않는다 (화면에서 그 줄을 숨긴다)
+    guest: bool = False
+
+
+class PushSettingsUpdate(BaseModel):
+    kinds: dict[PushKind, bool]
+
+
+class PushKeys(BaseModel):
+    p256dh: str = Field(min_length=20, max_length=200, pattern=r"^[A-Za-z0-9_\-=]+$")
+    auth: str = Field(min_length=8, max_length=100, pattern=r"^[A-Za-z0-9_\-=]+$")
+
+
+class PushSubscribe(BaseModel):
+    """브라우저 PushSubscription.toJSON() 과 같은 모양 + 기기 이름(user agent)·앱 주소(VAPID sub 용)."""
+
+    endpoint: str = Field(min_length=10, max_length=1000)
+    keys: PushKeys
+    user_agent: str | None = Field(default=None, max_length=300)
+    origin: str | None = Field(default=None, max_length=200)
+
+
+class PushEndpoint(BaseModel):
+    endpoint: str = Field(min_length=10, max_length=1000)
+
+
+class PushTestRequest(BaseModel):
+    # 이 기기에만 (비우면 내 기기 모두)
+    endpoint: str | None = Field(default=None, max_length=1000)
+
+
+class PushTestResult(BaseModel):
+    sent: int
+    failed: int

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import matchmaking, rating, visibility
+from .. import matchmaking, push, rating, visibility
 from ..database import get_db
 from ..deps import GUEST_ONLY_VIEW_AND_VOTE, get_current_user
 from ..models import (
@@ -124,6 +124,7 @@ def _draw_match_reads(
                 balance=_balance(dm, book),
                 slot_ids=[getattr(dm, slot) for slot in _SLOT_COLUMNS],
                 canceled=dm.canceled_at is not None,
+                started_at=dm.started_at,
             )
         )
     return reads
@@ -566,6 +567,7 @@ def record_draw_match_result(
     db.add(match)
     db.flush()  # match.id 확보
     dm.result_match_id = match.id
+    _call_next(db, gathering, dm, current_user)
     db.commit()
     db.refresh(dm)
     return _single_draw_match_read(dm, db)
@@ -671,6 +673,133 @@ def restore_draw_match(
     db.commit()
     db.refresh(dm)
     return _single_draw_match_read(dm, db)
+
+
+# --- 경기 시작 (폰 알림) -----------------------------------------------------
+def _teams(dm: DrawMatch) -> tuple[list[int], list[int]]:
+    return (
+        [p for p in (dm.team1_player1_id, dm.team1_player2_id) if p is not None],
+        [p for p in (dm.team2_player1_id, dm.team2_player2_id) if p is not None],
+    )
+
+
+def _startable(dm: DrawMatch) -> bool:
+    """점수 전·취소 아님·선수가 다 찬 경기."""
+    need = 1 if dm.match_type == MatchType.SINGLES else 2
+    t1, t2 = _teams(dm)
+    return dm.result_match_id is None and dm.canceled_at is None and len(t1) == need and len(t2) == need
+
+
+def _line(db: Session, dm: DrawMatch) -> str:
+    """'김철수·박영희 vs 이민수·최지은'"""
+    t1, t2 = _teams(dm)
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(t1 + t2))).all())
+    return " vs ".join("·".join(names.get(p, "") for p in team) for team in (t1, t2))
+
+
+def _round_text(dm: DrawMatch) -> str:
+    return f"{dm.round_number}라운드 · " if dm.round_number else ""
+
+
+def _start(db: Session, g: Gathering, dm: DrawMatch, user: User) -> None:
+    dm.started_at = visibility.now_kst()
+    push.match_started(
+        db, g, _draw_match_player_ids(dm), push.court_text(g, dm.court_number), _round_text(dm), _line(db, dm),
+        f"match-d{dm.id}", user.id,
+    )
+
+
+def _require_match_day(g: Gathering) -> None:
+    if not push.match_day_ok(g):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="경기 시작은 모임 날에 할 수 있어요.")
+
+
+def _call_next(db: Session, g: Gathering, dm: DrawMatch, user: User) -> None:
+    """점수가 들어오면 같은 코트의 다음 경기 선수에게 '다음 차례' 알림 (모임 시간 안에서만, 경기마다 한 번)."""
+    if dm.court_number is None or dm.round_number is None or not push.in_progress(g):
+        return
+    later = db.scalars(
+        select(DrawMatch)
+        .where(
+            DrawMatch.draw_id == dm.draw_id,
+            DrawMatch.court_number == dm.court_number,
+            DrawMatch.round_number > dm.round_number,
+            DrawMatch.canceled_at.is_(None),
+        )
+        .order_by(DrawMatch.round_number, DrawMatch.id)
+    ).first()
+    if later is None or later.started_at is not None or not _startable(later):
+        return
+    push.next_turn(
+        db, g, _draw_match_player_ids(later), push.court_text(g, later.court_number),
+        f"{_round_text(later)}{_line(db, later)}", f"d{later.id}", user.id,
+    )
+
+
+@router.post("/draw-matches/{draw_match_id}/start", response_model=DrawMatchRead)
+def start_draw_match(
+    draw_match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """경기 시작: 그 경기 선수에게 코트 번호와 함께 폰 알림, 대진표에 '진행 중'. 이미 시작했으면 그대로 (알림도 다시 안 감).
+    누를 수 있는 사람은 점수 입력과 같다 (모임 올린 사람·운영진·그 경기 선수)."""
+    dm = db.get(DrawMatch, draw_match_id)
+    if not dm:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
+    g = _require_scorer(db, dm, current_user)
+    if dm.result_match_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="이미 점수가 들어간 경기예요.")
+    if dm.canceled_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="취소한 경기예요.")
+    if not _startable(dm):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="대진의 선수 구성이 완전하지 않습니다.")
+    _require_match_day(g)
+    if dm.started_at is None:
+        _start(db, g, dm, current_user)
+        db.commit()
+    db.refresh(dm)
+    return _single_draw_match_read(dm, db)
+
+
+@router.delete("/draw-matches/{draw_match_id}/start", response_model=DrawMatchRead)
+def unstart_draw_match(
+    draw_match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """경기 시작 되돌리기 (잘못 눌렀을 때)."""
+    dm = db.get(DrawMatch, draw_match_id)
+    if not dm:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="대진 경기를 찾을 수 없습니다.")
+    _require_scorer(db, dm, current_user)
+    if dm.result_match_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="이미 점수가 들어간 경기예요.")
+    dm.started_at = None
+    db.commit()
+    db.refresh(dm)
+    return _single_draw_match_read(dm, db)
+
+
+@router.post("/draws/{draw_id}/rounds/{round_number}/start", response_model=DrawRead)
+def start_draw_round(
+    draw_id: int,
+    round_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """라운드 시작: 그 라운드에서 아직 시작하지 않은 경기를 한 번에 시작한다 (모임 올린 사람·운영진)."""
+    draw = _load_draw(db, draw_id)
+    g = _require_organizer(db, draw.gathering_id, current_user)
+    in_round = [dm for dm in draw.draw_matches if dm.round_number == round_number]
+    if not in_round:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="그 라운드가 없어요.")
+    _require_match_day(g)
+    for dm in in_round:
+        if dm.started_at is None and _startable(dm):
+            _start(db, g, dm, current_user)
+    db.commit()
+    return _build_draw_read(_load_draw(db, draw_id), db, _book_for(db, current_user))
 
 
 # --- 단건 직렬화 ------------------------------------------------------------

@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session, selectinload
 from .. import calendar_export
 from .. import pickups as pickup_sync
 from .. import schedule_import as sheet
-from .. import visibility
+from .. import push, visibility
 from ..club_account import default_club_account, fill_club_account
 from ..database import get_db
 from ..security import hash_password
@@ -630,6 +630,7 @@ def promote_waiting(db: Session, gathering: Gathering) -> list[Participant]:
     for p in promoted:
         p.status = AttendanceStatus.ATTENDING
         p.waiting_since = None
+    push.promoted(db, gathering, [p.user_id for p in promoted])  # 폰 알림 (커밋되면 간다)
     return promoted
 
 

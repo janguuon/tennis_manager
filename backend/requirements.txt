@@ -11,3 +11,4 @@ python-jose[cryptography]>=3.3
 python-multipart>=0.0.20
 openpyxl>=3.1
 Pillow>=10.4   # 프로필 사진 (정사각형으로 자르고 줄여 저장)
+pywebpush>=2.0   # 폰 알림 (웹 푸시, VAPID)

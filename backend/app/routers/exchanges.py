@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import exchange as X
-from .. import matchmaking, visibility
+from .. import matchmaking, push, visibility
 from ..database import get_db
 from ..deps import get_current_member, get_current_user
 from ..models import (
@@ -227,6 +227,7 @@ def _detail(db: Session, g: Gathering, user: User) -> ExchangeDetail:
                 and (manage or user.id in m.ours_ids),
                 canceled=m.canceled,
                 absent_ids=[p for p in m.ours_ids if p not in attending_ids],
+                started_at=m.started_at,
             )
             for m in matches
         ],
@@ -669,9 +670,12 @@ def record_result(
     so, st = payload.ours_score, payload.theirs_score
     if so + st == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="점수를 게임 수로 입력해 주세요. (예: 6:4)")
+    first = not m.recorded
     m.ours_score, m.theirs_score = so, st
     m.winner = 1 if so > st else 2 if st > so else None
     m.recorded_at = datetime.now()
+    if first:
+        _call_next(db, g, m, current_user)
     return _done(db, g, current_user)
 
 
@@ -688,6 +692,100 @@ def delete_result(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="아직 점수가 없는 경기예요.")
     m.ours_score = m.theirs_score = m.winner = None
     m.recorded_at = None
+    return _done(db, g, current_user)
+
+
+# --- 경기 시작 (폰 알림) -----------------------------------------------------
+def _line(g: Gathering, m: ExchangeMatch, db: Session) -> str:
+    """'김철수·박영희 vs 상대 이민수·최지은'"""
+    names = dict(db.execute(select(User.id, User.name).where(User.id.in_(m.ours_ids))).all())
+    theirs = {o.id: o.name for o in (g.exchange.opponents if g.exchange else [])}
+    ours = "·".join(names.get(p, "") for p in m.ours_ids)
+    return f"{ours} vs {'·'.join(theirs.get(x, '') for x in m.theirs_ids)}"
+
+
+def _start(db: Session, g: Gathering, m: ExchangeMatch, user: User) -> None:
+    m.started_at = visibility.now_kst()
+    push.match_started(
+        db, g, m.ours_ids, push.court_text(g, m.court), f"{m.round_number}라운드 · ", _line(g, m, db),
+        f"match-x{m.id}", user.id,
+    )
+
+
+def _require_match_day(g: Gathering) -> None:
+    if not push.match_day_ok(g):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="경기 시작은 교류전 날에 할 수 있어요.")
+
+
+def _call_next(db: Session, g: Gathering, m: ExchangeMatch, user: User) -> None:
+    """점수가 처음 들어오면 같은 코트 다음 라운드 경기의 우리 선수에게 '다음 차례' (교류전 시간 안에서만)."""
+    if not push.in_progress(g) or g.exchange is None:
+        return
+    later = sorted(
+        (x for x in g.exchange.matches if x.court == m.court and x.round_number > m.round_number and not x.canceled),
+        key=lambda x: (x.round_number, x.id),
+    )
+    nxt = later[0] if later else None
+    if nxt is None or nxt.started_at is not None or nxt.recorded or not _filled(nxt):
+        return
+    push.next_turn(
+        db, g, nxt.ours_ids, push.court_text(g, nxt.court), f"{nxt.round_number}라운드 · {_line(g, nxt, db)}",
+        f"x{nxt.id}", user.id,
+    )
+
+
+@router.post("/{gathering_id}/matches/{match_id}/start", response_model=ExchangeDetail)
+def start_match(
+    gathering_id: int,
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """경기 시작: 그 경기의 우리 선수에게 코트 번호와 함께 폰 알림. 누를 수 있는 사람은 점수와 같다 (운영진·그 경기 선수)."""
+    g = _load(db, gathering_id)
+    m = _scorable(g, match_id, current_user)
+    if m.recorded:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="이미 점수가 들어간 경기예요.")
+    _require_match_day(g)
+    if m.started_at is None:
+        _start(db, g, m, current_user)
+    return _done(db, g, current_user)
+
+
+@router.delete("/{gathering_id}/matches/{match_id}/start", response_model=ExchangeDetail)
+def unstart_match(
+    gathering_id: int,
+    match_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """경기 시작 되돌리기."""
+    g = _load(db, gathering_id)
+    m = _scorable(g, match_id, current_user)
+    if m.recorded:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="이미 점수가 들어간 경기예요.")
+    m.started_at = None
+    return _done(db, g, current_user)
+
+
+@router.post("/{gathering_id}/rounds/{round_number}/start", response_model=ExchangeDetail)
+def start_round(
+    gathering_id: int,
+    round_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_member),
+):
+    """라운드 시작: 그 라운드에서 아직 시작하지 않은 경기를 한 번에 (운영진)."""
+    g = _load(db, gathering_id)
+    _require_manage(current_user)
+    _require_editable(g)
+    in_round = [m for m in (g.exchange.matches if g.exchange else []) if m.round_number == round_number]
+    if not in_round:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="그 라운드가 없어요.")
+    _require_match_day(g)
+    for m in in_round:
+        if m.started_at is None and _live(m) and not m.recorded:
+            _start(db, g, m, current_user)
     return _done(db, g, current_user)
 
 
@@ -753,6 +851,7 @@ def _announce(db: Session, g: Gathering, user: User) -> None:
     db.add(notice)
     db.flush()
     ex.notice_id = notice.id
+    push.notice_posted(db, notice, f"exchange{ex.id}", user.id)
 
 
 @router.post("/{gathering_id}/finish", response_model=ExchangeDetail)

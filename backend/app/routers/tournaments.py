@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import matchmaking
+from .. import matchmaking, push
 from ..database import get_db
 from ..deps import get_current_member
 from ..models import (
@@ -399,6 +399,7 @@ def _announce_winner(db: Session, t: Tournament, winner: str | None, announce: b
     db.add(notice)
     db.flush()
     t.notice_id = notice.id
+    push.notice_posted(db, notice, f"tournament{t.id}", user.id)
 
 
 @router.delete("/{tournament_id}", status_code=status.HTTP_204_NO_CONTENT)

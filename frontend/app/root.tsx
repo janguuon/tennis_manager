@@ -32,7 +32,7 @@ export const links: LinksFunction = () => [
   // 팀 엠블럼: 브라우저 탭, 아이폰 홈 화면, 안드로이드 홈 화면(매니페스트)
   { rel: "icon", type: "image/png", href: "/favicon-64.png" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-  { rel: "manifest", href: "/site.webmanifest" },
+  { rel: "manifest", href: "/manifest.webmanifest" },
 ];
 
 /** 링크 미리보기(카톡 등) 문구 */

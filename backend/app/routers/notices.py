@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from .. import push
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import Notice, User
@@ -55,6 +56,8 @@ def create_notice(
     _require_staff(current_user)
     notice = Notice(**payload.model_dump(), created_by=current_user.id)
     db.add(notice)
+    db.flush()
+    push.notice_posted(db, notice, f"notice{notice.id}", current_user.id)
     db.commit()
     db.refresh(notice)
     return _read(notice, current_user)

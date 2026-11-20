@@ -16,6 +16,7 @@ import {
   Handshake,
   MapPin,
   Pencil,
+  Play,
   Plus,
   Shuffle,
   Trash2,
@@ -30,7 +31,7 @@ import { BackLink, PageBody, PageHeader } from "~/components/Page";
 import { ApiError, api } from "~/lib/api.server";
 import { genderShort } from "~/lib/club";
 import { courtName, exchangeStatus, OURS_LABEL, opponentLabel, resultLabel } from "~/lib/exchange";
-import { formatDate } from "~/lib/format";
+import { formatDate, isMatchDay } from "~/lib/format";
 import { requireMember } from "~/lib/guard.server";
 import { requireToken } from "~/lib/session.server";
 import {
@@ -135,6 +136,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
         break;
       case "delete_result":
         await api(`${base}/matches/${match}/result`, { method: "DELETE", token });
+        break;
+      case "start_match":
+      case "unstart_match":
+        // 경기 시작: 그 경기의 우리 선수에게 코트 번호와 함께 폰 알림
+        await api(`${base}/matches/${match}/start`, { method: intent === "start_match" ? "POST" : "DELETE", token });
+        break;
+      case "start_round":
+        await api(`${base}/rounds/${formData.get("round")}/start`, { method: "POST", token });
         break;
       case "cancel_match":
       case "restore_match":
@@ -724,10 +733,28 @@ function Round({ x, round, manage }: { x: ExchangeDetail; round: number; manage:
     ...x.opponents.filter((o) => !playingT.has(o.id)).map((o) => `${o.name}(상대)`),
   ];
   const recorded = matches.some((m) => m.recorded);
+  // 라운드 시작 (운영진, 교류전 날): 아직 시작 안 한 경기를 한 번에 → 우리 선수 폰에 코트 번호 알림
+  const canStartRound =
+    manage && isMatchDay(x.event_date) && matches.some((m) => m.ours.length && !m.canceled && !m.recorded && !m.started_at);
   return (
     <div className="exchange-round">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[15px] font-extrabold">{round}라운드</h3>
+        {canStartRound ? (
+          <Form
+            method="post"
+            className="ml-auto"
+            onSubmit={(e) => {
+              if (!confirm(`${round}라운드 경기를 모두 시작할까요? 우리 선수들 폰에 코트 번호 알림이 가요.`)) e.preventDefault();
+            }}
+          >
+            <input type="hidden" name="intent" value="start_round" />
+            <input type="hidden" name="round" value={round} />
+            <button className="btn-ghost btn-sm">
+              <Play size={13} /> 라운드 시작
+            </button>
+          </Form>
+        ) : null}
         {manage && !recorded ? (
           <span className="flex items-center gap-1">
             <Form
@@ -797,6 +824,7 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
             {empty ? "" : ` · ${MATCH_TYPE_LABEL[m.match_type]}`}
           </span>
           {m.canceled ? <span className="badge-orange-soft shrink-0">경기 취소</span> : null}
+          {m.started_at && !m.recorded && !m.canceled ? <span className="badge-orange shrink-0">진행 중</span> : null}
         </span>
         {manage && !m.recorded && !empty && !m.canceled ? (
           <button type="button" className="text-[11px] font-semibold text-slate-500 underline-offset-2 hover:underline" onClick={() => setEditing(true)}>
@@ -845,6 +873,7 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
             </div>
           ) : (
             <>
+              {m.can_score && !m.recorded && isMatchDay(x.event_date) ? <StartRow m={m} /> : null}
               <ScoreBox m={m} opponent={opponent} />
               {manage && !m.recorded ? (
                 <Form
@@ -868,6 +897,32 @@ function MatchCard({ x, m, manage }: { x: ExchangeDetail; m: ExchangeMatch; mana
       )}
       {editing ? <LineupModal x={x} m={m} onClose={() => setEditing(false)} /> : null}
     </div>
+  );
+}
+
+/** 경기 시작 줄: 누르면 우리 선수 폰에 코트 번호 알림. 시작했으면 시각과 되돌리기 */
+function StartRow({ m }: { m: ExchangeMatch }) {
+  const busy = useBusy(m.started_at ? "unstart_match" : "start_match", { name: "match_id", value: m.id });
+  return m.started_at ? (
+    <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+      <span>{m.started_at.slice(11, 16)}에 시작했어요</span>
+      <Form method="post" className="ml-auto">
+        <input type="hidden" name="intent" value="unstart_match" />
+        <input type="hidden" name="match_id" value={m.id} />
+        <button className="text-[11px] font-semibold underline-offset-2 hover:underline" disabled={busy}>
+          시작 되돌리기
+        </button>
+      </Form>
+    </div>
+  ) : (
+    <Form method="post" className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+      <input type="hidden" name="intent" value="start_match" />
+      <input type="hidden" name="match_id" value={m.id} />
+      <button className="btn-secondary btn-sm" disabled={busy}>
+        <Play size={13} /> 경기 시작
+      </button>
+      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">우리 선수 폰에 코트 번호가 가요</span>
+    </Form>
   );
 }
 

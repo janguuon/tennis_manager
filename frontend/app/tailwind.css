@@ -1533,3 +1533,44 @@
     opacity: 0;
   }
 }
+
+/* --- 폰 알림 (마이페이지 '폰 알림', 홈 안내) --- */
+@layer components {
+  .push-device {
+    @apply rounded-2xl border-[1.5px] border-slate-200 bg-paper px-4 py-4 dark:border-slate-700 dark:bg-slate-900;
+  }
+  .push-step {
+    @apply inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-extrabold text-white
+      dark:bg-white dark:text-ink;
+  }
+  .push-kinds {
+    @apply divide-y divide-slate-200 rounded-2xl border-[1.5px] border-slate-200 dark:divide-slate-700 dark:border-slate-700;
+  }
+  .push-kind {
+    @apply flex cursor-pointer items-center justify-between gap-3 px-4 py-3;
+  }
+  .push-kind strong {
+    @apply block text-[14px] font-bold;
+  }
+  .push-kind small {
+    @apply mt-0.5 block text-xs font-medium text-slate-500 dark:text-slate-400;
+  }
+  /* 켜기/끄기 스위치 (체크박스) */
+  .push-switch {
+    @apply relative h-7 w-12 shrink-0 cursor-pointer appearance-none rounded-full bg-slate-300 transition-colors
+      checked:bg-ink dark:bg-slate-700 dark:checked:bg-house-green;
+  }
+  .push-switch::after {
+    content: "";
+    @apply absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform;
+  }
+  .push-switch:checked::after {
+    @apply translate-x-5;
+  }
+  .push-switch:focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-ink dark:outline-white;
+  }
+  .push-prompt {
+    @apply flex items-center gap-3 rounded-[22px] bg-house-yellow px-4 py-3.5 text-ink;
+  }
+}

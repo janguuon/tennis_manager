@@ -27,6 +27,7 @@ import {
   Lock,
   MapPin,
   Pencil,
+  Play,
   Plus,
   Scale,
   Send,
@@ -70,7 +71,7 @@ import {
   naverMapUrl,
 } from "~/lib/club";
 import { courtLabels } from "~/lib/courts";
-import { accountText, won } from "~/lib/format";
+import { accountText, isMatchDay, won } from "~/lib/format";
 import { feeFieldsFromForm } from "~/lib/gathering-form";
 import { shareToKakao, withLink } from "~/lib/kakao";
 import { membersOrEmpty } from "~/lib/guard.server";
@@ -651,6 +652,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
         method: intent === "cancel_match" ? "POST" : "DELETE",
         token,
       });
+    } else if (intent === "start_match" || intent === "unstart_match") {
+      // 경기 시작: 그 경기 선수에게 코트 번호와 함께 폰 알림이 간다
+      await api(`/draw-matches/${formData.get("draw_match_id")}/start`, {
+        method: intent === "start_match" ? "POST" : "DELETE",
+        token,
+      });
+    } else if (intent === "start_round") {
+      await api(`/draws/${formData.get("draw_id")}/rounds/${formData.get("round")}/start`, {
+        method: "POST",
+        token,
+      });
     } else if (intent === "update_gathering") {
       const get = (k: string) => {
         const v = formData.get(k);
@@ -774,6 +786,8 @@ export default function GatheringDetailPage() {
   const canScore = (m: DrawMatch) => !guest && (isOrganizer || staff || m.slot_ids.includes(user.id));
   // 못 친 경기 취소·되돌리기: 모임을 올린 사람과 운영진 (서버와 같음)
   const canCancelMatch = !guest && (gathering.created_by === user.id || staff);
+  // 경기 시작(폰 알림)은 모임 날에만 (자정을 넘긴 다음 날 새벽까지, 서버와 같음)
+  const matchDay = !canceled && isMatchDay(gathering.event_date);
   // 정산(입금 확인·코트비 지급)은 관리자·총무만. 일반 벙개는 만든 벙주도 자기 모임 입금 처리 가능
   const settle = canSettle(user);
   const canPay = settle || (!club && !guest && gathering.created_by === user.id);
@@ -2064,6 +2078,25 @@ export default function GatheringDetailPage() {
                     round={round}
                     matches={matches}
                     attendees={attendees.map((p) => p.user)}
+                    action={
+                      isOrganizer && matchDay && round != null && matches.some(startable) ? (
+                        <Form
+                          method="post"
+                          onSubmit={(e) => {
+                            if (!confirm(`${round}라운드 경기를 모두 시작할까요? 선수들 폰에 코트 번호 알림이 가요.`))
+                              e.preventDefault();
+                          }}
+                        >
+                          <input type="hidden" name="intent" value="start_round" />
+                          <input type="hidden" name="draw_id" value={draw.id} />
+                          <input type="hidden" name="round" value={round} />
+                          <button className="btn-ghost btn-sm">
+                            <Play size={13} />
+                            라운드 시작
+                          </button>
+                        </Form>
+                      ) : null
+                    }
                   />
                   <div className="draw-grid !mt-2.5">
                     {matches.map((m) => (
@@ -2071,6 +2104,7 @@ export default function GatheringDetailPage() {
                         key={m.id}
                         match={m}
                         canRecord={canScore(m)}
+                        canStart={canScore(m) && matchDay}
                         canCancel={canCancelMatch}
                         courtLabels={courtLabels}
                         rated={isOtesikKind(gathering.kind)}
@@ -3133,6 +3167,14 @@ function drawRounds(matches: DrawMatch[]) {
 
 const matchPlayers = (m: DrawMatch) => [...m.team1, ...m.team2];
 
+/** 선수가 다 찬 경기 (단식 1:1, 복식 2:2) */
+const fullMatch = (m: DrawMatch) => {
+  const need = m.match_type === "singles" ? 1 : 2;
+  return m.team1.length === need && m.team2.length === need;
+};
+/** 경기 시작을 누를 수 있는 경기: 점수 전·취소 아님·아직 시작 안 함·선수가 다 참 */
+const startable = (m: DrawMatch) => m.result_match_id === null && !m.canceled && !m.started_at && fullMatch(m);
+
 /**
  * 대진표 위: 한 사람이 몇 게임씩 뛰는지 (게임 수별로 묶어서). 취소한 경기는 세지 않는다.
  * 대진을 만든 뒤 새로 참석한 사람은 0게임으로 보인다.
@@ -3188,26 +3230,32 @@ function RoundRestLine({
   round,
   matches,
   attendees,
+  action,
 }: {
   round: number | null;
   matches: DrawMatch[];
   attendees: UserBrief[];
+  /** 라운드 시작 버튼 (모임 올린 사람·운영진, 모임 날) */
+  action?: ReactNode;
 }) {
   const playing = new Set(
     matches.filter((m) => !m.canceled).flatMap((m) => matchPlayers(m).map((u) => u.id))
   );
   const resting = attendees.filter((u) => !playing.has(u.id));
   return (
-    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
-      <strong className="font-display text-[15px] font-extrabold tracking-[-0.03em]">
-        {round != null ? `${round}라운드` : "경기"}
-      </strong>
-      <span className="font-semibold text-slate-500 dark:text-slate-400">
-        {resting.length
-          ? `휴식 ${resting.length}명 · ${resting.map((u) => u.name).join(", ")}`
-          : "휴식 없음"}
-      </span>
-    </p>
+    <div className="flex items-start gap-2">
+      <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
+        <strong className="font-display text-[15px] font-extrabold tracking-[-0.03em]">
+          {round != null ? `${round}라운드` : "경기"}
+        </strong>
+        <span className="font-semibold text-slate-500 dark:text-slate-400">
+          {resting.length
+            ? `휴식 ${resting.length}명 · ${resting.map((u) => u.name).join(", ")}`
+            : "휴식 없음"}
+        </span>
+      </p>
+      {action ? <div className="ml-auto shrink-0">{action}</div> : null}
+    </div>
   );
 }
 
@@ -3234,6 +3282,7 @@ const SLOT_NAMES = ["team1_player1", "team1_player2", "team2_player1", "team2_pl
 function DrawMatchRow({
   match,
   canRecord,
+  canStart,
   canCancel,
   courtLabels,
   rated,
@@ -3241,6 +3290,8 @@ function DrawMatchRow({
 }: {
   match: DrawMatch;
   canRecord: boolean;
+  /** 경기 시작·되돌리기 (점수 입력할 수 있는 사람, 모임 날) — 선수들 폰에 코트 번호 알림 */
+  canStart: boolean;
   /** 못 친 경기 취소·되돌리기 (모임을 올린 사람·운영진) */
   canCancel: boolean;
   courtLabels: string[];
@@ -3348,6 +3399,7 @@ function DrawMatchRow({
             COURT {courtLabel} · {match.round_number ?? 1}R
           </span>
           {canceled ? <span className="badge-orange-soft">경기 취소</span> : null}
+          {match.started_at && !recorded && !canceled ? <span className="badge-orange">진행 중</span> : null}
         </span>
         <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           {balance ? (
@@ -3443,6 +3495,8 @@ function DrawMatchRow({
             ) : null}
           </div>
         ) : canRecord ? (
+          <>
+          {canStart && !recorded && fullMatch(match) ? <MatchStartRow match={match} busy={busy} /> : null}
           <Form method="post" className="space-y-2">
             <input
               type="hidden"
@@ -3496,6 +3550,7 @@ function DrawMatchRow({
               </p>
             ) : null}
           </Form>
+          </>
         ) : (
           <p className="text-center text-xs text-slate-500 dark:text-slate-400">
             경기 예정
@@ -3519,5 +3574,31 @@ function DrawMatchRow({
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** 경기 시작 줄: 누르면 그 경기 선수들 폰에 코트 번호 알림. 시작했으면 '진행 중 · 19:05 시작'과 되돌리기 */
+function MatchStartRow({ match, busy }: { match: DrawMatch; busy: boolean }) {
+  return match.started_at ? (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+      <span>{match.started_at.slice(11, 16)}에 시작했어요</span>
+      <Form method="post" className="ml-auto">
+        <input type="hidden" name="intent" value="unstart_match" />
+        <input type="hidden" name="draw_match_id" value={match.id} />
+        <button className="text-[11px] font-semibold underline-offset-2 hover:underline" disabled={busy}>
+          시작 되돌리기
+        </button>
+      </Form>
+    </div>
+  ) : (
+    <Form method="post" className="mb-3 flex flex-wrap items-center gap-2">
+      <input type="hidden" name="intent" value="start_match" />
+      <input type="hidden" name="draw_match_id" value={match.id} />
+      <button className="btn-secondary btn-sm" disabled={busy}>
+        <Play size={13} />
+        경기 시작
+      </button>
+      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">선수들 폰에 코트 번호가 가요</span>
+    </Form>
   );
 }

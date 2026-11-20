@@ -5,13 +5,17 @@
 - Remix 프론트엔드와의 통신을 위해 CORS를 허용한다.
 - /health, / 기본 엔드포인트만 우선 제공. (회원/전적/모임 라우터는 이후 Step에서 추가)
 """
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  (모델 등록을 위해 import 필요)
-from .database import Base, engine, run_lightweight_migrations
+from . import push
+from .config import settings
+from .database import Base, SessionLocal, engine, run_lightweight_migrations
 from .routers import (
     admin,
     auth,
@@ -24,6 +28,7 @@ from .routers import (
     gatherings,
     matches,
     notices,
+    notifications,
     pickups,
     ratings,
     stats,
@@ -37,8 +42,16 @@ async def lifespan(app: FastAPI):
     # 시작 시: 테이블 생성 + 기존 DB 컬럼 보강(경량 마이그레이션)
     Base.metadata.create_all(bind=engine)
     run_lightweight_migrations()
+    # 폰 알림: 키를 처음 한 번 만들어 두고, 1분마다 '1시간 전'·'일정 공개' 알림을 확인한다
+    with SessionLocal() as db:
+        push.ensure_keys(db)
+        db.commit()
+    task = asyncio.create_task(push.run_scheduler()) if settings.push_scheduler else None
     yield
-    # 종료 시 정리 로직이 필요하면 여기에 추가
+    if task:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(
@@ -74,6 +87,7 @@ app.include_router(court_bookings.router)
 app.include_router(ratings.router)
 app.include_router(club.router)
 app.include_router(notices.router)
+app.include_router(notifications.router)
 app.include_router(tournaments.router)
 app.include_router(exchanges.router)
 app.include_router(pickups.router)

@@ -364,6 +364,8 @@ export interface DrawMatch {
   slot_ids: (number | null)[];
   /** 취소한 경기 (못 친 경기: 점수를 받지 않고 전적과 상관없다) */
   canceled: boolean;
+  /** 경기 시작을 누른 시각 (점수 전이면 진행 중) */
+  started_at: string | null;
 }
 
 export type Tier = "A" | "B" | "C" | "D" | "E";
@@ -637,6 +639,8 @@ export interface ExchangeMatch {
   canceled: boolean;
   /** 대진을 짠 뒤 불참으로 바뀐 우리 선수 */
   absent_ids: number[];
+  /** 경기 시작을 누른 시각 (점수 전이면 진행 중) */
+  started_at: string | null;
 }
 
 export interface ExchangeDetail extends ExchangeSummary {
@@ -652,4 +656,16 @@ export interface ExchangeDetail extends ExchangeSummary {
   mvp: UserBrief[];
   can_manage: boolean;
   announced: boolean;
+}
+
+// --- 폰 알림 (웹 푸시) ---
+export type PushKind = "schedule" | "reminder" | "waitlist" | "news" | "match";
+
+export interface PushSettings {
+  public_key: string;
+  kinds: Record<PushKind, boolean>;
+  /** 알림을 켠 기기 수 */
+  devices: number;
+  /** 게스트는 일정 공개 알림을 받지 않는다 */
+  guest: boolean;
 }

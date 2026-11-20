@@ -21,6 +21,13 @@ export function todayKST(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
 }
 
+/** 경기 시작(폰 알림)을 누를 수 있는 날: 모임 날, 자정을 넘긴 다음 날 새벽까지 (서버 push.match_day_ok 와 같음) */
+export function isMatchDay(eventDate: string): boolean {
+  const next = new Date(`${eventDate}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return [eventDate, next.toISOString().slice(0, 10)].includes(todayKST());
+}
+
 /** "2026-10-31" → "10월 31일(토)" */
 export function formatDate(date: string): string {
   const [y, m, d] = date.split("-").map(Number);

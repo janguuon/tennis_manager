@@ -24,7 +24,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 
 import { MemberAvatar } from "~/components/Club";
 import { GenderPrompt } from "~/components/GenderPrompt";
@@ -32,6 +32,7 @@ import { NoticePopup } from "~/components/NoticePopup";
 import { EmblemBadge, Wordmark } from "~/components/Logo";
 import { ApiError, api } from "~/lib/api.server";
 import { isGuest } from "~/lib/club";
+import { registerServiceWorker } from "~/lib/push";
 import { FEATURES, canSeeRecords } from "~/lib/features";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
 import { getReturnPath, logout, requireToken } from "~/lib/session.server";
@@ -138,6 +139,10 @@ export default function AppLayout() {
   const rootData = useRouteLoaderData("root") as { theme?: string } | undefined;
   const theme = rootData?.theme === "dark" ? "dark" : "light";
   const location = useLocation();
+  // 폰 알림을 받는 서비스 워커 (페이지를 캐시하지 않는다, public/sw.js)
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
   // 랭킹은 꺼져 있고(FEATURES), 켜더라도 승률을 볼 수 있는 사람(관리자)에게만.
   // 게스트는 일정만: 홈·캘린더 탭만 보인다 (정산·회원·회칙 화면은 들어가도 캘린더로)
   const guest = isGuest(user);

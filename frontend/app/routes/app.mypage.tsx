@@ -15,11 +15,12 @@ import { CalendarSync, ChevronRight } from "lucide-react";
 import { AvatarEditor } from "~/components/AvatarEditor";
 import { CopyButton } from "~/components/CopyButton";
 import { PageBody, PageHeader } from "~/components/Page";
+import { PushSettings } from "~/components/PushSettings";
 import { ApiError, api } from "~/lib/api.server";
 import { publicOrigin } from "~/lib/origin.server";
 import { requireToken } from "~/lib/session.server";
 import { MEMBER_TYPE_LABEL } from "~/lib/status";
-import type { Me, User } from "~/lib/types";
+import type { Me, PushSettings as PushSettingsData, User } from "~/lib/types";
 
 export const meta: MetaFunction = () => [
   { title: "마이페이지 · 오테식 매니저" },
@@ -27,15 +28,16 @@ export const meta: MetaFunction = () => [
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const token = await requireToken(request);
-  const [user, feed] = await Promise.all([
+  const [user, feed, push] = await Promise.all([
     api<Me>("/users/me", { token }),
     api<{ token: string | null }>("/users/me/calendar-feed", { token }),
+    api<PushSettingsData>("/push/settings", { token }).catch(() => null),
   ]);
   // 참석 일정 구독 주소 (폰 캘린더가 로그인 없이 받아 간다)
   const feedUrl = feed.token
     ? `${publicOrigin(request)}/calendar-feed/${feed.token}/otesik.ics`
     : null;
-  return json({ user, feedUrl });
+  return json({ user, feedUrl, push });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -129,7 +131,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function MyPage() {
-  const { user, feedUrl } = useLoaderData<typeof loader>();
+  const { user, feedUrl, push } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submittingIntent =
@@ -312,6 +314,9 @@ export default function MyPage() {
           </div>
         </Form>
       </section>
+
+      {/* 폰 알림: 경기 시작·1시간 전·일정 공개·소식 */}
+      <PushSettings initial={push} />
 
       {/* 참석 일정 구독: 참석·대기 모임이 폰 캘린더에 알아서 들어오고 바뀐다 */}
       <section className="card scroll-mt-4" id="calendar-feed">

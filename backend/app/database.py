@@ -102,6 +102,10 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     # 경기 취소 (대진·교류전): 점수·전적에 영향 없이 못 친 경기로 둔다
     ("draw_matches", "canceled_at", "canceled_at DATETIME"),
     ("exchange_matches", "canceled_at", "canceled_at DATETIME"),
+    # 폰 알림: 끈 알림 종류, 경기 시작 (대진·교류전)
+    ("users", "push_off", "push_off VARCHAR(100)"),
+    ("draw_matches", "started_at", "started_at DATETIME"),
+    ("exchange_matches", "started_at", "started_at DATETIME"),
 ]
 
 

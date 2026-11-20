@@ -6,7 +6,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import avatars, visibility
@@ -28,6 +28,8 @@ from ..models import (
     MemberType,
     OFFICER_TYPES,
     Participant,
+    PushSent,
+    PushSubscription,
     Tournament,
     TournamentEntry,
     TournamentMatch,
@@ -323,6 +325,9 @@ def _purge(db: Session, user: User, admin: User) -> PurgePreview:
         select(ExchangeMatch).where(or_(ExchangeMatch.ours_p1_id == uid, ExchangeMatch.ours_p2_id == uid))
     ):
         em.ours_p1_id, em.ours_p2_id = [p for p in (em.ours_p1_id, em.ours_p2_id) if p != uid] + [None]
+    # 폰 알림: 알림 받던 기기와 보낸 기록
+    db.execute(delete(PushSubscription).where(PushSubscription.user_id == uid))
+    db.execute(delete(PushSent).where(PushSent.user_id == uid))
     db.flush()
     for g in freed:
         promote_waiting(db, g)

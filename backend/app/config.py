@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     # 프로필 사진 저장 폴더 (Docker 에서는 영속 볼륨 /app/data/avatars)
     avatar_dir: str = "data/avatars"
 
+    # 폰 알림 (웹 푸시, push.py). 키는 비워 두면 처음 켤 때 만들어 DB(club_settings)에 둔다.
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    # VAPID 'sub' (https 주소나 mailto:). 비우면 회원이 알림을 켠 앱 주소(https)를 쓴다
+    vapid_subject: str | None = None
+    # 1분마다 '1시간 전'·'일정 공개' 알림을 보내는 일 (테스트에서는 끈다)
+    push_scheduler: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

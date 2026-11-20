@@ -32,6 +32,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -192,6 +193,8 @@ class User(Base):
     notice_seen_at: Mapped[datetime | None] = mapped_column(DateTime)
     # 참석 일정 구독(폰 캘린더) 비밀 링크 토큰. 만들지 않았거나 끊었으면 NULL (routers/calendar_feed.py)
     calendar_token: Mapped[str | None] = mapped_column(String(64))
+    # 폰 알림에서 끈 종류 (쉼표로, 예: "news,schedule"). 비우면 모두 받는다 (push.py KINDS)
+    push_off: Mapped[str | None] = mapped_column(String(100))
 
     # 코트비 등을 돌려받을 계좌 (본인과 관리자·임원진에게만 공개)
     bank: Mapped[str | None] = mapped_column(String(50))
@@ -578,6 +581,8 @@ class DrawMatch(Base):
     result_match_id: Mapped[int | None] = mapped_column(ForeignKey("matches.id"))
     # 경기 취소(비·부상 등으로 못 친 경기): 점수를 받지 않고, 다음 자동 대진의 '오늘 같이 뛴 사람'에도 넣지 않는다
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 경기 시작(한국 시간): 누르면 그 경기 선수에게 코트 번호와 함께 폰 알림이 간다. 점수가 들어가면 끝난 경기
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     draw: Mapped[Draw] = relationship(back_populates="draw_matches")
 
@@ -804,6 +809,8 @@ class ExchangeMatch(Base):
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime)
     # 경기 취소(못 친 경기): 점수를 받지 않고 점수판·남은 경기·자동 대진의 뛴 수에서 빠진다
     canceled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 경기 시작(한국 시간): 누르면 그 경기의 우리 선수에게 폰 알림이 간다
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     exchange: Mapped[Exchange] = relationship(back_populates="matches")
 
@@ -822,3 +829,42 @@ class ExchangeMatch(Base):
     @property
     def canceled(self) -> bool:
         return self.canceled_at is not None
+
+
+# ---------------------------------------------------------------------------
+# 폰 알림 (웹 푸시): 알림 받는 기기 · 보낸 기록 (push.py, routers/notifications.py)
+# ---------------------------------------------------------------------------
+class PushSubscription(Base):
+    """회원이 '이 폰에서 알림 받기'를 켠 기기 하나 (브라우저가 준 푸시 주소와 암호 키). 한 회원이 여러 기기를 쓸 수 있다."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200), nullable=False)
+    auth: Mapped[str] = mapped_column(String(100), nullable=False)
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    user: Mapped[User] = relationship()
+
+
+class PushSent(Base):
+    """
+    한 번만 보낼 알림을 보냈다는 기록 (서버를 다시 켜도 두 번 보내지 않는다).
+
+    - reminder: 참석 일정 1시간 전 (ref = "모임id@시작시각", 회원마다)
+    - open: 일정 공개 (ref = 모임id, user_id 없음 = 모임마다 한 번)
+    - next: 다음 차례 (ref = "d대진경기id" / "x교류전경기id")
+    - news: 소식 (ref = "notice소식id" / "exchange교류전id" / "tournament대회id")
+    """
+
+    __tablename__ = "push_sent"
+    __table_args__ = (Index("ix_push_sent_kind_ref", "kind", "ref"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    ref: Mapped[str] = mapped_column(String(60), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
